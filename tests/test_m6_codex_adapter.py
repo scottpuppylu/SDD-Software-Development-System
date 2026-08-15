@@ -144,6 +144,80 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertIsNone(result.checkpoint_commit)
         self.assertEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
 
+    def test_verification_failed_authorized_dirty_files_can_resume_and_checkpoint(self):
+        self._write_tasks('''
+### T001 ? Resume failed calculator
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before = run_git(self.repo, "rev-parse", "HEAD")
+
+        def broken_callback(repo, prompt):
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/calculator.py").write_text(
+                "def add(a, b):\n    return 0\n", encoding="utf-8"
+            )
+            (repo / "tests/test_calculator.py").write_text(
+                "from src.calculator import add\n\n"
+                "def test_add():\n    assert add(2, 3) == 5\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(
+                returncode=0, stdout="implemented but broken", stderr=""
+            )
+
+        runner = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(broken_callback)
+        )
+        first = runner.execute_one("T001")
+
+        self.assertEqual(first.status, "VERIFICATION_FAILED")
+        self.assertIsNone(first.checkpoint_commit)
+        self.assertEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
+        self.assertTrue((self.repo / "src/calculator.py").is_file())
+        self.assertTrue((self.repo / "tests/test_calculator.py").is_file())
+        failed_status = run_git(
+            self.repo, "status", "--short", "--untracked-files=all"
+        )
+        self.assertIn("src/calculator.py", failed_status)
+        self.assertIn("tests/test_calculator.py", failed_status)
+        failed_head_paths = run_git(
+            self.repo, "show", "--name-only", "--pretty=format:", "HEAD"
+        )
+        self.assertNotIn("src/calculator.py", failed_head_paths)
+        self.assertNotIn("tests/test_calculator.py", failed_head_paths)
+
+        def fixed_callback(repo, prompt):
+            (repo / "src/calculator.py").write_text(
+                "def add(a, b):\n    return a + b\n", encoding="utf-8"
+            )
+            return SimpleNamespace(returncode=0, stdout="fixed", stderr="")
+
+        resumed_runner = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(fixed_callback)
+        )
+        second = resumed_runner.execute_one("T001")
+
+        self.assertEqual(second.status, "DONE")
+        self.assertIsNotNone(second.checkpoint_commit)
+        self.assertTrue(all(v.passed for v in second.verification))
+        self.assertNotEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
+        checkpoint_paths = run_git(
+            self.repo,
+            "show",
+            "--name-only",
+            "--pretty=format:",
+            second.checkpoint_commit,
+        )
+        self.assertIn("src/calculator.py", checkpoint_paths)
+        self.assertIn("tests/test_calculator.py", checkpoint_paths)
+        final_status = run_git(self.repo, "status", "--short")
+        self.assertNotIn("src/calculator.py", final_status)
+        self.assertNotIn("tests/test_calculator.py", final_status)
+
     def test_codex_failure_never_commits_and_records_evidence(self):
         self._write_tasks('''\n### T001 ??Codex failure
 - **Status:** TODO
