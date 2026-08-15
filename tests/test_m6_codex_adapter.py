@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+import json
 import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 import yaml
 
 from sdd_orchestrator.core import Orchestrator
@@ -16,6 +18,7 @@ from sdd_orchestrator.codex_adapter import (
     NoExecutableTaskError,
     VerificationCommandPolicy,
 )
+from sdd_orchestrator.git_runtime import GitRuntimeError
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -125,6 +128,70 @@ class M6CodexAdapterTests(unittest.TestCase):
         subject = run_git(self.repo, "log", "-1", "--pretty=%s")
         self.assertIn("[T001]", subject)
         self.assertIn("do not commit", fake.prompts[0].lower())
+
+    def test_checkpoint_failure_does_not_report_task_done_or_advance_recovery_state(self):
+        self._write_tasks('''
+### T001 ? Checkpoint failure
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before_head = run_git(self.repo, "rev-parse", "HEAD")
+        state_path = self.repo / ".sdd/state/implementation-state.yaml"
+        before_state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+
+        def callback(repo, prompt):
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/calculator.py").write_text(
+                "def add(a, b):\n    return a + b\n", encoding="utf-8"
+            )
+            (repo / "tests/test_calculator.py").write_text(
+                "from src.calculator import add\n\n"
+                "def test_add():\n    assert add(2, 3) == 5\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(
+                returncode=0, stdout="implemented", stderr=""
+            )
+
+        fake = FakeCodex(callback)
+        runner = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+
+        with patch.object(
+            runner.git,
+            "checkpoint",
+            side_effect=GitRuntimeError("simulated checkpoint failure"),
+        ):
+            with self.assertRaisesRegex(
+                GitRuntimeError, "simulated checkpoint failure"
+            ):
+                runner.execute_one("T001")
+
+        self.assertEqual(before_head, run_git(self.repo, "rev-parse", "HEAD"))
+        self.assertNotIn(
+            "[T001]", run_git(self.repo, "log", "--pretty=%s", f"{before_head}..HEAD")
+        )
+        status = run_git(
+            self.repo, "status", "--short", "--untracked-files=all"
+        )
+        self.assertIn("src/calculator.py", status)
+        self.assertIn("tests/test_calculator.py", status)
+        self.assertEqual(len(fake.prompts), 1)
+
+        evidence_files = sorted((self.repo / ".sdd/evidence").glob("*-T001.json"))
+        self.assertEqual(len(evidence_files), 1)
+        evidence = json.loads(evidence_files[0].read_text(encoding="utf-8"))
+        self.assertEqual(evidence["status"], "PASS")
+        self.assertTrue(evidence["verification"])
+        self.assertTrue(all(item["passed"] for item in evidence["verification"]))
+        self.assertNotIn("checkpoint_commit", evidence)
+
+        after_state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(after_state, before_state)
+        self.assertNotEqual(after_state.get("last_completed_task"), "T001")
+        self.assertNotEqual(after_state.get("last_verified_commit"), before_head)
 
     def test_failed_verification_never_commits(self):
         self._write_tasks('''\n### T001 — Broken calculator\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n''')
