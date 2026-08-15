@@ -143,6 +143,46 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertIsNone(result.checkpoint_commit)
         self.assertEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
 
+    def test_codex_failure_never_commits_and_records_evidence(self):
+        self._write_tasks('''\n### T001 ??Codex failure
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`
+- **Implementation Scope:** Implement the calculator task within the declared files.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before = run_git(self.repo, "rev-parse", "HEAD")
+        callback = lambda *_: SimpleNamespace(returncode=1, stdout="", stderr="codex failed")
+        runner = Stage08CodexRunner(Orchestrator(self.repo), codex=FakeCodex(callback))
+
+        result = runner.execute_one("T001")
+
+        self.assertEqual(result.status, "CODEX_FAILED")
+        self.assertIsNone(result.checkpoint_commit)
+        self.assertEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
+        self.assertIsNotNone(result.evidence_file)
+        self.assertTrue((self.repo / result.evidence_file).is_file())
+        self.assertEqual(result.verification, [])
+
+    def test_successful_codex_with_no_changes_never_commits_and_records_evidence(self):
+        self._write_tasks('''\n### T001 ??No changes
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`
+- **Implementation Scope:** Implement the calculator task within the declared files.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before = run_git(self.repo, "rev-parse", "HEAD")
+        callback = lambda *_: SimpleNamespace(returncode=0, stdout="nothing to change", stderr="")
+        runner = Stage08CodexRunner(Orchestrator(self.repo), codex=FakeCodex(callback))
+
+        result = runner.execute_one("T001")
+
+        self.assertEqual(result.status, "NO_CHANGES")
+        self.assertIsNone(result.checkpoint_commit)
+        self.assertEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
+        self.assertIsNotNone(result.evidence_file)
+        self.assertTrue((self.repo / result.evidence_file).is_file())
+        self.assertEqual(result.verification, [])
+
     def test_stage08_completion_transitions_only_to_verification(self):
         self._write_tasks('''\n### T001 — Add calculator\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n''')
         def callback(repo, prompt):
