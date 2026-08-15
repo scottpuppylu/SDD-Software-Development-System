@@ -19,6 +19,7 @@ from .codex_results import VerificationResult, CodexTaskRunResult
 from .errors import CodexAdapterError
 from .verification_policy import VerificationCommandPolicy
 from .verification_execution import execute_verification_command
+from . import path_scope_policy
 from .verification_runtime import (
     build_verification_env,
     resolve_project_python,
@@ -512,24 +513,28 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
 
     @classmethod
     def _runtime_dirty(cls, path: str) -> bool:
-        return path.startswith(cls.RUNTIME_DIRTY_PREFIXES)
+        return path_scope_policy.runtime_dirty(path, cls.RUNTIME_DIRTY_PREFIXES)
 
     @classmethod
     def _ignorable_runtime_dirty(cls, path: str, allowed_paths: list[str]) -> bool:
         # Runtime files are normally orchestrator-owned noise. When Stage 06 has
         # explicitly authorized a task-writable evidence artifact, however, it is
         # real task output and must participate in scope review + checkpointing.
-        if path in cls.TASK_WRITABLE_SDD_EXACT and cls._covered(path, allowed_paths):
-            return False
-        return cls._runtime_dirty(path)
+        return path_scope_policy.ignorable_runtime_dirty(
+            path,
+            allowed_paths,
+            runtime_dirty_prefixes=cls.RUNTIME_DIRTY_PREFIXES,
+            task_writable_sdd_exact=cls.TASK_WRITABLE_SDD_EXACT,
+        )
 
     @classmethod
     def _is_protected(cls, path: str, *, task_authorized: bool = False) -> bool:
-        if path in cls.PROTECTED_EXACT or path.startswith("docs/handoff/"):
-            return True
-        if path.startswith(".sdd/"):
-            return not (task_authorized and path in cls.TASK_WRITABLE_SDD_EXACT)
-        return False
+        return path_scope_policy.is_protected(
+            path,
+            task_authorized=task_authorized,
+            protected_exact=cls.PROTECTED_EXACT,
+            task_writable_sdd_exact=cls.TASK_WRITABLE_SDD_EXACT,
+        )
 
     @staticmethod
     def _progress(message: str) -> None:
@@ -556,15 +561,7 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
 
     @staticmethod
     def _covered(path: str, allowed_paths: list[str]) -> bool:
-        for allowed in allowed_paths:
-            normalized = allowed.rstrip("/")
-            if "*" in normalized or "?" in normalized or "[" in normalized:
-                import fnmatch
-                if fnmatch.fnmatch(path, normalized):
-                    return True
-            elif path == normalized or path.startswith(normalized + "/"):
-                return True
-        return False
+        return path_scope_policy.covered(path, allowed_paths)
 
     @staticmethod
     def _serialize_result(result: CodexTaskRunResult) -> dict[str, Any]:
