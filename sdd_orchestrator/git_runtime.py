@@ -57,6 +57,18 @@ class GitRepository:
         proc = self._run(["ls-files", "--error-unmatch", "--", path], check=False)
         return proc.returncode == 0
 
+    def commit_subject(self, commit: str = "HEAD") -> str:
+        return self._run(["show", "-s", "--format=%s", commit]).stdout.strip()
+
+    def commit_paths(self, commit: str = "HEAD") -> list[str]:
+        return self._run(
+            ["diff-tree", "--no-commit-id", "--name-only", "-r", commit]
+        ).stdout.splitlines()
+
+    def read_committed_file(self, path: str, commit: str = "HEAD") -> str:
+        normalized = Path(path).as_posix()
+        return self._run(["show", f"{commit}:{normalized}"]).stdout
+
     def snapshot(self, *, recent_limit: int = 10) -> GitSnapshot:
         if not self.is_repository():
             return GitSnapshot(False, None, None, [], [])

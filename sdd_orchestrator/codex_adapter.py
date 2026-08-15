@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+import json
 import re
 import shutil
 import subprocess
@@ -190,6 +191,10 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 "recover/inspect before Codex execution: " + ", ".join(unrelated_dirty)
             )
 
+        reconciled = self._reconcile_head_checkpoint(task, before.head_commit)
+        if reconciled is not None:
+            return reconciled
+
         # A prior attempt of the same Atomic Task may have produced authorized
         # files and then failed verification. Those dirty files are resumable
         # task state, not unrelated work. Re-run Codex so it can inspect/fix the
@@ -273,6 +278,102 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         return CodexTaskRunResult(
             task.task_id, task.title, proc.returncode, proc.stdout, proc.stderr,
             changed, verification, commit, next_task, "DONE", evidence,
+        )
+
+    def _reconcile_head_checkpoint(
+        self, task: AtomicTask, head_commit: str | None
+    ) -> CodexTaskRunResult | None:
+        """Repair state only when HEAD itself proves a completed Stage 08 task."""
+        if not head_commit:
+            return None
+        subject = self.git.commit_subject(head_commit)
+        match = re.match(
+            r"^(?:feat|fix)\(implementation\): \[([A-Z]+\d+)\] .+", subject
+        )
+        if not match or match.group(1) != task.task_id:
+            return None
+
+        checkpoint_paths = self.git.commit_paths(head_commit)
+        evidence_paths = [
+            path for path in checkpoint_paths
+            if path.startswith(".sdd/evidence/")
+            and path.endswith(f"-{task.task_id}.json")
+        ]
+        if len(evidence_paths) != 1:
+            return None
+        try:
+            evidence = json.loads(
+                self.git.read_committed_file(evidence_paths[0], head_commit)
+            )
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(evidence, dict):
+            return None
+        verification_data = evidence.get("verification")
+        codex_data = evidence.get("codex")
+        if (
+            evidence.get("schema_version") != "1.0"
+            or evidence.get("stage") != "08"
+            or evidence.get("task_id") != task.task_id
+            or evidence.get("status") != "PASS"
+            or not isinstance(evidence.get("changed_paths"), list)
+            or not isinstance(codex_data, dict)
+            or codex_data.get("returncode") != 0
+            or not isinstance(verification_data, list)
+            or not verification_data
+            or any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("command"), str)
+                or not isinstance(item.get("returncode"), int)
+                or not isinstance(item.get("stdout"), str)
+                or not isinstance(item.get("stderr"), str)
+                or item.get("passed") is not True
+                or item.get("returncode") != 0
+                for item in verification_data
+            )
+            or [item["command"] for item in verification_data]
+            != task.verification_commands
+        ):
+            return None
+
+        verification = [
+            VerificationResult(
+                command=str(item["command"]),
+                returncode=int(item.get("returncode", 0)),
+                stdout=str(item.get("stdout", "")),
+                stderr=str(item.get("stderr", "")),
+            )
+            for item in verification_data
+        ]
+        next_task = self._next_task_id(task.task_id)
+        state = self.recovery._load_state()
+        already_recorded = (
+            state.get("last_completed_task") == task.task_id
+            and state.get("last_verified_commit") == head_commit
+            and state.get("current_task") == next_task
+            and state.get("next_task") is None
+            and state.get("test_status", {}).get("overall") == "PASS"
+        )
+        if not already_recorded:
+            self.recovery.record_checkpoint(
+                commit=head_commit,
+                completed_task=task.task_id,
+                next_task=next_task,
+                test_status="PASS",
+            )
+        self._progress(f"{task.task_id} reconciled from checkpoint {head_commit}")
+        return CodexTaskRunResult(
+            task.task_id,
+            task.title,
+            int(codex_data.get("returncode", 0)),
+            str(codex_data.get("final_stdout", "")),
+            str(codex_data.get("stderr", "")),
+            list(evidence["changed_paths"]),
+            verification,
+            head_commit,
+            next_task,
+            "DONE",
+            evidence_paths[0],
         )
 
     def run_until_complete(self, *, max_tasks: int = 100) -> dict[str, Any]:
