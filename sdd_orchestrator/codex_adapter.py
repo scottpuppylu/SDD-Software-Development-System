@@ -15,7 +15,7 @@ from .codex_cli import CodexCLI
 from .codex_results import VerificationResult, CodexTaskRunResult
 from .result_serialization import serialize_task_run_result
 from .evidence_writer import write_stage08_evidence
-from .errors import CodexAdapterError
+from .errors import CodexAdapterError, NoExecutableTaskError
 from .verification_policy import VerificationCommandPolicy
 from .verification_execution import execute_verification_command
 from . import path_scope_policy
@@ -96,7 +96,7 @@ class Stage08CodexRunner:
         for task in tasks:
             if task.status in {"TODO", "IN_PROGRESS"}:
                 return task
-        raise CodexAdapterError("No executable TODO/IN_PROGRESS task remains")
+        raise NoExecutableTaskError("No executable TODO/IN_PROGRESS task remains")
 
     def preflight(self, task: AtomicTask) -> None:
         check = self.orchestrator.check_required_inputs("08")
@@ -280,10 +280,8 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         for _ in range(max_tasks):
             try:
                 task = self.select_task()
-            except CodexAdapterError as exc:
-                if "No executable TODO/IN_PROGRESS task remains" in str(exc):
-                    break
-                raise
+            except NoExecutableTaskError:
+                break
             result = self.execute_one(task.task_id)
             results.append(result)
             if result.status != "DONE":

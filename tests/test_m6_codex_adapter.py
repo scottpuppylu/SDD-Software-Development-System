@@ -13,6 +13,7 @@ from sdd_orchestrator.codex_adapter import (
     TaskFileParser,
     Stage08CodexRunner,
     CodexAdapterError,
+    NoExecutableTaskError,
     VerificationCommandPolicy,
 )
 
@@ -229,6 +230,22 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertEqual(orch.project_state["stages"]["09"]["status"], "IN_PROGRESS")
         self.assertIsNone(orch.project_state["stages"]["09"]["result"])
         self.assertEqual(fake.prompts, [])
+
+    def test_select_task_uses_specific_error_when_no_executable_task_remains(self):
+        self._write_tasks('''
+### T001 ??Already completed
+- **Status:** DONE
+- **Allowed files:** `src/calculator.py`
+- **Implementation Scope:** Already completed.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        runner = Stage08CodexRunner(Orchestrator(self.repo), codex=FakeCodex(lambda *_: None))
+
+        with self.assertRaises(NoExecutableTaskError) as ctx:
+            runner.select_task()
+
+        self.assertEqual(str(ctx.exception), "No executable TODO/IN_PROGRESS task remains")
+        self.assertTrue(issubclass(NoExecutableTaskError, CodexAdapterError))
 
 
 if __name__ == "__main__":
