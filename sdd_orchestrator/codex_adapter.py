@@ -428,7 +428,7 @@ class Stage08CodexRunner:
                     return task
             raise CodexAdapterError(f"Task not found in tasks.md: {requested}")
         for task in tasks:
-            if task.status in {"TODO", "IN_PROGRESS", "待處理", "進行中"}:
+            if task.status in {"TODO", "IN_PROGRESS"}:
                 return task
         raise CodexAdapterError("No executable TODO/IN_PROGRESS task remains")
 
@@ -874,7 +874,7 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
         tasks = self.tasks()
         found = False
         for task in tasks:
-            if found and task.status in {"TODO", "IN_PROGRESS", "待處理", "進行中"}:
+            if found and task.status in {"TODO", "IN_PROGRESS"}:
                 return task.task_id
             if task.task_id == current_id:
                 found = True
