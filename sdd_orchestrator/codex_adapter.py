@@ -496,20 +496,10 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
         return {"stage_id": "08", "result": "COMPLETED", "next": "09"}
 
     def _generated_verification_dirty(self, path: str) -> bool:
-        """Ignore only untracked, safely reproducible Python verification artifacts.
-
-        Tracked files are never ignored, even when their names match these patterns.
-        This keeps task scope enforcement strict while allowing editable installs and
-        imports to leave normal build/cache byproducts between atomic task attempts.
-        """
-        normalized = path.replace("\\", "/")
-        parts = normalized.split("/")
-        generated = (
-            any(part == "__pycache__" for part in parts)
-            or normalized.endswith(".pyc")
-            or any(part.endswith(".egg-info") for part in parts)
+        return path_scope_policy.generated_verification_dirty(
+            path,
+            is_tracked=self.git.is_tracked,
         )
-        return generated and not self.git.is_tracked(path)
 
     @classmethod
     def _runtime_dirty(cls, path: str) -> bool:

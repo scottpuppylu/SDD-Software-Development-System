@@ -1,6 +1,24 @@
 from __future__ import annotations
 
 import fnmatch
+from typing import Callable
+
+
+def generated_verification_dirty(
+    path: str,
+    *,
+    is_tracked: Callable[[str], bool],
+) -> bool:
+    normalized = path.replace("\\", "/")
+    parts = normalized.split("/")
+    generated = (
+        any(part == "__pycache__" for part in parts)
+        or normalized.endswith(".pyc")
+        or any(part.endswith(".egg-info") for part in parts)
+    )
+    if not generated:
+        return False
+    return not is_tracked(path)
 
 
 def covered(path: str, allowed_paths: list[str]) -> bool:
