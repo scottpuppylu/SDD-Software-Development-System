@@ -816,58 +816,6 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
                 written.append(rel)
         return written
 
-    def reconcile_completed_t014_evidence(self) -> dict[str, Any] | None:
-        """Repair stale pre-verification T014 Markdown from canonical runtime JSON.
-
-        This is an idempotent migration/recovery path for repositories produced by
-        v1.1.18-v1.1.20. It never reruns implementation and never invents a Stage 09
-        result. A new evidence-only checkpoint is created only when the Markdown is
-        actually stale.
-        """
-        state = self.recovery._load_state()
-        if state.get("last_completed_task") != "T014":
-            return None
-        evidence_dir = self.repo_root / ".sdd" / "evidence"
-        candidates = sorted(evidence_dir.glob("*-T014.json")) if evidence_dir.exists() else []
-        if not candidates:
-            return None
-        payload=None
-        source=None
-        for path in reversed(candidates):
-            try:
-                item=json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            if item.get("status") == "PASS" and item.get("task_id") == "T014":
-                payload=item; source=path; break
-        if payload is None:
-            return None
-        verification=[
-            VerificationResult(
-                str(v.get("command", "")), int(v.get("returncode", 1)),
-                str(v.get("stdout") or ""), str(v.get("stderr") or "")
-            )
-            for v in payload.get("verification", []) if isinstance(v, dict)
-        ]
-        if not verification or not all(v.passed for v in verification):
-            return None
-        task=next((t for t in self.tasks() if t.task_id == "T014"), None)
-        if task is None:
-            return None
-        written=self._finalize_t014_evidence_indexes(task, verification)
-        if not written:
-            return {"status":"ALREADY_RECONCILED", "evidence": source.relative_to(self.repo_root).as_posix()}
-        commit=self.git.checkpoint(
-            task_id="T014-R", summary="reconcile T014 runtime evidence indexes",
-            paths=written, commit_type="docs", scope="evidence", allow_unrelated_dirty=True,
-        )
-        self.recovery.record_checkpoint(commit=commit, completed_task="T014", next_task=None, test_status="PASS")
-        self._progress(f"T014 evidence reconciled at checkpoint {commit}")
-        return {
-            "status":"RECONCILED", "checkpoint_commit":commit,
-            "paths":written, "source_evidence":source.relative_to(self.repo_root).as_posix(),
-        }
-
     def _write_evidence(
         self,
         task: AtomicTask,

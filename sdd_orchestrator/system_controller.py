@@ -233,13 +233,6 @@ class FullSystemController:
             if sid not in self.REASONING_STAGES:
                 return SystemRunSummary(start, sid, "STOP", events)
 
-            # Before Stage 09, reconcile legacy T014 evidence indexes that were
-            # drafted before machine verification (v1.1.18-v1.1.20). This is
-            # idempotent and evidence-only; it does not decide Stage 09.
-            if sid == "09":
-                reconciliation = self.codex_runner.reconcile_completed_t014_evidence()
-                if reconciliation and reconciliation.get("status") == "RECONCILED":
-                    events.append({"stage_id": "08", "status": "EVIDENCE_RECONCILED", **reconciliation})
 
             stage_semantics = self._semantics(sid, semantic_by_stage)
             if sid == "07":
