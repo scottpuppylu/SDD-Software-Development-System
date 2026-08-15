@@ -201,6 +201,35 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertEqual(orch.project_state["lifecycle"]["current_stage"], "09")
         self.assertIsNone(orch.project_state["stages"]["09"]["result"])
 
+    def test_run_until_complete_with_no_executable_tasks_transitions_to_stage09(self):
+        self._write_tasks('''
+### T001 ??Already completed
+- **Status:** DONE
+- **Allowed files:** `src/calculator.py`
+- **Implementation Scope:** Already completed.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        orch = Orchestrator(self.repo)
+
+        def callback(*_):
+            raise AssertionError("Codex must not execute")
+
+        fake = FakeCodex(callback)
+        runner = Stage08CodexRunner(orch, codex=fake)
+
+        result = runner.run_until_complete()
+
+        self.assertEqual(result["status"], "COMPLETED")
+        self.assertEqual(result["stage"], "08")
+        self.assertEqual(result["tasks"], [])
+        self.assertEqual(result["transition"]["next"], "09")
+        self.assertEqual(orch.project_state["lifecycle"]["current_stage"], "09")
+        self.assertEqual(orch.project_state["stages"]["08"]["status"], "DONE")
+        self.assertEqual(orch.project_state["stages"]["08"]["result"], "COMPLETED")
+        self.assertEqual(orch.project_state["stages"]["09"]["status"], "IN_PROGRESS")
+        self.assertIsNone(orch.project_state["stages"]["09"]["result"])
+        self.assertEqual(fake.prompts, [])
+
 
 if __name__ == "__main__":
     unittest.main()
