@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,10 @@ import yaml
 from .core import Orchestrator
 from .codex_cli import CodexCLI
 from .codex_results import VerificationResult, CodexTaskRunResult
+from .result_serialization import (
+    serialize_task_run_result,
+    serialize_verification_result,
+)
 from .errors import CodexAdapterError
 from .verification_policy import VerificationCommandPolicy
 from .verification_execution import execute_verification_command
@@ -439,7 +442,7 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
             "title": task.title,
             "status": status,
             "changed_paths": changed,
-            "verification": [asdict(v) | {"passed": v.passed} for v in verification],
+            "verification": [serialize_verification_result(v) for v in verification],
             "codex": {
                 "returncode": proc.returncode,
                 "final_stdout": proc.stdout,
@@ -555,7 +558,4 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
 
     @staticmethod
     def _serialize_result(result: CodexTaskRunResult) -> dict[str, Any]:
-        data = asdict(result)
-        for item in data.get("verification", []):
-            item["passed"] = item.get("returncode") == 0
-        return data
+        return serialize_task_run_result(result)
