@@ -168,10 +168,8 @@ class TaskFileParser:
 
     def _extract_verification_commands(self, block: str) -> list[str]:
         # Prefer the explicit Stage 06 -> Stage 08 machine contract.
-        # Keep legacy Verification/Validation parsing as a compatibility path
-        # only when it contains an actual executable command.
         candidates: list[str] = []
-        field_names = self.VERIFICATION_COMMAND_FIELDS + ("Verification", "Validation")
+        field_names = self.VERIFICATION_COMMAND_FIELDS
         for name in field_names:
             raw = self._field(block, name)
             if raw:

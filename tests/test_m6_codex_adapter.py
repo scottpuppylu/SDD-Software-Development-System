@@ -84,7 +84,7 @@ class M6CodexAdapterTests(unittest.TestCase):
             VerificationCommandPolicy.argv("pytest && rm -rf .")
 
     def test_preflight_requires_explicit_scope(self):
-        self._write_tasks('''\n### T001 — vague\n- **Status:** TODO\n- **Verification:** `python -m pytest -q`\n''')
+        self._write_tasks('''\n### T001 — vague\n- **Status:** TODO\n- **Verification Commands:** `python -m pytest -q`\n''')
         orch = Orchestrator(self.repo)
         runner = Stage08CodexRunner(orch, codex=FakeCodex(lambda *_: None))
         with self.assertRaises(CodexAdapterError):

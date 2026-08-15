@@ -67,6 +67,16 @@ class V117MachineTaskContractTests(unittest.TestCase):
         task = TaskFileParser(text).parse()[0]
         self.assertEqual(task.verification_commands, [])
 
+    def test_executable_looking_verification_is_not_machine_command(self):
+        text = '''
+### T001 - human verification field
+- **Status:** TODO
+- **Allowed files:** src/app.py
+- **Verification:** python -m pytest -q
+'''
+        task = TaskFileParser(text).parse()[0]
+        self.assertEqual(task.verification_commands, [])
+
     def test_stage06_and_stage07_instructions_publish_machine_contract(self):
         root = Path(__file__).resolve().parents[1]
         s06 = (root / '.sdd/instructions/stage-06.md').read_text(encoding='utf-8')
