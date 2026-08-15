@@ -218,6 +218,57 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertNotIn("src/calculator.py", final_status)
         self.assertNotIn("tests/test_calculator.py", final_status)
 
+    def test_resume_with_authorized_and_unrelated_dirty_files_is_blocked_before_codex(self):
+        self._write_tasks('''
+### T001 ? Resume calculator
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        (self.repo / "src").mkdir(exist_ok=True)
+        (self.repo / "src/calculator.py").write_text(
+            "def add(a, b):\n    return a + b\n", encoding="utf-8"
+        )
+        (self.repo / "tests").mkdir(exist_ok=True)
+        (self.repo / "tests/test_calculator.py").write_text(
+            "from src.calculator import add\n", encoding="utf-8"
+        )
+        (self.repo / "outside.txt").write_text("unrelated\n", encoding="utf-8")
+
+        def callback(*_):
+            raise AssertionError(
+                "Codex must not execute when unrelated dirty state exists"
+            )
+
+        fake = FakeCodex(callback)
+        runner = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+        before = run_git(self.repo, "rev-parse", "HEAD")
+
+        with self.assertRaisesRegex(
+            CodexAdapterError,
+            "pre-existing non-runtime dirty files outside the current task scope",
+        ):
+            runner.execute_one("T001")
+
+        self.assertEqual(fake.prompts, [])
+        self.assertEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
+        self.assertTrue((self.repo / "src/calculator.py").is_file())
+        self.assertTrue((self.repo / "tests/test_calculator.py").is_file())
+        self.assertTrue((self.repo / "outside.txt").is_file())
+
+        status = run_git(self.repo, "status", "--short", "--untracked-files=all")
+        self.assertIn("src/calculator.py", status)
+        self.assertIn("tests/test_calculator.py", status)
+        self.assertIn("outside.txt", status)
+
+        head_paths = run_git(
+            self.repo, "show", "--name-only", "--pretty=format:", "HEAD"
+        )
+        self.assertNotIn("src/calculator.py", head_paths)
+        self.assertNotIn("tests/test_calculator.py", head_paths)
+        self.assertNotIn("outside.txt", head_paths)
+
     def test_codex_failure_never_commits_and_records_evidence(self):
         self._write_tasks('''\n### T001 ??Codex failure
 - **Status:** TODO
