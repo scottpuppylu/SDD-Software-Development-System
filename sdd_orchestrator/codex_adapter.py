@@ -18,6 +18,7 @@ from .codex_cli import CodexCLI
 from .codex_results import VerificationResult, CodexTaskRunResult
 from .errors import CodexAdapterError
 from .verification_policy import VerificationCommandPolicy
+from .verification_execution import execute_verification_command
 from .verification_runtime import (
     build_verification_env,
     resolve_project_python,
@@ -337,32 +338,18 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             argv = resolve_verification_argv(
                 argv, project_python, verify_env, resolver=shutil.which
             )
-            try:
-                proc = self._call_with_heartbeat(
-                    f"{task.task_id} verification still running",
-                    lambda: subprocess.run(
-                        argv,
-                        cwd=self.repo_root,
-                        env=verify_env,
-                        text=True,
-                        encoding="utf-8",
-                        errors="replace",
-                        capture_output=True,
-                    ),
-                )
-            except FileNotFoundError as exc:
-                results.append(
-                    VerificationResult(
-                        command,
-                        127,
-                        "",
-                        f"verification executable not found: {argv[0]} ({exc})",
-                    )
-                )
-                break
-            results.append(VerificationResult(command, proc.returncode, proc.stdout, proc.stderr))
-            self._progress(f"{task.task_id} verify {'PASS' if proc.returncode == 0 else 'FAIL'}: {command}")
-            if proc.returncode != 0:
+            result = execute_verification_command(
+                command,
+                argv,
+                self.repo_root,
+                verify_env,
+                run_command=subprocess.run,
+                call_with_heartbeat=self._call_with_heartbeat,
+                heartbeat_label=f"{task.task_id} verification still running",
+            )
+            results.append(result)
+            self._progress(f"{task.task_id} verify {'PASS' if result.passed else 'FAIL'}: {command}")
+            if not result.passed:
                 break
         return results
 
