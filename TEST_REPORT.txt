@@ -1,0 +1,4 @@
+SDD v1.1.22 regression
+108 passed, 4 subtests passed
+Command: python -m pytest -q
+Scope: cumulative v1.1.13 baseline + rolling patches through v1.1.21-r2 + v1.1.22

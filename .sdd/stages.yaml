@@ -1,0 +1,705 @@
+schema_version: "1.0"
+
+defaults:
+  conflict_protocol:
+    - DETECT
+    - REPORT
+    - BLOCK
+    - ROUTE_TO_AUTHORITATIVE_OWNER
+  no_linear_authority_priority: true
+  chat_memory_is_not_execution_state: true
+
+stages:
+  "01":
+    name: PRODUCT_PROPOSAL
+    phase: AUTHORING
+    type: AUTHORING
+    core_question: "Why build this, for whom, and what problem/outcome matters?"
+    authority_domains:
+      owns:
+        - PRODUCT_INTENT
+      forbidden:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+        - EXECUTION_DECOMPOSITION
+    required_inputs:
+      semantic:
+        - IDEA_OR_PROBLEM
+        - TARGET_USER_OR_USAGE_CONTEXT
+        - GOALS_OR_DESIRED_OUTCOME
+      files: []
+    optional_inputs:
+      semantic:
+        - CONSTRAINTS
+        - EVIDENCE
+        - CONTEXT
+    outputs:
+      files:
+        - "docs/proposal.md"
+      stable_ids:
+        - "G-*"
+    required_content:
+      - PRODUCT_VISION
+      - USER_PROBLEM
+      - TARGET_USER
+      - USAGE_CONTEXT
+      - DESIRED_OUTCOME
+      - CORE_VALUE_PROPOSITION
+      - CORE_INTERACTION_CONCEPT
+      - MVP_INTENT_BOUNDARY
+      - NON_GOALS
+      - CONFIRMED_CONSTRAINTS
+      - EVIDENCE_ASSUMPTIONS_TBD
+    prohibitions:
+      - "Do not create formal FR/NFR/AC."
+      - "Do not assign P0/P1/P2."
+      - "Do not define API schema, database/provider, architecture, or tasks."
+    exit_conditions:
+      - "proposal.md exists"
+      - "product intent is sufficiently explicit for Stage 02"
+    next:
+      success: "02"
+      blocked: HUMAN_DECISION
+
+  "02":
+    name: PRODUCT_REQUIREMENTS
+    phase: AUTHORING
+    type: AUTHORING
+    core_question: "What must the product do and what behavior counts as complete?"
+    authority_domains:
+      owns:
+        - PRODUCT_REQUIREMENT
+      reads:
+        - PRODUCT_INTENT
+      forbidden:
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+    required_inputs:
+      files:
+        - "docs/proposal.md"
+      semantic:
+        - APPROVED_PRODUCT_DECISIONS
+    outputs:
+      files:
+        - "docs/PRD.md"
+      stable_ids:
+        - "FR-*"
+        - "NFR-*"
+        - "EC-*"
+    checks:
+      - "All P0 requirements have testable acceptance criteria."
+      - "P0/P1/P2 scope is explicit."
+      - "Requirements trace back to product goals."
+    prohibitions:
+      - "Do not decide framework, database, API schema, or module structure."
+    exit_conditions:
+      - "PRD.md exists"
+      - "P0 acceptance criteria are testable"
+    next:
+      success: "03"
+      blocked: HUMAN_DECISION
+
+  "03":
+    name: TECHNICAL_SPECIFICATION
+    phase: AUTHORING
+    type: AUTHORING
+    core_question: "What must the system technically guarantee?"
+    authority_domains:
+      owns:
+        - TECHNICAL_CONTRACT
+      reads:
+        - PRODUCT_INTENT
+        - PRODUCT_REQUIREMENT
+      forbidden:
+        - IMPLEMENTATION_DECISION
+    required_inputs:
+      files:
+        - "docs/proposal.md"
+        - "docs/PRD.md"
+      semantic:
+        - KNOWN_TECHNICAL_CONSTRAINTS_IF_ANY
+    outputs:
+      files:
+        - "docs/spec.md"
+      stable_ids:
+        - "SPEC-*"
+    checks:
+      - "Every applicable P0 requirement has technical coverage."
+      - "State/data/API/error/security/NFR contracts are defined when applicable."
+      - "Verification expectations are traceable."
+      - "No technical contract silently changes product behavior."
+    conflict_handling:
+      cross_domain_conflict:
+        result: BLOCKED
+        route_owner_by_domain: true
+        may_self_resolve: false
+    exit_conditions:
+      - "spec.md exists"
+      - "required technical contracts are traceable to PRD"
+      - "no unresolved cross-domain conflict affecting scope"
+    next:
+      success: "04"
+      blocked: REMEDIATION_ROUTER
+
+  "04":
+    name: SOFTWARE_DESIGN
+    phase: AUTHORING
+    type: AUTHORING
+    core_question: "How will the approved technical contracts be implemented?"
+    authority_domains:
+      owns:
+        - IMPLEMENTATION_DECISION
+      reads:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+      forbidden:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+    required_inputs:
+      files:
+        - "docs/PRD.md"
+        - "docs/spec.md"
+      semantic:
+        - REPOSITORY_STRUCTURE_IF_EXISTING
+        - APPROVED_CONSTRAINTS
+        - APPROVED_ADRS_IF_ANY
+    outputs:
+      files:
+        - "docs/Design.md"
+      optional_files:
+        - "docs/decisions/ADR-*.md"
+      stable_ids:
+        - "DES-*"
+        - "ADR-*"
+    checks:
+      - "Design decisions implement rather than redefine authoritative contracts."
+      - "Architecture/module/dependency/data-flow/repository mapping is sufficient for task decomposition."
+    conflict_handling:
+      cross_domain_conflict:
+        result: BLOCKED
+        route_owner_by_domain: true
+        may_self_resolve: false
+    exit_conditions:
+      - "Design.md exists"
+      - "P0 technical contracts have implementation design coverage"
+      - "no unresolved authority conflict affecting implementation"
+    next:
+      success: "05"
+      blocked: REMEDIATION_ROUTER
+
+  "05":
+    name: AGENT_GOVERNANCE
+    phase: AUTHORING
+    type: AUTHORING
+    core_question: "What may the coding agent do, not do, and when is it authorized to act?"
+    authority_domains:
+      owns:
+        - AGENT_REPOSITORY_GOVERNANCE
+      reads:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+      forbidden:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+    required_inputs:
+      files:
+        - "docs/PRD.md"
+        - "docs/spec.md"
+        - "docs/Design.md"
+      semantic:
+        - REPOSITORY_STRUCTURE
+    outputs:
+      files:
+        - "AGENTS.md"
+    required_content:
+      - AUTHORITY_MODEL
+      - AGENT_PERMISSIONS
+      - AGENT_PROHIBITIONS
+      - CROSS_DOMAIN_CONFLICT_HANDLING
+      - STAGE_07_10_LIFECYCLE
+      - ATOMIC_EXECUTION
+      - TESTING
+      - GIT_CHECKPOINT
+      - START_RESUME
+      - PROTECTED_SCOPE
+      - ESCALATION
+      - STAGE_09_10_HANDOFF
+    invariant:
+      - "Agent may detect/report/block but may not silently modify upstream authoritative contracts."
+    exit_conditions:
+      - "AGENTS.md exists"
+      - "agent permissions and lifecycle boundaries are explicit"
+    next:
+      success: "06"
+      blocked: REMEDIATION_ROUTER
+
+  "06":
+    name: IMPLEMENTATION_TASKS
+    phase: AUTHORING
+    type: AUTHORING
+    core_question: "What atomic tasks must be done, in what dependency order, with what verification?"
+    authority_domains:
+      owns:
+        - EXECUTION_DECOMPOSITION
+      reads:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+        - AGENT_REPOSITORY_GOVERNANCE
+      forbidden:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+    required_inputs:
+      files:
+        - "docs/PRD.md"
+        - "docs/spec.md"
+        - "docs/Design.md"
+        - "AGENTS.md"
+      semantic:
+        - REPOSITORY_STRUCTURE
+    outputs:
+      files:
+        - "tasks.md"
+      stable_ids:
+        - "T*"
+    atomic_task_contract:
+      required_fields:
+        - TASK_ID
+        - TITLE
+        - STATUS
+        - OBJECTIVE
+        - TRACEABILITY
+        - DEPENDENCIES
+        - IMPLEMENTATION_SCOPE
+        - VERIFICATION
+        - DONE_WHEN
+    checks:
+      - "Tasks are independently executable and verifiable."
+      - "Tasks preserve upstream authority."
+      - "Traceability chain reaches requirement/spec/design."
+    exit_conditions:
+      - "tasks.md exists"
+      - "all required P0 implementation scope is decomposed"
+      - "no task is a workaround for unresolved authority conflict"
+    next:
+      success: "07"
+      blocked: REMEDIATION_ROUTER
+
+  "07":
+    name: PRE_IMPLEMENTATION_GATE
+    phase: EXECUTION_VERIFICATION
+    type: GATE
+    core_question: "Are the artifacts complete, consistent, testable, and executable enough to authorize coding?"
+    authority_domains:
+      owns:
+        - PRE_IMPLEMENTATION_GATE_DECISION
+      reads:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+        - AGENT_REPOSITORY_GOVERNANCE
+        - EXECUTION_DECOMPOSITION
+      forbidden:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+    required_inputs:
+      files:
+        - "docs/PRD.md"
+        - "docs/spec.md"
+        - "docs/Design.md"
+        - "AGENTS.md"
+        - "tasks.md"
+        - ".sdd/state/project-state.yaml"
+        - ".sdd/state/authority-state.yaml"
+      semantic:
+        - REPOSITORY_STRUCTURE
+        - GIT_READINESS
+    checks:
+      - P0_COMPLETENESS
+      - P0_ACCEPTANCE_CRITERIA
+      - TECHNICAL_COVERAGE
+      - DESIGN_COVERAGE
+      - TASK_COVERAGE
+      - TESTABILITY
+      - TRACEABILITY
+      - SECURITY_BLOCKERS
+      - CRITICAL_TBD
+      - AUTHORITY_CONFLICTS
+      - AGENTS_READINESS
+      - REPOSITORY_GIT_READINESS
+    outputs:
+      files:
+        - "docs/handoff/pre-implementation-gate-report.md"
+    result_vocabulary:
+      - PASS
+      - FAIL
+      - INCOMPLETE
+    result_semantics:
+      PASS:
+        implementation_authorization: true
+        next: "08"
+      FAIL:
+        implementation_authorization: false
+        next: REMEDIATION_ROUTER
+      INCOMPLETE:
+        implementation_authorization: false
+        next: REMEDIATION_ROUTER
+    missing_required_artifact_result: INCOMPLETE
+    unresolved_authority_conflict_result: FAIL
+
+  "08":
+    name: IMPLEMENTATION_RUNNER
+    phase: EXECUTION_VERIFICATION
+    type: EXECUTION
+    core_question: "Execute authorized atomic tasks exactly within approved scope."
+    authority_domains:
+      owns:
+        - IMPLEMENTATION_EVIDENCE
+      reads:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+        - AGENT_REPOSITORY_GOVERNANCE
+        - EXECUTION_DECOMPOSITION
+        - PRE_IMPLEMENTATION_GATE_DECISION
+      forbidden:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+        - PRE_IMPLEMENTATION_GATE_DECISION
+    entry_conditions:
+      all:
+        - "stage_07_result == PASS"
+        - "implementation_authorization == true"
+    required_inputs:
+      files:
+        - "AGENTS.md"
+        - "tasks.md"
+        - "docs/PRD.md"
+        - "docs/spec.md"
+        - "docs/Design.md"
+        - ".sdd/state/implementation-state.yaml"
+      runtime:
+        - GIT_STATUS
+        - CURRENT_BRANCH
+        - RECENT_COMMITS
+    execution_engine: "CODEX_OR_REPOSITORY_AWARE_CODING_AGENT"
+    resume_protocol:
+      - "Read AGENTS.md"
+      - "Read current task"
+      - "Read referenced PRD/SPEC/DES"
+      - "Read implementation-state"
+      - "Inspect git status"
+      - "Identify branch"
+      - "Inspect recent commits"
+      - "Identify last completed/current/next task"
+    atomic_execution_loop:
+      - READ_TASK
+      - VALIDATE_AUTHORITY_SCOPE
+      - ESTABLISH_BASELINE
+      - FAILING_TEST_IF_APPLICABLE
+      - IMPLEMENT
+      - PASSING_TEST_OR_VERIFY
+      - GIT_CHECKPOINT
+      - UPDATE_STATE
+      - NEXT_TASK
+    checkpoint_rule: "ONE_INDEPENDENTLY_VERIFIABLE_ATOMIC_TASK_PER_CHECKPOINT"
+    checkpoint_preconditions:
+      - IMPLEMENTATION_COMPLETE
+      - REQUIRED_VERIFICATION_PASS
+      - COMPLETION_CRITERIA_SATISFIED
+      - SCOPE_RESPECTED
+      - UNEXPECTED_DIFF_REVIEWED
+      - NO_UNRESOLVED_BLOCKER
+    outputs:
+      evidence:
+        - "src/**"
+        - "tests/**"
+        - "git commits"
+        - ".sdd/state/implementation-state.yaml"
+    completion_conditions:
+      - "all required authorized tasks are DONE"
+      - "required tests/verification for tasks pass"
+      - "state and git checkpoints are current"
+    blocked_conditions:
+      - "Stage 07 is not PASS"
+      - "implementation authorization is false"
+      - "unresolved authority conflict"
+      - "task requires out-of-scope upstream contract change"
+    next:
+      completed: "09"
+      blocked: REMEDIATION_ROUTER
+
+  "09":
+    name: VERIFICATION_AND_CONVERGENCE
+    phase: EXECUTION_VERIFICATION
+    type: GATE_WITH_CONVERGENCE
+    core_question: "Does the implementation actually conform to product, technical, and design contracts?"
+    authority_domains:
+      owns:
+        - VERIFICATION_DECISION
+      reads:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+        - EXECUTION_DECOMPOSITION
+        - IMPLEMENTATION_EVIDENCE
+      forbidden:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+    required_inputs:
+      files:
+        - "docs/PRD.md"
+        - "docs/spec.md"
+        - "docs/Design.md"
+        - "AGENTS.md"
+        - "tasks.md"
+        - ".sdd/state/implementation-state.yaml"
+      runtime:
+        - SOURCE_CODE
+        - TEST_EVIDENCE
+        - GIT_HISTORY
+        - BUILD_LINT_TYPECHECK_EVIDENCE_IF_APPLICABLE
+    checks:
+      - P0_REQUIREMENTS
+      - ACCEPTANCE_CRITERIA
+      - STATE_MACHINE
+      - DATA_CONTRACT
+      - API_CONTRACT
+      - ERROR_CONTRACT
+      - SECURITY_PRIVACY
+      - NFR
+      - DESIGN_CONFORMANCE
+      - TASK_COMPLETION
+      - UNIT_CONTRACT_INTEGRATION_E2E
+      - REGRESSION
+      - BUILD_LINT_TYPECHECK
+      - AUTHORITY_DEVIATIONS
+      - BIDIRECTIONAL_TRACEABILITY
+    outputs:
+      files:
+        - "docs/handoff/verification-report.md"
+    result_vocabulary:
+      - PASS
+      - FAIL
+      - INCOMPLETE
+    classification:
+      IMPLEMENTATION_GAP:
+        description: "Authoritative contracts are clear; code/evidence does not conform."
+        allowed_action:
+          - CREATE_CONVERGENCE_TASK
+        convergence_task_id: "TC*"
+        route:
+          - "08"
+          - "09"
+        may_modify_upstream_contracts: false
+      AUTHORITY_CONTRACT_CONFLICT:
+        description: "Authoritative artifacts conflict with each other."
+        allowed_action:
+          - ROUTE_TO_AUTHORITATIVE_OWNER
+          - PROPAGATE_AFFECTED_DOWNSTREAM
+          - RERUN_STAGE_07
+        convergence_task_forbidden: true
+    result_semantics:
+      PASS:
+        next: "10"
+      FAIL:
+        next: CLASSIFICATION_ROUTER
+      INCOMPLETE:
+        next: REMEDIATION_ROUTER
+
+  "10":
+    name: HANDOFF_AND_RELEASE
+    phase: HANDOFF_RELEASE
+    type: RELEASE_GATE
+    core_question: "Can the verified implementation be safely handed off and released now?"
+    authority_domains:
+      owns:
+        - RELEASE_DECISION
+      reads:
+        - VERIFICATION_DECISION
+        - IMPLEMENTATION_EVIDENCE
+      forbidden:
+        - PRODUCT_REQUIREMENT
+        - TECHNICAL_CONTRACT
+        - IMPLEMENTATION_DECISION
+        - VERIFICATION_DECISION
+    entry_conditions:
+      all:
+        - "stage_09_result == PASS"
+    required_inputs:
+      files:
+        - "docs/handoff/verification-report.md"
+      semantic:
+        - RELEASE_IDENTITY
+        - TARGET_ENVIRONMENT
+        - DEPLOYMENT_TARGET
+        - BUILD_CI_EVIDENCE
+        - SECURITY_EVIDENCE
+        - DOCUMENTATION_READINESS
+        - MIGRATION_READINESS_IF_APPLICABLE
+        - DEPLOYMENT_READINESS
+        - ROLLBACK_RECOVERY_READINESS
+    checks:
+      RELEASE_IDENTITY:
+        - VERSION
+        - BRANCH
+        - COMMIT_OR_TAG
+        - TARGET_ENVIRONMENT
+        - DEPLOYMENT_TARGET
+      BUILD_CI:
+        - TESTS
+        - BUILD
+        - LINT_IF_APPLICABLE
+        - TYPECHECK_IF_APPLICABLE
+        - CI
+        - ARTIFACT_GENERATION_IF_APPLICABLE
+      SECURITY:
+        blockers:
+          - SECURITY_BLOCKER
+          - CREDENTIAL_LEAKAGE
+          - AUTH_BYPASS
+          - CRITICAL_PRIVACY_VIOLATION
+      DOCUMENTATION:
+        - README
+        - SETUP
+        - API_DOCS_IF_APPLICABLE
+        - ENVIRONMENT_DOCS
+        - RUNBOOK_IF_APPLICABLE
+        - RELEASE_NOTES
+        - KNOWN_ISSUES
+        - RECOVERY_INSTRUCTIONS
+      MIGRATION_IF_APPLICABLE:
+        - MIGRATION_PLAN
+        - COMPATIBILITY
+        - EXISTING_DATA_IMPACT
+        - EXECUTION_ORDER
+        - ROLLBACK_OR_FORWARD_RECOVERY
+        - DESTRUCTIVE_OPERATION_AUTHORIZATION
+        - VERIFICATION
+      DEPLOYMENT:
+        - ENVIRONMENT
+        - REQUIRED_SECRETS
+        - DEPLOYMENT_CONFIG
+        - DEPENDENCY_READINESS
+        - SMOKE_STRATEGY
+      ROLLBACK:
+        - PREVIOUS_KNOWN_GOOD_VERSION
+        - REVERT_METHOD
+        - DATA_RECOVERY
+        - ROLLBACK_TRIGGER
+        - OPERATOR_RESPONSIBILITY
+    outputs:
+      files:
+        - "docs/handoff/handoff-report.md"
+    result_vocabulary:
+      - READY
+      - READY_WITH_KNOWN_ISSUES
+      - BLOCKED
+    ready_with_known_issues_forbidden_if:
+      - P0_BLOCKER
+      - SECURITY_BLOCKER
+      - DATA_LOSS_BLOCKER
+      - UNRESOLVED_AUTHORITY_CONFLICT
+      - FAILED_REQUIRED_CI_OR_BUILD
+      - MISSING_CRITICAL_ROLLBACK_OR_RECOVERY
+    result_semantics:
+      READY:
+        release_authorization: true
+        next: DEPLOY
+      READY_WITH_KNOWN_ISSUES:
+        release_authorization: true
+        next: DEPLOY_WITH_RECORDED_NON_BLOCKING_ISSUES
+      BLOCKED:
+        release_authorization: false
+        next: RELEASE_REMEDIATION
+
+routers:
+  REMEDIATION_ROUTER:
+    strategy: "CLASSIFY_BY_AUTHORITY_DOMAIN_AND_FAILURE_TYPE"
+    rules:
+      MISSING_ARTIFACT:
+        route_to: "stage_that_owns_required_artifact"
+      CROSS_DOMAIN_CONFLICT:
+        route_to: "all_relevant_authoritative_owner_stages"
+        human_decision_if_contract_choice_required: true
+      BLOCKING_TBD:
+        route_to: "authoritative_owner_stage"
+      SECURITY_BLOCKER:
+        route_to: "stage_owning_the_affected_contract_or_implementation"
+      IMPLEMENTATION_GAP:
+        route_to: "08"
+
+  CLASSIFICATION_ROUTER:
+    rules:
+      IMPLEMENTATION_GAP:
+        route_to: "08"
+        create_tc_task: true
+      AUTHORITY_CONTRACT_CONFLICT:
+        route_to: REMEDIATION_ROUTER
+        create_tc_task: false
+
+rerun_rules:
+  invariant: "When an upstream formal contract changes, all affected downstream scope must be re-evaluated."
+  by_changed_stage:
+    "01":
+      reevaluate:
+        - "02"
+        - "03"
+        - "04"
+        - "05_if_affected"
+        - "06"
+        - "07"
+        - "08_affected_work"
+        - "09"
+        - "10"
+    "02":
+      reevaluate:
+        - "03"
+        - "04"
+        - "05_if_affected"
+        - "06"
+        - "07"
+        - "08_affected_work"
+        - "09"
+        - "10"
+    "03":
+      reevaluate:
+        - "04"
+        - "05_if_affected"
+        - "06"
+        - "07"
+        - "08_affected_work"
+        - "09"
+        - "10"
+    "04":
+      reevaluate:
+        - "05_if_affected"
+        - "06"
+        - "07"
+        - "08_affected_work"
+        - "09"
+        - "10"
+    implementation_gap_only:
+      route:
+        - "09"
+        - "TC_TASK"
+        - "08"
+        - "09"
+      upstream_authoring_rerun_required: false
+
+completion_definition:
+  minimum:
+    - "stage_07 == PASS"
+    - "all_required_stage_08_tasks == DONE"
+    - "stage_09 == PASS"
+    - "stage_10 in [READY, READY_WITH_KNOWN_ISSUES]"
+  optional_if_in_scope:
+    - ACTUAL_DEPLOYMENT
+    - SMOKE_VERIFICATION

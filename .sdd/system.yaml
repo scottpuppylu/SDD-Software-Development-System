@@ -1,0 +1,152 @@
+schema_version: '1.0'
+system:
+  name: SDD Software Development System
+  version: 3.1-codex-default
+  baseline_governance: Shared Knowledge v2.3
+  purpose: 'Execute the SDD 01-10 lifecycle as a governed software development system
+    using repository artifacts as persistent state instead of manual copy/paste or
+    chat memory.
+
+    '
+principles:
+  stage_progression:
+    model: SEQUENTIAL_GATED
+    description: Lifecycle stages have ordered entry/exit gates.
+  knowledge_dependencies:
+    model: NON_LINEAR_AUTHORITY_GRAPH
+    description: A stage reads all required authoritative artifacts, not only the
+      previous stage output.
+  authority:
+    model: DOMAIN_SPECIFIC
+    linear_priority_forbidden: true
+    conflict_protocol:
+    - DETECT
+    - REPORT
+    - BLOCK
+    - ROUTE_TO_AUTHORITATIVE_OWNER
+  persistence:
+    source_of_execution_state: REPOSITORY_AND_GIT
+    chat_memory_authoritative: false
+  orchestration:
+    may_route: true
+    may_read_artifacts: true
+    may_update_runtime_state: true
+    may_grant_authorization_only_from_defined_gate_result: true
+    may_override_domain_authority: false
+    may_silently_rewrite_authoritative_contracts: false
+authority_domains:
+  PRODUCT_INTENT:
+    authoritative_artifact: docs/proposal.md
+    owner_stage: '01'
+  PRODUCT_REQUIREMENT:
+    authoritative_artifact: docs/PRD.md
+    owner_stage: '02'
+  TECHNICAL_CONTRACT:
+    authoritative_artifact: docs/spec.md
+    owner_stage: '03'
+  IMPLEMENTATION_DECISION:
+    authoritative_artifact: docs/Design.md
+    owner_stage: '04'
+  AGENT_REPOSITORY_GOVERNANCE:
+    authoritative_artifact: AGENTS.md
+    owner_stage: '05'
+  EXECUTION_DECOMPOSITION:
+    authoritative_artifact: tasks.md
+    owner_stage: '06'
+  IMPLEMENTATION_EVIDENCE:
+    authoritative_artifact:
+    - src/**
+    - tests/**
+    - git
+    owner_stage: 08
+  PRE_IMPLEMENTATION_GATE_DECISION:
+    authoritative_artifact: docs/handoff/pre-implementation-gate-report.md
+    owner_stage: '07'
+  VERIFICATION_DECISION:
+    authoritative_artifact: docs/handoff/verification-report.md
+    owner_stage: 09
+  RELEASE_DECISION:
+    authoritative_artifact: docs/handoff/handoff-report.md
+    owner_stage: '10'
+vocabularies:
+  artifact_task_status:
+  - TODO
+  - IN_PROGRESS
+  - BLOCKED
+  - DONE
+  gate_result:
+  - PASS
+  - FAIL
+  - INCOMPLETE
+  release_result:
+  - READY
+  - READY_WITH_KNOWN_ISSUES
+  - BLOCKED
+  remediation_reason:
+  - NEEDS_CLARIFICATION
+  - BLOCKING_TBD
+  - CROSS_DOMAIN_CONFLICT
+  - IMPLEMENTATION_GAP
+  - MISSING_ARTIFACT
+  - SECURITY_BLOCKER
+  - RELEASE_OPERATIONAL_BLOCKER
+traceability:
+  canonical_chain:
+  - G
+  - FR_NFR_EC
+  - AC
+  - SPEC
+  - DES
+  - TASK
+  - CODE
+  - TEST_EVIDENCE
+  bidirectional_required_at_stage_09: true
+runtime:
+  stage_registry: .sdd/stages.yaml
+  project_state: .sdd/state/project-state.yaml
+  implementation_state: .sdd/state/implementation-state.yaml
+  authority_state: .sdd/state/authority-state.yaml
+human_intervention:
+  policy: EXCEPTION_BASED
+  required_when:
+  - authoritative product decision is missing or conflicting
+  - technical contract owner decision is required
+  - high-risk destructive operation requires explicit authorization
+  - release blocker requires operator/business decision
+  not_required_for:
+  - normal artifact handoff
+  - routine stage transition with satisfied gate
+  - repository state recovery
+  - automatic loading of required artifacts
+reasoning_provider:
+  default: CODEX_CLI_CHATGPT_AUTH
+  api_key_required: false
+  reasoning_stages:
+  - '01'
+  - '02'
+  - '03'
+  - '04'
+  - '05'
+  - '06'
+  - '07'
+  - 09
+  - '10'
+  codex_cli:
+    sandbox: read-only
+    session: ephemeral_per_stage
+    structured_output: --output-schema
+    final_output: --output-last-message
+    authentication: saved_codex_cli_auth
+  optional_providers:
+    OPENAI_API:
+      enabled: true
+      default: false
+      requires_api_key: true
+    EXTERNAL_COMMAND:
+      enabled: true
+      default: false
+implementation_provider:
+  stage: 08
+  default: CODEX_CLI
+  sandbox: workspace-write
+  authentication: saved_codex_cli_auth
