@@ -5,11 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 import json
-import os
 import re
 import shutil
 import subprocess
-import sys
 import threading
 import time
 
@@ -20,6 +18,11 @@ from .codex_cli import CodexCLI
 from .codex_results import VerificationResult, CodexTaskRunResult
 from .errors import CodexAdapterError
 from .verification_policy import VerificationCommandPolicy
+from .verification_runtime import (
+    build_verification_env,
+    resolve_project_python,
+    resolve_verification_argv,
+)
 from .task_parser import AtomicTask, TaskFileParser
 from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
 
@@ -318,49 +321,11 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         }
 
     def _resolve_project_python(self) -> str:
-        candidates: list[str] = []
-        if self.project_python:
-            candidates.append(self.project_python)
-        env_python = os.environ.get("SDD_PROJECT_PYTHON")
-        if env_python:
-            candidates.append(env_python)
-
-        if os.name == "nt":
-            candidates.append(str(self.repo_root / ".venv" / "Scripts" / "python.exe"))
-        else:
-            candidates.append(str(self.repo_root / ".venv" / "bin" / "python"))
-
-        # Backward-compatible final fallback. It is acceptable only if the
-        # project itself accepts the Orchestrator interpreter; project package
-        # metadata/verification will reject an incompatible runtime.
-        candidates.append(sys.executable)
-
-        for candidate in candidates:
-            if not candidate:
-                continue
-            p = Path(candidate)
-            if p.is_absolute() and p.exists():
-                return str(p)
-            resolved = shutil.which(candidate)
-            if resolved:
-                return resolved
-        raise CodexAdapterError(
-            "No project Python interpreter is available. Supply --project-python <path> "
-            "or set SDD_PROJECT_PYTHON to the project's Python executable."
-        )
+        return resolve_project_python(self.repo_root, self.project_python)
 
     @staticmethod
     def _verification_env(project_python: str) -> dict[str, str]:
-        env = os.environ.copy()
-        py = Path(project_python)
-        prepend: list[str] = [str(py.parent)]
-        if os.name == "nt":
-            scripts = py.parent / "Scripts"
-            if scripts.exists():
-                prepend.append(str(scripts))
-        env["PATH"] = os.pathsep.join(prepend + [env.get("PATH", "")])
-        env["SDD_PROJECT_PYTHON"] = project_python
-        return env
+        return build_verification_env(project_python)
 
     def _run_verification(self, task: AtomicTask) -> list[VerificationResult]:
         results: list[VerificationResult] = []
@@ -369,21 +334,9 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         for command in task.verification_commands:
             self._progress(f"{task.task_id} verify: {command}")
             argv = VerificationCommandPolicy.argv(command)
-            # Python verification belongs to the project runtime, not to the
-            # SDD Orchestrator's own interpreter. This allows SDD to run on one
-            # Python minor while verifying a repository governed by another.
-            if argv[0] in {"python", "python3"}:
-                argv[0] = project_python
-            elif argv[0] == "pytest":
-                argv = [project_python, "-m", "pytest", *argv[1:]]
-            else:
-                # Windows CreateProcess does not reliably apply PATHEXT when
-                # shell=False. Resolve project-installed console scripts (for
-                # example ``todo`` -> ``...\Scripts\todo.exe``) ourselves
-                # against the verification environment before execution.
-                resolved = shutil.which(argv[0], path=verify_env.get("PATH"))
-                if resolved:
-                    argv[0] = resolved
+            argv = resolve_verification_argv(
+                argv, project_python, verify_env, resolver=shutil.which
+            )
             try:
                 proc = self._call_with_heartbeat(
                     f"{task.task_id} verification still running",
