@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-import json
 import re
 import shutil
 import subprocess
@@ -15,10 +13,8 @@ import yaml
 from .core import Orchestrator
 from .codex_cli import CodexCLI
 from .codex_results import VerificationResult, CodexTaskRunResult
-from .result_serialization import (
-    serialize_task_run_result,
-    serialize_verification_result,
-)
+from .result_serialization import serialize_task_run_result
+from .evidence_writer import write_stage08_evidence
 from .errors import CodexAdapterError
 from .verification_policy import VerificationCommandPolicy
 from .verification_execution import execute_verification_command
@@ -431,27 +427,14 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
         *,
         status: str,
     ) -> str:
-        evidence_dir = self.repo_root / ".sdd" / "evidence"
-        evidence_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
-        rel = f".sdd/evidence/{stamp}-{task.task_id}.json"
-        payload = {
-            "schema_version": "1.0",
-            "stage": "08",
-            "task_id": task.task_id,
-            "title": task.title,
-            "status": status,
-            "changed_paths": changed,
-            "verification": [serialize_verification_result(v) for v in verification],
-            "codex": {
-                "returncode": proc.returncode,
-                "final_stdout": proc.stdout,
-                "stderr": proc.stderr,
-            },
-            "recorded_at": stamp,
-        }
-        (self.repo_root / rel).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        return rel
+        return write_stage08_evidence(
+            self.repo_root,
+            task,
+            proc,
+            changed,
+            verification,
+            status=status,
+        )
 
     def _finish_without_checkpoint(
         self,
