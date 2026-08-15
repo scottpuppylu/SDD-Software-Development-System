@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,39 +17,13 @@ import yaml
 
 from .core import Orchestrator
 from .codex_cli import CodexCLI
+from .codex_results import VerificationResult, CodexTaskRunResult
 from .errors import CodexAdapterError
 from .verification_policy import VerificationCommandPolicy
 from .task_parser import AtomicTask, TaskFileParser
 from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
 
 
-
-
-@dataclass
-class VerificationResult:
-    command: str
-    returncode: int
-    stdout: str
-    stderr: str
-
-    @property
-    def passed(self) -> bool:
-        return self.returncode == 0
-
-
-@dataclass
-class CodexTaskRunResult:
-    task_id: str
-    title: str
-    codex_returncode: int
-    codex_stdout: str
-    codex_stderr: str
-    changed_paths: list[str]
-    verification: list[VerificationResult]
-    checkpoint_commit: str | None
-    next_task: str | None
-    status: str
-    evidence_file: str | None
 
 
 class Stage08CodexRunner:
