@@ -193,6 +193,94 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertNotEqual(after_state.get("last_completed_task"), "T001")
         self.assertNotEqual(after_state.get("last_verified_commit"), before_head)
 
+    def test_recovery_state_failure_after_checkpoint_exposes_split_brain_without_false_done(self):
+        self._write_tasks('''
+### T001 ? Recovery state failure
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before_head = run_git(self.repo, "rev-parse", "HEAD")
+        state_path = self.repo / ".sdd/state/implementation-state.yaml"
+        before_state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        recovery_fields = (
+            "last_completed_task",
+            "current_task",
+            "next_task",
+            "last_verified_commit",
+            "test_status",
+        )
+
+        def callback(repo, prompt):
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/calculator.py").write_text(
+                "def add(a, b):\n    return a + b\n", encoding="utf-8"
+            )
+            (repo / "tests/test_calculator.py").write_text(
+                "from src.calculator import add\n\n"
+                "def test_add():\n    assert add(2, 3) == 5\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(
+                returncode=0, stdout="implemented", stderr=""
+            )
+
+        fake = FakeCodex(callback)
+        runner = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+        result = None
+
+        with patch.object(
+            runner.recovery,
+            "record_checkpoint",
+            side_effect=RuntimeError("simulated recovery state write failure"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "simulated recovery state write failure"
+            ):
+                result = runner.execute_one("T001")
+
+        self.assertIsNone(result)
+        self.assertEqual(len(fake.prompts), 1)
+
+        after_head = run_git(self.repo, "rev-parse", "HEAD")
+        self.assertNotEqual(after_head, before_head)
+        checkpoint_paths = run_git(
+            self.repo, "show", "--name-only", "--pretty=format:", "HEAD"
+        ).splitlines()
+        self.assertIn("src/calculator.py", checkpoint_paths)
+        self.assertIn("tests/test_calculator.py", checkpoint_paths)
+
+        evidence_paths = [
+            path for path in checkpoint_paths
+            if path.startswith(".sdd/evidence/") and path.endswith("-T001.json")
+        ]
+        self.assertEqual(len(evidence_paths), 1)
+        evidence = json.loads(
+            (self.repo / evidence_paths[0]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(evidence["status"], "PASS")
+        self.assertTrue(evidence["verification"])
+        self.assertTrue(all(item["passed"] for item in evidence["verification"]))
+
+        after_state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        for field in recovery_fields:
+            self.assertEqual(after_state.get(field), before_state.get(field))
+        if before_state.get("last_completed_task") != "T001":
+            self.assertNotEqual(after_state.get("last_completed_task"), "T001")
+        if before_state.get("last_verified_commit") != after_head:
+            self.assertNotEqual(after_state.get("last_verified_commit"), after_head)
+
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), after_head)
+        self.assertNotEqual(after_state.get("last_verified_commit"), after_head)
+        status = run_git(
+            self.repo, "status", "--short", "--untracked-files=all"
+        )
+        self.assertNotIn("src/calculator.py", status)
+        self.assertNotIn("tests/test_calculator.py", status)
+        self.assertNotIn(evidence_paths[0], status)
+
     def test_failed_verification_never_commits(self):
         self._write_tasks('''\n### T001 — Broken calculator\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n''')
         before = run_git(self.repo, "rev-parse", "HEAD")
