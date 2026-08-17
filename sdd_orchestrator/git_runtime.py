@@ -65,9 +65,30 @@ class GitRepository:
             ["diff-tree", "--no-commit-id", "--name-only", "-r", commit]
         ).stdout.splitlines()
 
+    def commit_added_paths(self, commit: str = "HEAD") -> list[str]:
+        return self._run(
+            ["diff-tree", "--no-commit-id", "--name-only", "--diff-filter=A", "-r", commit]
+        ).stdout.splitlines()
+
+    def commit_parents(self, commit: str) -> list[str]:
+        return self._run(["show", "-s", "--format=%P", commit]).stdout.split()
+
     def read_committed_file(self, path: str, commit: str = "HEAD") -> str:
         normalized = Path(path).as_posix()
         return self._run(["show", f"{commit}:{normalized}"]).stdout
+
+    def first_parent_commits(self, head: str, lower_exclusive: str) -> list[str] | None:
+        """Return the bounded first-parent range, or None when lower is not on it."""
+        ancestry = self._run(["rev-list", "--first-parent", head]).stdout.splitlines()
+        if lower_exclusive not in ancestry:
+            return None
+        return self._run(
+            ["rev-list", "--first-parent", "--reverse", f"{lower_exclusive}..{head}"]
+        ).stdout.splitlines()
+
+    def first_parent(self, commit: str) -> str | None:
+        parents = self.commit_parents(commit)
+        return parents[0] if parents else None
 
     def snapshot(self, *, recent_limit: int = 10) -> GitSnapshot:
         if not self.is_repository():

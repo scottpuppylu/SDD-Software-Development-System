@@ -191,7 +191,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 "recover/inspect before Codex execution: " + ", ".join(unrelated_dirty)
             )
 
-        reconciled = self._reconcile_head_checkpoint(task, before.head_commit)
+        reconciled = self._reconcile_checkpoint_history(task, before.head_commit)
         if reconciled is not None:
             return reconciled
 
@@ -280,20 +280,91 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             changed, verification, commit, next_task, "DONE", evidence,
         )
 
-    def _reconcile_head_checkpoint(
+    def _reconcile_checkpoint_history(
         self, task: AtomicTask, head_commit: str | None
     ) -> CodexTaskRunResult | None:
-        """Repair state only when HEAD itself proves a completed Stage 08 task."""
+        """Reconcile a bounded, contiguous first-parent checkpoint chain."""
         if not head_commit:
             return None
-        subject = self.git.commit_subject(head_commit)
+        state = self.recovery._load_state()
+        lower = state.get("last_verified_commit")
+        if lower:
+            commits = self.git.first_parent_commits(head_commit, str(lower))
+            if commits is None:
+                return None
+        else:
+            commits = [head_commit]
+
+        validated: list[tuple[str, AtomicTask, dict[str, Any], str, list[VerificationResult]]] = []
+        for commit in commits:
+            checkpoint = self._validate_checkpoint_commit(commit)
+            if checkpoint is None:
+                return None
+            validated.append((commit, *checkpoint))
+
+        # When state already records HEAD, an explicitly requested older task is
+        # recoverable only through the immediately preceding checkpoint chain.
+        cursor = str(lower) if lower else None
+        while lower and not any(item[1].task_id == task.task_id for item in validated):
+            if cursor is None:
+                return None
+            checkpoint = self._validate_checkpoint_commit(cursor)
+            if checkpoint is None:
+                return None
+            validated.insert(0, (cursor, *checkpoint))
+            if checkpoint[0].task_id == task.task_id:
+                break
+            cursor = self.git.first_parent(cursor)
+            if cursor is None:
+                return None
+
+        for previous, current in zip(validated, validated[1:]):
+            if self._next_task_id(previous[1].task_id) != current[1].task_id:
+                return None
+
+        recovered = next((item for item in validated if item[1].task_id == task.task_id), None)
+        if recovered is None:
+            return None
+
+        # Replay only checkpoints newer than durable state, in normal order.
+        for commit, recovered_task, *_ in validated:
+            if commit not in commits:
+                continue
+            self.recovery.record_checkpoint(
+                commit=commit,
+                completed_task=recovered_task.task_id,
+                next_task=self._next_task_id(recovered_task.task_id),
+                test_status="PASS",
+            )
+
+        commit, _, evidence, evidence_path, verification = recovered
+        codex_data = evidence["codex"]
+        next_task = self._next_task_id(task.task_id)
+        self._progress(f"{task.task_id} reconciled from checkpoint {commit}")
+        return CodexTaskRunResult(
+            task.task_id, task.title, int(codex_data["returncode"]),
+            str(codex_data.get("final_stdout", "")), str(codex_data.get("stderr", "")),
+            list(evidence["changed_paths"]), verification, commit, next_task, "DONE", evidence_path,
+        )
+
+    def _validate_checkpoint_commit(
+        self, commit: str
+    ) -> tuple[AtomicTask, dict[str, Any], str, list[VerificationResult]] | None:
+        if len(self.git.commit_parents(commit)) != 1:
+            return None
+        subject = self.git.commit_subject(commit)
         match = re.match(
             r"^(?:feat|fix)\(implementation\): \[([A-Z]+\d+)\] .+", subject
         )
-        if not match or match.group(1) != task.task_id:
+        if not match:
             return None
 
-        checkpoint_paths = self.git.commit_paths(head_commit)
+        task_id = match.group(1)
+        task = next((item for item in self.tasks() if item.task_id == task_id), None)
+        if task is None:
+            return None
+
+        checkpoint_paths = self.git.commit_added_paths(commit)
         evidence_paths = [
             path for path in checkpoint_paths
             if path.startswith(".sdd/evidence/")
@@ -303,7 +374,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             return None
         try:
             evidence = json.loads(
-                self.git.read_committed_file(evidence_paths[0], head_commit)
+                self.git.read_committed_file(evidence_paths[0], commit)
             )
         except json.JSONDecodeError:
             return None
@@ -345,36 +416,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             )
             for item in verification_data
         ]
-        next_task = self._next_task_id(task.task_id)
-        state = self.recovery._load_state()
-        already_recorded = (
-            state.get("last_completed_task") == task.task_id
-            and state.get("last_verified_commit") == head_commit
-            and state.get("current_task") == next_task
-            and state.get("next_task") is None
-            and state.get("test_status", {}).get("overall") == "PASS"
-        )
-        if not already_recorded:
-            self.recovery.record_checkpoint(
-                commit=head_commit,
-                completed_task=task.task_id,
-                next_task=next_task,
-                test_status="PASS",
-            )
-        self._progress(f"{task.task_id} reconciled from checkpoint {head_commit}")
-        return CodexTaskRunResult(
-            task.task_id,
-            task.title,
-            int(codex_data.get("returncode", 0)),
-            str(codex_data.get("final_stdout", "")),
-            str(codex_data.get("stderr", "")),
-            list(evidence["changed_paths"]),
-            verification,
-            head_commit,
-            next_task,
-            "DONE",
-            evidence_paths[0],
-        )
+        return task, evidence, evidence_paths[0], verification
 
     def run_until_complete(self, *, max_tasks: int = 100) -> dict[str, Any]:
         results: list[CodexTaskRunResult] = []

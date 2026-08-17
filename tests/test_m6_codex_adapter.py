@@ -370,6 +370,203 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertNotIn("tests/test_calculator.py", status)
         self.assertNotIn(evidence_path, status)
 
+    def test_multi_checkpoint_stale_recovery_does_not_rerun_checkpointed_tasks(self):
+        self._write_tasks('''
+### T001 ? First calculator task
+- **Status:** TODO
+- **Allowed files:** `src/first.py`, `tests/test_first.py`
+- **Implementation Scope:** Implement first task.
+- **Verification Commands:** `python -m pytest -q`
+
+### T002 ? Second calculator task
+- **Status:** TODO
+- **Allowed files:** `src/second.py`, `tests/test_second.py`
+- **Implementation Scope:** Implement second task.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        state_path = self.repo / ".sdd/state/implementation-state.yaml"
+        stale_state = state_path.read_text(encoding="utf-8")
+        setup_head = run_git(self.repo, "rev-parse", "HEAD")
+
+        def implement_first(repo, _prompt):
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/first.py").write_text(
+                "def add(a, b):\n    return a + b\n", encoding="utf-8"
+            )
+            (repo / "tests/test_first.py").write_text(
+                "from src.first import add\n\n"
+                "def test_add():\n    assert add(2, 3) == 5\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="implemented T001", stderr="")
+
+        first_codex = FakeCodex(implement_first)
+        first = Stage08CodexRunner(Orchestrator(self.repo), codex=first_codex)
+        with patch.object(
+            first.recovery,
+            "record_checkpoint",
+            side_effect=RuntimeError("simulated T001 recovery state write failure"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "simulated T001 recovery state write failure"
+            ):
+                first.execute_one("T001")
+
+        t001_commit = run_git(self.repo, "rev-parse", "HEAD")
+        self.assertNotEqual(t001_commit, setup_head)
+        self.assertEqual(len(first_codex.prompts), 1)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), stale_state)
+        self.assertRegex(
+            run_git(self.repo, "show", "-s", "--format=%s", t001_commit),
+            r"^(?:feat|fix)\(implementation\): \[T001\] .+",
+        )
+
+        def implement_second(repo, _prompt):
+            (repo / "src/second.py").write_text(
+                "def multiply(a, b):\n    return a * b\n", encoding="utf-8"
+            )
+            (repo / "tests/test_second.py").write_text(
+                "from src.second import multiply\n\n"
+                "def test_multiply():\n    assert multiply(2, 3) == 6\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="implemented T002", stderr="")
+
+        second_codex = FakeCodex(implement_second)
+        second = Stage08CodexRunner(Orchestrator(self.repo), codex=second_codex)
+        second_result = second.execute_one("T002")
+        t002_commit = second_result.checkpoint_commit
+        self.assertIsNotNone(t002_commit)
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), t002_commit)
+        self.assertEqual(run_git(self.repo, "rev-parse", f"{t002_commit}^"), t001_commit)
+        self.assertRegex(
+            run_git(self.repo, "show", "-s", "--format=%s", t002_commit),
+            r"^(?:feat|fix)\(implementation\): \[T002\] .+",
+        )
+        self.assertEqual(len(second_codex.prompts), 1)
+
+        def committed_pass_evidence(commit, task_id):
+            paths = run_git(
+                self.repo, "show", "--name-only", "--pretty=format:", commit
+            ).splitlines()
+            matches = [
+                path for path in paths
+                if path.startswith(".sdd/evidence/") and path.endswith(f"-{task_id}.json")
+            ]
+            self.assertEqual(len(matches), 1)
+            evidence = json.loads(run_git(self.repo, "show", f"{commit}:{matches[0]}"))
+            self.assertEqual(evidence["schema_version"], "1.0")
+            self.assertEqual(evidence["stage"], "08")
+            self.assertEqual(evidence["task_id"], task_id)
+            self.assertEqual(evidence["status"], "PASS")
+            self.assertIsInstance(evidence["changed_paths"], list)
+            self.assertIsInstance(evidence["codex"], dict)
+            self.assertEqual(evidence["codex"]["returncode"], 0)
+            self.assertTrue(evidence["verification"])
+            self.assertEqual(
+                [item["command"] for item in evidence["verification"]],
+                ["python -m pytest -q"],
+            )
+            self.assertTrue(all(
+                isinstance(item["command"], str)
+                and isinstance(item["returncode"], int)
+                and isinstance(item["stdout"], str)
+                and isinstance(item["stderr"], str)
+                and item["passed"] is True
+                and item["returncode"] == 0
+                for item in evidence["verification"]
+            ))
+            return matches[0]
+
+        t001_evidence = committed_pass_evidence(t001_commit, "T001")
+        t002_evidence = committed_pass_evidence(t002_commit, "T002")
+        state_after_t002 = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state_after_t002["last_completed_task"], "T002")
+        self.assertEqual(state_after_t002["last_verified_commit"], t002_commit)
+
+        def must_not_run(*_):
+            raise AssertionError(
+                "Codex must not rerun already checkpointed tasks during reconciliation"
+            )
+
+        fresh_codex = FakeCodex(must_not_run)
+        fresh = Stage08CodexRunner(Orchestrator(self.repo), codex=fresh_codex)
+        head_before_reconciliation = run_git(self.repo, "rev-parse", "HEAD")
+        evidence_count_before = len(list((self.repo / ".sdd/evidence").glob("*.json")))
+
+        t001_result = fresh.execute_one("T001")
+        t002_result = fresh.execute_one("T002")
+        repeated_t001_result = fresh.execute_one("T001")
+
+        self.assertEqual(t001_result.checkpoint_commit, t001_commit)
+        self.assertEqual(t002_result.checkpoint_commit, t002_commit)
+        self.assertEqual(repeated_t001_result.status, "DONE")
+        self.assertEqual(repeated_t001_result.checkpoint_commit, t001_commit)
+        self.assertEqual(fresh_codex.prompts, [])
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), head_before_reconciliation)
+        self.assertEqual(len(list((self.repo / ".sdd/evidence").glob("*.json"))), evidence_count_before)
+        self.assertEqual(run_git(self.repo, "log", "--format=%s").count("[T001]"), 1)
+        self.assertEqual(run_git(self.repo, "log", "--format=%s").count("[T002]"), 1)
+        self.assertTrue(run_git(self.repo, "show", f"{t001_commit}:{t001_evidence}"))
+        self.assertTrue(run_git(self.repo, "show", f"{t002_commit}:{t002_evidence}"))
+        state_after_reconciliation = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state_after_reconciliation["last_completed_task"], "T002")
+        self.assertEqual(state_after_reconciliation["last_verified_commit"], t002_commit)
+        self.assertEqual(state_after_reconciliation["current_task"], state_after_t002["current_task"])
+
+    def test_historical_reconciliation_does_not_cross_unrelated_commit(self):
+        self._write_tasks('''
+### T001 ? First task
+- **Status:** TODO
+- **Allowed files:** `src/first.py`, `tests/test_first.py`
+- **Implementation Scope:** Implement first task.
+- **Verification Commands:** `python -m pytest -q`
+
+### T002 ? Second task
+- **Status:** TODO
+- **Allowed files:** `src/second.py`, `tests/test_second.py`
+- **Implementation Scope:** Implement second task.
+- **Verification Commands:** `python -m pytest -q`
+''')
+
+        def implement(task_id, module):
+            def callback(repo, _prompt):
+                (repo / "src").mkdir(exist_ok=True)
+                (repo / "tests").mkdir(exist_ok=True)
+                (repo / f"src/{module}.py").write_text("VALUE = 1\n", encoding="utf-8")
+                (repo / f"tests/test_{module}.py").write_text(
+                    f"from src.{module} import VALUE\n\ndef test_{task_id.lower()}():\n    assert VALUE == 1\n",
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(returncode=0, stdout=f"implemented {task_id}", stderr="")
+            return callback
+
+        first = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(implement("T001", "first"))
+        ).execute_one("T001")
+        unrelated = self.repo / "README.md"
+        unrelated.write_text("unrelated history\n", encoding="utf-8")
+        run_git(self.repo, "add", "README.md")
+        run_git(self.repo, "commit", "-m", "docs: unrelated history")
+        unrelated_commit = run_git(self.repo, "rev-parse", "HEAD")
+        second = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(implement("T002", "second"))
+        ).execute_one("T002")
+
+        def observed_rerun(_repo, _prompt):
+            return SimpleNamespace(returncode=1, stdout="", stderr="not reconciled")
+
+        codex = FakeCodex(observed_rerun)
+        result = Stage08CodexRunner(Orchestrator(self.repo), codex=codex).execute_one("T001")
+
+        self.assertEqual(result.status, "CODEX_FAILED")
+        self.assertEqual(len(codex.prompts), 1)
+        self.assertEqual(run_git(self.repo, "rev-parse", f"{second.checkpoint_commit}^"), unrelated_commit)
+        self.assertNotEqual(first.checkpoint_commit, unrelated_commit)
+        self.assertEqual(run_git(self.repo, "log", "--format=%s").count("[T001]"), 1)
+        self.assertEqual(run_git(self.repo, "log", "--format=%s").count("[T002]"), 1)
+
     def test_failed_verification_never_commits(self):
         self._write_tasks('''\n### T001 — Broken calculator\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n''')
         before = run_git(self.repo, "rev-parse", "HEAD")
