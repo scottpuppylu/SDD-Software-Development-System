@@ -329,6 +329,120 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertIsNotNone(result.checkpoint_commit)
         self.assertEqual(calls, 1)
 
+    def test_partial_evidence_write_failure_leaves_no_invalid_artifact_and_fresh_retry_recovers(self):
+        self._write_tasks('''
+### T001 ? Partial evidence write failure
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before_head = run_git(self.repo, "rev-parse", "HEAD")
+        codex_calls = 0
+        verification_calls = 0
+
+        def implement(repo, _prompt):
+            nonlocal codex_calls
+            codex_calls += 1
+            if codex_calls > 1:
+                raise AssertionError(
+                    "Codex implementation must not rerun after partial evidence write failure"
+                )
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/calculator.py").write_text(
+                "def add(a, b):\n    return a + b\n", encoding="utf-8"
+            )
+            (repo / "tests/test_calculator.py").write_text(
+                "from src.calculator import add\n\n"
+                "def test_add():\n    assert add(2, 3) == 5\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="implemented", stderr="")
+
+        fake = FakeCodex(implement)
+        first = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+        original_first_verification = first._run_verification
+
+        def count_first_verification(task):
+            nonlocal verification_calls
+            verification_calls += 1
+            return original_first_verification(task)
+
+        original_write_text = Path.write_text
+
+        def partial_evidence_write(path, data, *args, **kwargs):
+            if path.parent == self.repo / ".sdd/evidence" and path.name.endswith("-T001.json"):
+                original_write_text(path, '{"schema_version": "1.0",', *args, **kwargs)
+                raise RuntimeError("simulated partial evidence write failure")
+            return original_write_text(path, data, *args, **kwargs)
+
+        with patch.object(first, "_run_verification", side_effect=count_first_verification):
+            with patch.object(Path, "write_text", new=partial_evidence_write):
+                with self.assertRaisesRegex(
+                    RuntimeError, "simulated partial evidence write failure"
+                ):
+                    first.execute_one("T001")
+
+        evidence_files_after_failure = sorted(
+            (self.repo / ".sdd/evidence").glob("*-T001.json")
+        )
+        invalid_after_failure = []
+        for path in evidence_files_after_failure:
+            try:
+                json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                invalid_after_failure.append(path)
+
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), before_head)
+        self.assertEqual(
+            run_git(self.repo, "log", "--format=%s", f"{before_head}..HEAD").count("[T001]"),
+            0,
+        )
+        self.assertEqual(
+            TaskFileParser(
+                (self.repo / "tasks.md").read_text(encoding="utf-8")
+            ).parse()[0].status,
+            "TODO",
+        )
+        self.assertEqual(codex_calls, 1)
+
+        fresh = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+        original_fresh_verification = fresh._run_verification
+
+        def count_fresh_verification(task):
+            nonlocal verification_calls
+            verification_calls += 1
+            return original_fresh_verification(task)
+
+        with patch.object(fresh, "_run_verification", side_effect=count_fresh_verification):
+            result = fresh.execute_one("T001")
+
+        final_evidence_files = sorted(
+            (self.repo / ".sdd/evidence").glob("*-T001.json")
+        )
+        final_evidence = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in final_evidence_files
+        ]
+        self.assertEqual(invalid_after_failure, [])
+        self.assertEqual(result.status, "DONE")
+        self.assertIsNotNone(result.checkpoint_commit)
+        self.assertEqual(codex_calls, 1)
+        self.assertEqual(verification_calls, 2)
+        self.assertEqual(len(final_evidence), 1)
+        self.assertEqual(final_evidence[0]["task_id"], "T001")
+        self.assertEqual(final_evidence[0]["status"], "PASS")
+        self.assertTrue(final_evidence[0]["verification"])
+        self.assertTrue(
+            all(item["passed"] for item in final_evidence[0]["verification"])
+        )
+        self.assertEqual(
+            run_git(self.repo, "log", "--format=%s", f"{before_head}..HEAD").count("[T001]"),
+            1,
+        )
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), result.checkpoint_commit)
+
     def test_fresh_runner_retry_after_post_write_evidence_failure_does_not_duplicate_pass_evidence(self):
         self._write_tasks('''
 ### T001 ? Post-write evidence failure

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 
 from .codex_results import VerificationResult
 from .result_serialization import serialize_verification_result
@@ -41,12 +42,25 @@ def write_stage08_evidence(
         },
         "recorded_at": stamp,
     }
-    (repo_root / rel).write_text(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    evidence_path = repo_root / rel
+    temporary_file = tempfile.NamedTemporaryFile(
+        dir=evidence_dir,
+        prefix=".tmp-",
+        suffix=f"-{task.task_id}.json",
+        delete=False,
     )
+    temporary_path = Path(temporary_file.name)
+    temporary_file.close()
+    try:
+        temporary_path.write_text(
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        temporary_path.replace(evidence_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
     return rel
