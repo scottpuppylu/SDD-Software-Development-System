@@ -16,6 +16,7 @@ from sdd_orchestrator.core import Orchestrator
 from sdd_orchestrator.codex_adapter import (
     Stage08CodexRunner, CodexAdapterError, TaskFileParser, VerificationCommandPolicy
 )
+from sdd_orchestrator.system_controller import FullSystemController
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -138,6 +139,34 @@ class V1118Stage08Tests(unittest.TestCase):
         self.assertEqual(result["next_task"], "T002")
         self.assertEqual(runner.orchestrator.project_state["lifecycle"]["current_stage"], "08")
         self.assertIn("SAFE TO STOP", buf.getvalue())
+
+    def test_controller_one_step_preserves_completed_transition_for_final_task(self):
+        self._write_tasks('''
+### T001 ??Only task
+- **Status:** TODO
+- **Allowed files:** `src/only.py`
+- **Verification Commands:** `python -c "import sys"`
+''')
+
+        def callback(repo: Path, prompt: str):
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "src/only.py").write_text("ONLY = 1\n", encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout="done", stderr="")
+
+        orchestrator = Orchestrator(self.repo)
+        runner = Stage08CodexRunner(
+            orchestrator, codex=FakeCodex(callback), heartbeat_seconds=0
+        )
+        controller = FullSystemController(orchestrator, SimpleNamespace(), runner)
+
+        result = controller.run(max_steps=1)
+
+        self.assertEqual(result.status, "COMPLETED")
+        self.assertEqual(result.end_stage, "09")
+        self.assertEqual(result.events[0]["status"], "COMPLETED")
+        self.assertEqual(result.events[0]["transition"]["next"], "09")
+        self.assertNotIn("safe_to_stop", result.events[0])
+        self.assertNotIn("next_task", result.events[0])
 
 
     def test_t014_read_only_git_verification_commands_are_preserved_and_allowlisted(self):

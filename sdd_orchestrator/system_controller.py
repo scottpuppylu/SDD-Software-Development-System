@@ -222,12 +222,10 @@ class FullSystemController:
                 events.append(result)
                 if result.get("status") != "COMPLETED":
                     return SystemRunSummary(start, sid, result.get("status", "BLOCKED"), events)
-                # With an explicit one-step run, the last Stage 08 task is also a
-                # valid checkpoint boundary even when it completes the stage and
-                # advances lifecycle state to Stage 09. Report the same safe-stop
-                # semantics instead of a generic MAX_STEPS_REACHED.
                 if max_steps == 1:
-                    return SystemRunSummary(start, self.orchestrator.current_stage_id, "SAFE_STOP", events)
+                    current_stage = self.orchestrator.current_stage_id
+                    if current_stage == "09":
+                        return SystemRunSummary(start, current_stage, "COMPLETED", events)
                 continue
 
             if sid not in self.REASONING_STAGES:
