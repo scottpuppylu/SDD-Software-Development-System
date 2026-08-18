@@ -28,6 +28,8 @@ Technical Contract 必須忠實實現 PRD。若 PRD 規定 `RETRY 不得進下�
 
 發現 Product Requirement ↔ Technical Contract/legacy decision conflict 時，必須 `BLOCKED`，指出 affected requirement/contract、authority domains、impact、required authoritative resolution；不得修改 PRD、選版本、建立 workaround 或把問題留給 Design/Codex。
 
+若 Technical Contract 無法確定是因為缺少 Product decision，必須以一般使用者可理解的 Product-level clarification 路由回 Stage 02 authority，不得在 Stage 03 猜測或發明 Product Requirement。若只是 API、IPC、schema、persistence mechanism、framework 或其他普通 technical implementation 選擇，則由 Stage 03 衍生 Technical Contract（或依邊界交給 Design），通常不得要求 product owner 決定。
+
 ## 5. Required Contract Areas
 依適用情況明確定義：
 - State：states/events/preconditions/transitions/guards/invalid behavior

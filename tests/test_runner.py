@@ -28,6 +28,9 @@ class StageRunnerTests(unittest.TestCase):
         self.write("docs/proposal.md", "proposal-content")
         self.write("docs/PRD.md", "prd-content")
         orch = Orchestrator(self.repo)
+        orch.project_state["stages"]["02"]["status"] = "DONE"
+        orch.project_state["stages"]["02"]["result"] = "COMPLETED"
+        orch._save_yaml(orch.project_state_path, orch.project_state)
         runner = StageRunner(orch)
         executor = StaticExecutor(StageExecutionResult(
             status="COMPLETED",

@@ -91,11 +91,16 @@ stages:
       - "All P0 requirements have testable acceptance criteria."
       - "P0/P1/P2 scope is explicit."
       - "Requirements trace back to product goals."
+      - "No blocking Product-level clarification or conflict remains."
+      - "Product decisions were made by the user or under explicitly confirmed Decision Delegation."
+      - "The final product baseline is explicitly authorized by the product owner."
     prohibitions:
       - "Do not decide framework, database, API schema, or module structure."
     exit_conditions:
       - "PRD.md exists"
       - "P0 acceptance criteria are testable"
+      - "product requirements have converged with no blocking Product-level clarification or conflict"
+      - "required Product decisions and final product baseline authorization are satisfied"
     next:
       success: "03"
       blocked: HUMAN_DECISION
@@ -113,6 +118,9 @@ stages:
         - PRODUCT_REQUIREMENT
       forbidden:
         - IMPLEMENTATION_DECISION
+    entry_conditions:
+      all:
+        - "stage_02_result == COMPLETED"
     required_inputs:
       files:
         - "docs/proposal.md"

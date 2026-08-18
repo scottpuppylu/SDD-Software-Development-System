@@ -48,7 +48,14 @@ class StageRerunExistingOutputTests(unittest.TestCase):
                     path = repo / rel
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(text, encoding="utf-8")
-                req = StageRunner(Orchestrator(repo)).build_request(sid, semantic_inputs=semantics)
+                orchestrator = Orchestrator(repo)
+                if sid == "03":
+                    orchestrator.project_state["stages"]["02"]["status"] = "DONE"
+                    orchestrator.project_state["stages"]["02"]["result"] = "COMPLETED"
+                    orchestrator._save_yaml(
+                        orchestrator.project_state_path, orchestrator.project_state
+                    )
+                req = StageRunner(orchestrator).build_request(sid, semantic_inputs=semantics)
                 self.assertEqual(req.artifacts[output], files[output])
 
     def test_gate_rerun_does_not_include_previous_gate_report(self):

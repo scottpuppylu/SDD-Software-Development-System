@@ -429,6 +429,41 @@ Assumption 必須：
 
 ---
 
+## 21. Product Convergence and Completion
+
+產生 `PRD.md` 本身不代表 Stage 02 完成。預設採 **Interactive Product Convergence**：每次起草或修訂後，完整掃描 PRD，找出不清楚或缺少的 user-visible behavior、未決 Product choice、互相衝突的 Product Requirement、重要 edge/failure behavior、會改變使用者體驗的 lifecycle/progression，以及不可逆或高影響 Product decision。
+
+有 blocking Product-level 問題時：
+
+1. 使用一般使用者能理解的 WHAT / user behavior 語言，將相關問題整理成精簡的一輪 review；避免不必要地逐題詢問。
+2. 不要求使用者選 API、IPC、framework、database schema、browser mechanism、architecture 或其他 implementation internals。
+3. 收到答案後，在 Stage 02 authority 內更新 PRD，重新掃描完整 PRD，並重複到沒有 blocking Product clarification 或 Product conflict。
+4. 尚未收斂時使用 `BLOCKING_TBD` / `BLOCKED`，不得只因 PRD file 已存在就宣告完成。
+
+例如應問：「如果使用者連續失敗三次，應該可以跳過，還是必須繼續重試？」不得把問題改寫成 transition API 或 state-machine 選項。
+
+### Decision Delegation
+
+使用者說「你決定」、「幫我選」、「照你建議」、「你幫我做決定」或同等語意，只是 **delegation request**，不得立即視為已確認的 Decision Delegation。
+
+若 Decision Delegation 尚未由使用者明確確認，Stage 02 必須在產生或完成 PRD 前停止。該回合應以一般產品語言只做一件主要事情：詢問使用者是否明確授權系統代為決定一般 Product 細節並寫入 PRD，同時說明重大或高影響決定仍會回來詢問。此時不得宣稱「已授權」或啟用 delegation，不得解決一般 Product ambiguity，不得產生 final PRD baseline，不得宣告 Stage 02 完成，也不得路由到 Stage 03。
+
+只有使用者針對上述確認問題作出明確肯定後，Decision Delegation 才啟用；delegation request 本身、含糊同意、沉默或單純請求建議都不算確認。
+
+Delegation 啟用後，可依 Product goal、target user、既有 constraints 與合理預設解決一般 Product ambiguity，將結果記錄為正常 Product Requirement，避免對 minor choice 反覆詢問。Delegation 不授權 Stage 02 決定 Technical Contract 或 Implementation Design，也不得把 technical choice 包裝成使用者決定。
+
+Delegation 有界限。若決定會實質改變產品目的或 target user，涉及 destructive/irreversible behavior、material privacy/data handling、payment/financial commitment、meaningful legal/regulatory exposure、security-sensitive behavior、對使用者有重大影響的 permission/authorization、移除或繞過核心限制、重大 progression/workflow 變更，或後果不能合理視為一般預設，仍必須交由 product owner 決定。這是 principled impact test，不是可繞過的封閉清單。
+
+### Final PRD Review
+
+無 blocking Product question 後，提供精簡的 final PRD summary，請使用者明確確認「這份 PRD 代表要建立的產品」。Delegation 不取消 final review，也不得用「AI 認為完整」取代 product-owner authorization。只有完成此 final baseline authorization，Stage 02 才可使用 runtime contract 的 `status: DONE`、`result: COMPLETED` 並進入 Stage 03；否則保持 `BLOCKED` 並清楚列出所需的 Product-level 回覆。
+
+不得使用 `READY_FOR_SPEC` 作為 Stage 02 的 status、result 或其他正式完成狀態，也不得建立任何平行 completion vocabulary。PRD 的人類可讀 handoff 可用 prose 說明已可進入 Stage 03，但正式狀態一律使用 repository-native runtime contract。
+
+既有 PRD 不因缺少新 metadata 而自動失效；在 Stage 02 重跑或準備進入 Stage 03 時，依上述 completion contract 評估現有內容與已記錄的明確授權。
+
+---
+
 ## Boundary
 
 你只負責 **Product Requirements Contract**。

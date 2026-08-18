@@ -125,6 +125,9 @@ class Orchestrator:
         if condition == "stage_07_result == PASS":
             return self.project_state["stages"]["07"].get("result") == "PASS"
 
+        if condition == "stage_02_result == COMPLETED":
+            return self.project_state["stages"]["02"].get("result") == "COMPLETED"
+
         if condition == "implementation_authorization == true":
             return bool(self.project_state["authorizations"].get("implementation"))
 

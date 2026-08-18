@@ -88,6 +88,8 @@ class M4Tests(unittest.TestCase):
             p = self.repo / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text("# upstream\n", encoding="utf-8")
+        orch.project_state["stages"]["02"]["status"] = "DONE"
+        orch.project_state["stages"]["02"]["result"] = "COMPLETED"
         req = runner.build_request(
             "03",
             semantic_inputs={"KNOWN_TECHNICAL_CONSTRAINTS_IF_ANY": "none"},
