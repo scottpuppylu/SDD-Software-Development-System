@@ -197,6 +197,12 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         if reconciled is not None:
             return reconciled
 
+        if task.status == "DONE":
+            raise CodexAdapterError(
+                f"{task.task_id} is marked DONE but has no verifiable checkpoint; "
+                "refusing Codex execution"
+            )
+
         resume = self._evidence_write_resume
         durable_resume = self.recovery.load_pending_evidence_write()
         can_resume_evidence_write = bool(

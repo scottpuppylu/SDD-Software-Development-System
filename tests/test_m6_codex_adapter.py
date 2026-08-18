@@ -904,6 +904,29 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertEqual(orch.project_state["lifecycle"]["current_stage"], "09")
         self.assertIsNone(orch.project_state["stages"]["09"]["result"])
 
+    def test_explicit_done_task_without_checkpoint_does_not_rerun_codex(self):
+        self._write_tasks('''
+### T001 ??Already completed
+- **Status:** DONE
+- **Allowed files:** `src/calculator.py`
+- **Implementation Scope:** Already completed.
+- **Verification Commands:** `python -m pytest -q`
+''')
+
+        def must_not_run(*_):
+            raise AssertionError("DONE task must not rerun Codex")
+
+        runner = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(must_not_run)
+        )
+
+        try:
+            result = runner.execute_one("T001")
+        except CodexAdapterError:
+            pass
+        else:
+            self.assertEqual(result.status, "DONE")
+
     def test_run_until_complete_with_no_executable_tasks_transitions_to_stage09(self):
         self._write_tasks('''
 ### T001 ??Already completed
