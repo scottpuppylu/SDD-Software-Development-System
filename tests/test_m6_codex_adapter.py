@@ -329,6 +329,93 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertIsNotNone(result.checkpoint_commit)
         self.assertEqual(calls, 1)
 
+    def test_fresh_runner_retry_after_post_write_evidence_failure_does_not_duplicate_pass_evidence(self):
+        self._write_tasks('''
+### T001 ? Post-write evidence failure
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before_head = run_git(self.repo, "rev-parse", "HEAD")
+        calls = 0
+
+        def implement(repo, _prompt):
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                raise AssertionError(
+                    "Codex implementation must not rerun after PASS evidence was written"
+                )
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/calculator.py").write_text(
+                "def add(a, b):\n    return a + b\n", encoding="utf-8"
+            )
+            (repo / "tests/test_calculator.py").write_text(
+                "from src.calculator import add\n\n"
+                "def test_add():\n    assert add(2, 3) == 5\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="implemented", stderr="")
+
+        fake = FakeCodex(implement)
+        first = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+        original_write_evidence = first._write_evidence
+
+        def write_then_throw(*args, **kwargs):
+            evidence_path = original_write_evidence(*args, **kwargs)
+            self.assertTrue((self.repo / evidence_path).is_file())
+            raise RuntimeError("simulated post-write evidence failure")
+
+        with patch.object(first, "_write_evidence", side_effect=write_then_throw):
+            with self.assertRaisesRegex(
+                RuntimeError, "simulated post-write evidence failure"
+            ):
+                first.execute_one("T001")
+
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), before_head)
+        self.assertEqual(
+            run_git(self.repo, "log", "--format=%s", f"{before_head}..HEAD").count("[T001]"),
+            0,
+        )
+        self.assertEqual(
+            TaskFileParser(
+                (self.repo / "tasks.md").read_text(encoding="utf-8")
+            ).parse()[0].status,
+            "TODO",
+        )
+        first_pass_evidence = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in (self.repo / ".sdd/evidence").glob("*-T001.json")
+        ]
+        self.assertEqual(len(first_pass_evidence), 1)
+        self.assertEqual(first_pass_evidence[0]["task_id"], "T001")
+        self.assertEqual(first_pass_evidence[0]["status"], "PASS")
+        self.assertTrue(first_pass_evidence[0]["verification"])
+        self.assertTrue(
+            all(item["passed"] for item in first_pass_evidence[0]["verification"])
+        )
+        self.assertEqual(calls, 1)
+
+        fresh = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+        result = fresh.execute_one("T001")
+
+        self.assertEqual(result.status, "DONE")
+        self.assertIsNotNone(result.checkpoint_commit)
+        self.assertEqual(calls, 1)
+        pass_evidence = []
+        for path in (self.repo / ".sdd/evidence").glob("*-T001.json"):
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+            if evidence.get("task_id") == "T001" and evidence.get("status") == "PASS":
+                pass_evidence.append(evidence)
+        self.assertEqual(len(pass_evidence), 1)
+        self.assertEqual(
+            run_git(self.repo, "log", "--format=%s", f"{before_head}..HEAD").count("[T001]"),
+            1,
+        )
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), result.checkpoint_commit)
+
     def test_recovery_state_failure_after_checkpoint_exposes_split_brain_without_false_done(self):
         self._write_tasks('''
 ### T001 ? Recovery state failure

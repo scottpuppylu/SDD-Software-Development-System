@@ -205,6 +205,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
 
         resume = self._evidence_write_resume
         durable_resume = self.recovery.load_pending_evidence_write()
+        reusable_evidence: str | None = None
         can_resume_evidence_write = bool(
             resume
             and resume[0] == task.task_id
@@ -242,6 +243,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 stdout=str(codex_data.get("stdout", "")),
                 stderr=str(codex_data.get("stderr", "")),
             )
+            reusable_evidence = self._recover_written_pass_evidence(task, durable_resume)
             can_resume_evidence_write = True
 
         # A prior attempt of the same Atomic Task may have produced authorized
@@ -331,13 +333,16 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 "stderr": proc.stderr,
             },
         })
-        try:
-            evidence = self._write_evidence(task, proc, changed, verification, status="PASS")
-        except Exception:
-            self._evidence_write_resume = (
-                task.task_id, before.head_commit, list(changed), proc,
-            )
-            raise
+        if reusable_evidence is not None:
+            evidence = reusable_evidence
+        else:
+            try:
+                evidence = self._write_evidence(task, proc, changed, verification, status="PASS")
+            except Exception:
+                self._evidence_write_resume = (
+                    task.task_id, before.head_commit, list(changed), proc,
+                )
+                raise
         self._evidence_write_resume = None
         checkpoint_paths = changed + [evidence]
         commit = self.git.checkpoint(
@@ -364,6 +369,55 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             task.task_id, task.title, proc.returncode, proc.stdout, proc.stderr,
             changed, verification, commit, next_task, "DONE", evidence,
         )
+
+    def _recover_written_pass_evidence(
+        self, task: AtomicTask, pending: dict[str, Any]
+    ) -> str | None:
+        evidence_dir = self.repo_root / ".sdd" / "evidence"
+        candidates: list[tuple[Path, dict[str, Any]]] = []
+        for path in sorted(evidence_dir.glob(f"*-{task.task_id}.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                continue
+            if (
+                isinstance(payload, dict)
+                and payload.get("task_id") == task.task_id
+                and payload.get("status") == "PASS"
+            ):
+                candidates.append((path, payload))
+
+        if not candidates:
+            return None
+        if len(candidates) != 1:
+            raise CodexAdapterError(
+                "Pending Stage 08 evidence recovery found multiple PASS evidence files; "
+                "inspect before resuming."
+            )
+
+        path, payload = candidates[0]
+        codex = pending["codex"]
+        recorded_at = payload.get("recorded_at")
+        matches = (
+            payload.get("schema_version") == "1.0"
+            and payload.get("stage") == "08"
+            and payload.get("title") == task.title
+            and payload.get("changed_paths") == pending.get("changed_paths")
+            and payload.get("verification") == pending.get("verification")
+            and payload.get("codex") == {
+                "returncode": codex.get("returncode"),
+                "final_stdout": codex.get("stdout"),
+                "stderr": codex.get("stderr"),
+            }
+            and isinstance(recorded_at, str)
+            and path.name == f"{recorded_at}-{task.task_id}.json"
+        )
+        if not matches:
+            raise CodexAdapterError(
+                "Pending Stage 08 evidence recovery found PASS evidence that does not "
+                "match the pending recovery state; inspect before resuming."
+            )
+        return path.relative_to(self.repo_root).as_posix()
 
     def _reconcile_checkpoint_history(
         self, task: AtomicTask, head_commit: str | None
