@@ -944,6 +944,46 @@ class M6CodexAdapterTests(unittest.TestCase):
                     orch.project_state["stages"]["09"]["status"], "IN_PROGRESS"
                 )
 
+    def test_run_until_complete_rejects_non_integer_max_tasks_before_execution(self):
+        self._write_tasks('''
+### T001 ??Pending task
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        state_path = self.repo / ".sdd/state/project-state.yaml"
+        initial_state = state_path.read_text(encoding="utf-8")
+
+        for max_tasks in (None, True, False, "1", 1.5):
+            with self.subTest(max_tasks=max_tasks):
+                state_path.write_text(initial_state, encoding="utf-8")
+                orch = Orchestrator(self.repo)
+                fake = FakeCodex(lambda *_: None)
+                runner = Stage08CodexRunner(orch, codex=fake)
+
+                with patch.object(runner, "execute_one") as execute_one:
+                    with self.assertRaisesRegex(
+                        CodexAdapterError,
+                        "max_tasks must be a positive integer",
+                    ):
+                        runner.run_until_complete(max_tasks=max_tasks)
+
+                execute_one.assert_not_called()
+                self.assertEqual(fake.prompts, [])
+                self.assertEqual(
+                    orch.project_state["lifecycle"]["current_stage"], "08"
+                )
+                self.assertNotEqual(
+                    orch.project_state["stages"]["08"]["status"], "DONE"
+                )
+                self.assertNotEqual(
+                    orch.project_state["stages"]["08"]["result"], "COMPLETED"
+                )
+                self.assertNotEqual(
+                    orch.project_state["stages"]["09"]["status"], "IN_PROGRESS"
+                )
+
     def test_explicit_done_task_without_checkpoint_does_not_rerun_codex(self):
         self._write_tasks('''
 ### T001 ??Already completed
