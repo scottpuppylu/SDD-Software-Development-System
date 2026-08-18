@@ -512,6 +512,8 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             try:
                 task = self.select_task()
             except NoExecutableTaskError:
+                if not all(task.status == "DONE" for task in self.tasks()):
+                    raise
                 break
             result = self.execute_one(task.task_id)
             results.append(result)

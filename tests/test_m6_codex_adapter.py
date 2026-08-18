@@ -996,6 +996,35 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertIsNone(orch.project_state["stages"]["09"]["result"])
         self.assertEqual(fake.prompts, [])
 
+    def test_run_until_complete_with_blocked_task_does_not_complete_stage08(self):
+        self._write_tasks('''
+### T001 ??Blocked task
+- **Status:** BLOCKED
+- **Allowed files:** `src/calculator.py`
+- **Implementation Scope:** Waiting for an upstream decision.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        orch = Orchestrator(self.repo)
+        fake = FakeCodex(
+            lambda *_: (_ for _ in ()).throw(
+                AssertionError("Codex must not execute")
+            )
+        )
+        runner = Stage08CodexRunner(orch, codex=fake)
+
+        with self.assertRaises(NoExecutableTaskError):
+            runner.run_until_complete()
+
+        self.assertEqual(fake.prompts, [])
+        self.assertEqual(orch.project_state["lifecycle"]["current_stage"], "08")
+        self.assertNotEqual(orch.project_state["stages"]["08"]["status"], "DONE")
+        self.assertNotEqual(
+            orch.project_state["stages"]["08"]["result"], "COMPLETED"
+        )
+        self.assertNotEqual(
+            orch.project_state["stages"]["09"]["status"], "IN_PROGRESS"
+        )
+
     def test_select_task_uses_specific_error_when_no_executable_task_remains(self):
         self._write_tasks('''
 ### T001 ??Already completed
