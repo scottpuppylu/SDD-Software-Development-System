@@ -180,6 +180,28 @@ class RecoveryManager:
         self.implementation_state_path = (
             self.repo_root / ".sdd" / "state" / "implementation-state.yaml"
         )
+        self.pending_evidence_path = (
+            self.repo_root / ".sdd" / "evidence" / ".stage08-pending-evidence-write.yaml"
+        )
+
+    def load_pending_evidence_write(self) -> dict[str, Any] | None:
+        if not self.pending_evidence_path.exists():
+            return None
+        data = yaml.safe_load(self.pending_evidence_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise GitRuntimeError("Invalid pending Stage 08 evidence recovery record; inspect before resuming.")
+        return data
+
+    def record_pending_evidence_write(self, record: dict[str, Any]) -> None:
+        self.pending_evidence_path.parent.mkdir(parents=True, exist_ok=True)
+        self.pending_evidence_path.write_text(
+            yaml.safe_dump(record, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+    def clear_pending_evidence_write(self) -> None:
+        if self.pending_evidence_path.exists():
+            self.pending_evidence_path.unlink()
 
     def _load_state(self) -> dict[str, Any]:
         if not self.implementation_state_path.exists():

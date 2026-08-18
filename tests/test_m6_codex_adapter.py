@@ -193,6 +193,142 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertNotEqual(after_state.get("last_completed_task"), "T001")
         self.assertNotEqual(after_state.get("last_verified_commit"), before_head)
 
+    def test_evidence_write_failure_before_checkpoint_resumes_without_rerunning_codex(self):
+        self._write_tasks('''
+### T001 ? Evidence write failure
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before_head = run_git(self.repo, "rev-parse", "HEAD")
+        state_path = self.repo / ".sdd/state/implementation-state.yaml"
+        before_state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        convergence_path = self.repo / ".sdd/convergence/T001.yaml"
+
+        calls = 0
+
+        def implement(repo, _prompt):
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                raise AssertionError(
+                    "Codex implementation must not rerun after evidence write failure"
+                )
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/calculator.py").write_text(
+                "def add(a, b):\n    return a + b\n", encoding="utf-8"
+            )
+            (repo / "tests/test_calculator.py").write_text(
+                "from src.calculator import add\n\n"
+                "def test_add():\n    assert add(2, 3) == 5\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="implemented", stderr="")
+
+        fake = FakeCodex(implement)
+        runner = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+
+        with patch.object(
+            runner,
+            "_write_evidence",
+            side_effect=RuntimeError("simulated evidence write failure"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "simulated evidence write failure"
+            ):
+                runner.execute_one("T001")
+
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), before_head)
+        self.assertEqual(
+            run_git(self.repo, "log", "--format=%s").count("[T001]"), 0
+        )
+        dirty = run_git(
+            self.repo, "status", "--short", "--untracked-files=all"
+        )
+        self.assertIn("src/calculator.py", dirty)
+        self.assertIn("tests/test_calculator.py", dirty)
+        self.assertEqual(TaskFileParser(
+            (self.repo / "tasks.md").read_text(encoding="utf-8")
+        ).parse()[0].status, "TODO")
+        self.assertEqual(
+            yaml.safe_load(state_path.read_text(encoding="utf-8")), before_state
+        )
+        self.assertNotEqual(before_state.get("last_completed_task"), "T001")
+        self.assertFalse(convergence_path.exists())
+        self.assertEqual(calls, 1)
+
+        result = runner.execute_one("T001")
+
+        self.assertEqual(result.status, "DONE")
+        self.assertEqual(calls, 1)
+
+    def test_fresh_runner_recovers_evidence_write_failure_before_checkpoint_without_rerunning_codex(self):
+        self._write_tasks('''
+### T001 ? Fresh runner evidence recovery
+- **Status:** TODO
+- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`
+- **Implementation Scope:** Implement calculator addition.
+- **Verification Commands:** `python -m pytest -q`
+''')
+        before_head = run_git(self.repo, "rev-parse", "HEAD")
+        calls = 0
+
+        def implement(repo, _prompt):
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                raise AssertionError(
+                    "Codex implementation must not rerun during fresh-runner recovery"
+                )
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/calculator.py").write_text(
+                "def add(a, b):\n    return a + b\n", encoding="utf-8"
+            )
+            (repo / "tests/test_calculator.py").write_text(
+                "from src.calculator import add\n\n"
+                "def test_add():\n    assert add(2, 3) == 5\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="implemented", stderr="")
+
+        fake = FakeCodex(implement)
+        first = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+
+        with patch.object(
+            first,
+            "_write_evidence",
+            side_effect=RuntimeError("simulated evidence write failure"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "simulated evidence write failure"
+            ):
+                first.execute_one("T001")
+
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), before_head)
+        self.assertEqual(
+            TaskFileParser(
+                (self.repo / "tasks.md").read_text(encoding="utf-8")
+            ).parse()[0].status,
+            "TODO",
+        )
+        dirty = run_git(
+            self.repo, "status", "--short", "--untracked-files=all"
+        )
+        self.assertIn("src/calculator.py", dirty)
+        self.assertIn("tests/test_calculator.py", dirty)
+        self.assertEqual(calls, 1)
+
+        first = None
+        fresh = Stage08CodexRunner(Orchestrator(self.repo), codex=fake)
+        result = fresh.execute_one("T001")
+
+        self.assertEqual(result.status, "DONE")
+        self.assertIsNotNone(result.checkpoint_commit)
+        self.assertEqual(calls, 1)
+
     def test_recovery_state_failure_after_checkpoint_exposes_split_brain_without_false_done(self):
         self._write_tasks('''
 ### T001 ? Recovery state failure

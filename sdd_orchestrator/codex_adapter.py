@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from types import SimpleNamespace
 import json
 import re
 import shutil
@@ -57,6 +58,7 @@ class Stage08CodexRunner:
         self.codex = codex or CodexCLI()
         self.project_python = project_python
         self.heartbeat_seconds = max(0, int(heartbeat_seconds))
+        self._evidence_write_resume: tuple[str, str | None, list[str], Any] | None = None
 
     def tasks(self) -> list[AtomicTask]:
         path = self.repo_root / "tasks.md"
@@ -195,17 +197,64 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         if reconciled is not None:
             return reconciled
 
+        resume = self._evidence_write_resume
+        durable_resume = self.recovery.load_pending_evidence_write()
+        can_resume_evidence_write = bool(
+            resume
+            and resume[0] == task.task_id
+            and resume[1] == before.head_commit
+            and resume[2] == sorted(relevant_dirty)
+        )
+        if durable_resume is not None:
+            verification_data = durable_resume.get("verification")
+            durable_matches = (
+                durable_resume.get("task_id") == task.task_id
+                and durable_resume.get("head_commit") == before.head_commit
+                and durable_resume.get("changed_paths") == sorted(relevant_dirty)
+                and durable_resume.get("verification_commands") == task.verification_commands
+                and isinstance(verification_data, list)
+                and bool(verification_data)
+                and all(
+                    isinstance(item, dict)
+                    and item.get("passed") is True
+                    and item.get("returncode") == 0
+                    for item in verification_data
+                )
+            )
+            if not durable_matches:
+                raise CodexAdapterError(
+                    "Pending Stage 08 evidence recovery does not match the requested task, "
+                    "Git HEAD, dirty changed paths, or previously verified state; inspect before resuming."
+                )
+            codex_data = durable_resume.get("codex")
+            if not isinstance(codex_data, dict) or codex_data.get("returncode") != 0:
+                raise CodexAdapterError(
+                    "Pending Stage 08 evidence recovery has invalid Codex state; inspect before resuming."
+                )
+            proc = SimpleNamespace(
+                returncode=0,
+                stdout=str(codex_data.get("stdout", "")),
+                stderr=str(codex_data.get("stderr", "")),
+            )
+            can_resume_evidence_write = True
+
         # A prior attempt of the same Atomic Task may have produced authorized
         # files and then failed verification. Those dirty files are resumable
         # task state, not unrelated work. Re-run Codex so it can inspect/fix the
         # task, then verify the complete current task scope.
         self._progress(f"Starting {task.task_id} — {task.title}")
-        self._progress(f"{task.task_id} Codex started")
-        proc = self._call_with_heartbeat(
-            f"{task.task_id} Codex still running",
-            lambda: self.codex.execute(self.repo_root, self.build_prompt(task)),
-        )
-        self._progress(f"{task.task_id} Codex completed (exit={proc.returncode})")
+        if can_resume_evidence_write:
+            if resume is not None:
+                proc = resume[3]
+            self._progress(f"{task.task_id} resuming after evidence write failure")
+        else:
+            self._evidence_write_resume = None
+            self._progress(f"{task.task_id} Codex started")
+            proc = self._call_with_heartbeat(
+                f"{task.task_id} Codex still running",
+                lambda: self.codex.execute(self.repo_root, self.build_prompt(task)),
+            )
+            self._progress(f"{task.task_id} Codex completed (exit={proc.returncode})")
         after = self.git.snapshot(recent_limit=5)
         post_nonruntime_dirty = [
             p for p in after.dirty_paths
@@ -254,7 +303,36 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 and not self._generated_verification_dirty(p)
                 and self._covered(p, task.allowed_paths)
             )
-        evidence = self._write_evidence(task, proc, changed, verification, status="PASS")
+        self.recovery.record_pending_evidence_write({
+            "schema_version": "1.0",
+            "task_id": task.task_id,
+            "head_commit": before.head_commit,
+            "changed_paths": list(changed),
+            "verification_commands": list(task.verification_commands),
+            "verification": [
+                {
+                    "command": item.command,
+                    "returncode": item.returncode,
+                    "stdout": item.stdout,
+                    "stderr": item.stderr,
+                    "passed": item.passed,
+                }
+                for item in verification
+            ],
+            "codex": {
+                "returncode": proc.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            },
+        })
+        try:
+            evidence = self._write_evidence(task, proc, changed, verification, status="PASS")
+        except Exception:
+            self._evidence_write_resume = (
+                task.task_id, before.head_commit, list(changed), proc,
+            )
+            raise
+        self._evidence_write_resume = None
         checkpoint_paths = changed + [evidence]
         commit = self.git.checkpoint(
             task_id=task.task_id,
@@ -264,6 +342,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             scope="implementation",
             allow_unrelated_dirty=True,  # runtime state files are orchestrator-managed
         )
+        self.recovery.clear_pending_evidence_write()
         next_task = self._next_task_id(task.task_id)
         self.recovery.record_checkpoint(
             commit=commit,
