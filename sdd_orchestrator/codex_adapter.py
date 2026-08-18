@@ -504,6 +504,9 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         return task, evidence, evidence_paths[0], verification
 
     def run_until_complete(self, *, max_tasks: int = 100) -> dict[str, Any]:
+        if max_tasks <= 0:
+            raise CodexAdapterError("max_tasks must be a positive integer")
+
         results: list[CodexTaskRunResult] = []
         for _ in range(max_tasks):
             try:
