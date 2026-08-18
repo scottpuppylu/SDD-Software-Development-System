@@ -425,6 +425,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         commit, _, evidence, evidence_path, verification = recovered
         codex_data = evidence["codex"]
         next_task = self._next_task_id(task.task_id)
+        self._mark_convergence_done(task.task_id)
         self._progress(f"{task.task_id} reconciled from checkpoint {commit}")
         return CodexTaskRunResult(
             task.task_id, task.title, int(codex_data["returncode"]),

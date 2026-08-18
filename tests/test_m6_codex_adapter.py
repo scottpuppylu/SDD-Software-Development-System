@@ -506,6 +506,93 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertNotIn("tests/test_calculator.py", status)
         self.assertNotIn(evidence_path, status)
 
+    def test_fresh_runner_reconciliation_repairs_tc_convergence_after_recovery_state_failure(self):
+        self._write_tasks("# Tasks\n")
+        convergence_path = self.repo / ".sdd/convergence/TC001.yaml"
+        convergence_path.parent.mkdir(parents=True, exist_ok=True)
+        convergence_path.write_text(
+            yaml.safe_dump(
+                {
+                    "task_id": "TC001",
+                    "title": "Fix app gap",
+                    "objective": "Implement missing path",
+                    "traceability": ["FR-001", "SPEC-001", "DES-001"],
+                    "allowed_paths": ["src/app.py", "tests/test_app.py"],
+                    "verification_commands": ["python -m pytest -q"],
+                    "status": "TODO",
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        run_git(self.repo, "add", ".sdd/convergence/TC001.yaml")
+        run_git(self.repo, "commit", "-m", "add TC001 convergence task")
+
+        def implement(repo, _prompt):
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "tests").mkdir(exist_ok=True)
+            (repo / "src/app.py").write_text(
+                "def ok():\n    return True\n", encoding="utf-8"
+            )
+            (repo / "tests/test_app.py").write_text(
+                "from src.app import ok\n\n"
+                "def test_ok():\n    assert ok()\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="fixed", stderr="")
+
+        first_codex = FakeCodex(implement)
+        first = Stage08CodexRunner(Orchestrator(self.repo), codex=first_codex)
+        with patch.object(
+            first.recovery,
+            "record_checkpoint",
+            side_effect=RuntimeError("simulated recovery state write failure"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "simulated recovery state write failure"
+            ):
+                first.execute_one("TC001")
+
+        checkpoint = run_git(self.repo, "rev-parse", "HEAD")
+        self.assertIn(
+            "[TC001]",
+            run_git(self.repo, "show", "-s", "--format=%s", checkpoint),
+        )
+        evidence_paths = list((self.repo / ".sdd/evidence").glob("*-TC001.json"))
+        self.assertEqual(len(evidence_paths), 1)
+        evidence = json.loads(evidence_paths[0].read_text(encoding="utf-8"))
+        self.assertEqual(evidence["status"], "PASS")
+        self.assertTrue(all(item["passed"] for item in evidence["verification"]))
+        self.assertEqual(
+            yaml.safe_load(convergence_path.read_text(encoding="utf-8"))["status"],
+            "TODO",
+        )
+        self.assertEqual(len(first_codex.prompts), 1)
+
+        def must_not_run(*_):
+            raise AssertionError(
+                "Codex must not rerun a checkpointed TC task during reconciliation"
+            )
+
+        fresh_codex = FakeCodex(must_not_run)
+        fresh = Stage08CodexRunner(Orchestrator(self.repo), codex=fresh_codex)
+        result = fresh.execute_one("TC001")
+
+        self.assertEqual(result.status, "DONE")
+        self.assertEqual(result.checkpoint_commit, checkpoint)
+        self.assertEqual(fresh_codex.prompts, [])
+        self.assertEqual(run_git(self.repo, "rev-parse", "HEAD"), checkpoint)
+        self.assertEqual(
+            run_git(self.repo, "log", "--format=%s").count("[TC001]"), 1
+        )
+        self.assertEqual(
+            len(list((self.repo / ".sdd/evidence").glob("*-TC001.json"))), 1
+        )
+        self.assertEqual(
+            yaml.safe_load(convergence_path.read_text(encoding="utf-8"))["status"],
+            "DONE",
+        )
+
     def test_multi_checkpoint_stale_recovery_does_not_rerun_checkpointed_tasks(self):
         self._write_tasks('''
 ### T001 ? First calculator task
