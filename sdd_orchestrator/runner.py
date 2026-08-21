@@ -12,6 +12,7 @@ import fnmatch
 
 from .core import Orchestrator, SDDOrchestratorError
 from .executor import StageExecutionRequest, StageExecutionResult, StageExecutor
+from .telemetry.measurement import measure_stage_request
 
 
 class StageExecutionValidationError(SDDOrchestratorError):
@@ -19,9 +20,10 @@ class StageExecutionValidationError(SDDOrchestratorError):
 
 
 class StageRunner:
-    def __init__(self, orchestrator: Orchestrator):
+    def __init__(self, orchestrator: Orchestrator, telemetry_recorder: Any = None):
         self.orchestrator = orchestrator
         self.repo_root = orchestrator.repo_root
+        self.telemetry_recorder = telemetry_recorder
 
     def build_request(
         self,
@@ -451,6 +453,11 @@ class StageRunner:
             semantic_inputs=semantic_inputs,
             stage_instructions=stage_instructions,
         )
+        if self.telemetry_recorder is not None:
+            try:
+                self.telemetry_recorder.record(measure_stage_request(request))
+            except Exception:
+                pass
         result = executor.execute(request)
         self._validate_result(request, result)
         written = self._write_outputs_atomically(result.artifacts)
