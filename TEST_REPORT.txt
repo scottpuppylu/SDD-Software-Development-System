@@ -1,4 +1,12 @@
-SDD v1.1.22 regression
-108 passed, 4 subtests passed
-Command: python -m pytest -q
-Scope: cumulative v1.1.13 baseline + rolling patches through v1.1.21-r2 + v1.1.22
+SDD v1.2.0 baseline verification
+Stage08 hardening closure: COMPLETE
+Stage08 regression: 73 passed + 14 subtests
+Stage07->10 cross-stage smoke: 9 passed
+Stage10 blocker targeted regression: PASS
+Runner + orchestrator: 17 passed
+Release readiness: READY_WITH_KNOWN_ISSUES
+
+Known issues:
+1. Deferred P1: checkpoint may include pre-existing staged paths.
+2. Deferred P1: historical reconciliation has not yet verified actual commit diff scope against allowed/protected/evidence paths.
+3. Coverage gap: Stage09 non-PASS -> Stage10 entry rejection lacks an independent regression test.

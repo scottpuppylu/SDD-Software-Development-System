@@ -1,5 +1,5 @@
 
-# SDD Software Development System v1.1.3 — Codex-first default
+# SDD Software Development System v1.2.0 — Codex-first default
 
 > **Default authentication:** Codex CLI + ChatGPT login. No OpenAI API key is required for the standard SDD 01–10 workflow.
 >

@@ -1,3 +1,13 @@
+## v1.2.0-baseline
+
+- Completed Stage 02 product convergence.
+- Hardened Stage 08 recovery, evidence handling, and convergence behavior.
+- Strengthened `SAFE_STOP` and `max_tasks` handling and protected completed (`DONE`) tasks.
+- Cleaned up T014 processing and made evidence and convergence writes atomic.
+- Stage 10 now revokes stale release authorization when its decision becomes `BLOCKED`.
+- Release readiness: `READY_WITH_KNOWN_ISSUES`.
+- Known issues (deferred; not release blockers): checkpoints may include pre-existing staged paths; historical reconciliation has not yet verified actual commit diff scope against allowed/protected/evidence paths; Stage 09 non-PASS → Stage 10 entry rejection lacks an independent regression test.
+
 - Stage 10 now receives bounded supplemental release evidence from `README.md`, `pyproject.toml`, and release-specific handoff documents when present.
 - Stage 10 now receives live Git release identity (branch, HEAD, tags-at-HEAD, working-tree status, and recent commits) using the existing UTF-8-safe Git subprocess path.
 - Added a Stage 10 context policy statement clarifying that supplied documents are evidence, not automatic release authorization.

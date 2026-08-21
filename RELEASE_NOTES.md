@@ -1,3 +1,17 @@
+## v1.2.0-baseline
+
+Release readiness: **READY_WITH_KNOWN_ISSUES**.
+
+Since `v1.1.22-baseline`, this baseline completes Stage 02 product convergence and hardens Stage 08 recovery, evidence handling, and convergence. It strengthens `SAFE_STOP` and `max_tasks` behavior, protects completed (`DONE`) tasks, cleans up T014 handling, makes evidence and convergence writes atomic, and revokes stale release authorization when Stage 10 becomes `BLOCKED`.
+
+Validation completed: Stage 08 hardening closure COMPLETE; Stage 08 regression 73 passed + 14 subtests; Stage 07→10 cross-stage smoke 9 passed; Stage 10 blocker targeted regression PASS; runner + orchestrator 17 passed.
+
+Known issues (deferred; not release blockers):
+
+1. Deferred P1: checkpoints may include pre-existing staged paths.
+2. Deferred P1: historical reconciliation has not yet verified actual commit diff scope against allowed, protected, and evidence paths.
+3. Coverage gap: Stage 09 non-PASS → Stage 10 entry rejection lacks an independent regression test.
+
 ### Stage 10 Release Context Collection
 
 Stage 10 previously evaluated only its static required inputs and Stage 09 report. Release evidence added after verification—such as `docs/handoff/release-profile.md`, README setup/recovery instructions, and `pyproject.toml` version metadata—could exist in Git but remain invisible to the release reasoning request. This caused false `BLOCKED` results claiming that release identity, CI applicability, migration applicability, smoke strategy, and recovery evidence had not been supplied.
