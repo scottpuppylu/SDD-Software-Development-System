@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Any
 from types import SimpleNamespace
 import json
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 
@@ -758,7 +760,26 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
             return
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         data["status"] = "DONE"
-        path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        content = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                temporary_file.write(content)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+            os.replace(temporary_path, path)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
     def _next_task_id(self, current_id: str) -> str | None:
         tasks = self.tasks()
