@@ -237,3 +237,52 @@ class StageRerunLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(history.exists())
         self.assertIn('"FAILED"', history.read_text(encoding="utf-8"))
+
+    def test_stage10_blocked_rerun_revokes_stale_release_authorization(self):
+        self.write("docs/handoff/verification-report.md", "PASS\n")
+        orch = Orchestrator(self.repo)
+        orch.project_state["lifecycle"]["current_stage"] = "10"
+        orch.project_state["lifecycle"]["current_stage_name"] = "HANDOFF_AND_RELEASE"
+        orch.project_state["stages"]["09"] = {"status": "DONE", "result": "PASS"}
+        orch.project_state["stages"]["10"] = {"status": "IN_PROGRESS", "result": None}
+        orch._save_yaml(orch.project_state_path, orch.project_state)
+        runner = StageRunner(orch)
+        semantics = {
+            "RELEASE_IDENTITY": "v1",
+            "TARGET_ENVIRONMENT": "production",
+            "DEPLOYMENT_TARGET": "production service",
+            "BUILD_CI_EVIDENCE": "passing",
+            "SECURITY_EVIDENCE": "clear",
+            "DOCUMENTATION_READINESS": "ready",
+            "MIGRATION_READINESS_IF_APPLICABLE": "not applicable",
+            "DEPLOYMENT_READINESS": "ready",
+            "ROLLBACK_RECOVERY_READINESS": "ready",
+        }
+
+        ready = runner.run(
+            StaticExecutor(StageExecutionResult(
+                status="COMPLETED",
+                result="READY",
+                artifacts={"docs/handoff/handoff-report.md": "READY\n"},
+            )),
+            "10",
+            semantic_inputs=semantics,
+        )
+        self.assertEqual(ready["transition"]["next"], "DEPLOY")
+        self.assertTrue(orch.project_state["authorizations"]["release"])
+
+        blocked = runner.run(
+            StaticExecutor(StageExecutionResult(
+                status="BLOCKED",
+                result="BLOCKED",
+                remediation_reasons=["RELEASE_EVIDENCE_STALE"],
+            )),
+            "10",
+            semantic_inputs=semantics,
+        )
+
+        self.assertEqual(blocked["transition"]["next"], "REMEDIATION_ROUTER")
+        self.assertTrue(blocked["transition"]["blocked"])
+        self.assertEqual(orch.project_state["stages"]["10"]["status"], "BLOCKED")
+        self.assertFalse(orch.project_state["authorizations"].get("release", False))
+        self.assertNotEqual(orch.project_state["lifecycle"]["next_action"], "DEPLOY")

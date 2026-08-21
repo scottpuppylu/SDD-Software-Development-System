@@ -596,6 +596,8 @@ class StageRunner:
         if result.status == "BLOCKED":
             state = self.orchestrator.project_state
             state["stages"][sid]["status"] = "BLOCKED"
+            if sid == "10":
+                state["authorizations"]["release"] = False
             state["blocking"]["is_blocked"] = True
             state["blocking"]["reasons"] = result.remediation_reasons or ["EXECUTOR_BLOCKED"]
             state["lifecycle"]["next_action"] = "REMEDIATION_ROUTER"
