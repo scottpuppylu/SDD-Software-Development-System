@@ -289,6 +289,17 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         self._progress(f"{task.task_id} verification started")
         verification = self._run_verification(task)
         if not all(v.passed for v in verification):
+            if task.task_id == "T014":
+                provisional_indexes = {
+                    p for p in changed
+                    if p not in relevant_dirty
+                    and p in task.allowed_paths
+                    and p in self.TASK_WRITABLE_SDD_EXACT
+                }
+                for rel in provisional_indexes:
+                    path = self.repo_root / rel
+                    if path.is_file():
+                        path.unlink()
             evidence = self._write_evidence(task, proc, changed, verification, status="VERIFICATION_FAILED")
             self._progress(f"{task.task_id} verification FAILED")
             return CodexTaskRunResult(

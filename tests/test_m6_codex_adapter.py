@@ -1104,6 +1104,51 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertIsNone(result.checkpoint_commit)
         self.assertEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
 
+    def test_t014_failed_verification_removes_provisional_evidence_index(self):
+        self._write_tasks('''
+### T014 — Build Stage 09 evidence index
+- **Status:** TODO
+- **Allowed evidence files:** `.sdd/state/post-implementation-verification.md`
+- **Verification Commands:** `python -m pytest -q`
+''')
+        artifact = self.repo / ".sdd/state/post-implementation-verification.md"
+        before = run_git(self.repo, "rev-parse", "HEAD")
+
+        def callback(repo, prompt):
+            artifact.write_text(
+                "# Post-Implementation Verification\n\nPASS\nT014 DONE\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout="drafted", stderr="")
+
+        runner = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(callback)
+        )
+        result = runner.execute_one("T014")
+
+        self.assertEqual(result.status, "VERIFICATION_FAILED")
+        self.assertTrue(result.verification)
+        self.assertFalse(all(item.passed for item in result.verification))
+        self.assertIsNone(result.checkpoint_commit)
+        self.assertEqual(before, run_git(self.repo, "rev-parse", "HEAD"))
+        self.assertFalse(artifact.exists())
+        evidence = json.loads(
+            (self.repo / result.evidence_file).read_text(encoding="utf-8")
+        )
+        self.assertEqual(evidence["status"], "VERIFICATION_FAILED")
+        self.assertNotEqual(evidence["status"], "PASS")
+        self.assertIn(
+            "- **Status:** TODO",
+            (self.repo / "tasks.md").read_text(encoding="utf-8"),
+        )
+        implementation_state = yaml.safe_load(
+            (self.repo / ".sdd/state/implementation-state.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertNotEqual(implementation_state["last_completed_task"], "T014")
+        self.assertNotEqual(implementation_state["test_status"]["overall"], "PASS")
+
     def test_verification_failed_authorized_dirty_files_can_resume_and_checkpoint(self):
         self._write_tasks('''
 ### T001 ? Resume failed calculator
