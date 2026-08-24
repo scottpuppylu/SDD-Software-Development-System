@@ -48,8 +48,9 @@ def measure_provider_call(
     wire: bytes,
     outcome_category: OutcomeCategory,
     metadata: dict[str, Any],
+    provider_usage: Usage | None = None,
 ) -> MeasurementEvent:
-    """Build a metadata-only M1.3 provider-call observation."""
+    """Build a provider-call observation, optionally with actual provider usage."""
     unavailable_sources = {
         "openai": UsageSource.OPENAI_RESPONSES_UNAVAILABLE,
         "codex": UsageSource.CODEX_CLI_UNAVAILABLE,
@@ -103,7 +104,9 @@ def measure_provider_call(
         run_id=None,
         outcome_category=outcome_category,
         metrics=metrics,
-        usage=Usage(
+        usage=provider_usage
+        if provider_usage is not None
+        else Usage(
             availability=Availability.UNAVAILABLE,
             quality=Quality.UNAVAILABLE,
             usage_source=usage_source,

@@ -13,7 +13,14 @@ from typing import Any
 
 from .executor import StageExecutionRequest, StageExecutionResult
 from .telemetry.measurement import measure_provider_call
-from .telemetry.models import Component, OutcomeCategory
+from .telemetry.models import (
+    Availability,
+    Component,
+    OutcomeCategory,
+    Quality,
+    Usage,
+    UsageSource,
+)
 
 
 class ReasoningProviderError(RuntimeError):
@@ -159,7 +166,51 @@ def _extract_output_text(response: dict[str, Any]) -> str:
     raise ReasoningProviderError("OpenAI response did not contain output text")
 
 
+def _non_negative_int(value: Any) -> int | None:
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        else None
+    )
 
+
+def _openai_response_usage(payload: Any) -> Usage | None:
+    if not isinstance(payload, dict):
+        return None
+    raw_usage = payload.get("usage")
+    if not isinstance(raw_usage, dict):
+        return None
+
+    input_tokens = _non_negative_int(raw_usage.get("input_tokens"))
+    output_tokens = _non_negative_int(raw_usage.get("output_tokens"))
+    total_tokens = _non_negative_int(raw_usage.get("total_tokens"))
+    if input_tokens is None and output_tokens is None and total_tokens is None:
+        return None
+
+    input_details = raw_usage.get("input_tokens_details")
+    output_details = raw_usage.get("output_tokens_details")
+    cached_input_tokens = (
+        _non_negative_int(input_details.get("cached_tokens"))
+        if isinstance(input_details, dict)
+        else None
+    )
+    reasoning_output_tokens = (
+        _non_negative_int(output_details.get("reasoning_tokens"))
+        if isinstance(output_details, dict)
+        else None
+    )
+    return Usage(
+        availability=Availability.AVAILABLE,
+        quality=Quality.ACTUAL,
+        usage_source=UsageSource.OPENAI_RESPONSES_USAGE,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total_tokens,
+        component_tokens={
+            "cached_input_tokens": cached_input_tokens,
+            "reasoning_output_tokens": reasoning_output_tokens,
+        },
+    )
 
 class CodexExecReasoningExecutor:
     """Default reasoning adapter using Codex CLI with saved ChatGPT authentication.
@@ -376,10 +427,15 @@ class OpenAIResponsesExecutor:
         )
         started = time.monotonic()
         outcome = OutcomeCategory.FAILED
+        provider_usage = None
         try:
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
                     payload = json.loads(resp.read().decode("utf-8"))
+                try:
+                    provider_usage = _openai_response_usage(payload)
+                except Exception:
+                    provider_usage = None
                 outcome = OutcomeCategory.COMPLETED
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode("utf-8", errors="replace")
@@ -405,6 +461,7 @@ class OpenAIResponsesExecutor:
                         ],
                         wire=wire,
                         outcome_category=outcome,
+                        provider_usage=provider_usage,
                         metadata={
                             "provider": "openai",
                             "model": self.model,
