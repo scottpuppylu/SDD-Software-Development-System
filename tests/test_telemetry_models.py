@@ -75,7 +75,7 @@ class TelemetryModelTests(unittest.TestCase):
 
     def test_schema_identity_is_frozen(self):
         self.assertEqual(SCHEMA_ID, "sdd.measurement.stage_execution")
-        self.assertEqual(SCHEMA_VERSION, "1.0.2")
+        self.assertEqual(SCHEMA_VERSION, "1.0.3")
         event = self._event(EventType.STAGE_REQUEST, None)
         self.assertEqual(event.schema_id, SCHEMA_ID)
         self.assertEqual(event.schema_version, SCHEMA_VERSION)

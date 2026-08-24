@@ -1,9 +1,9 @@
 # SDD Measurement Contract v1
 
-Status: **FROZEN for M1.1 implementation**  
+Status: **FROZEN for M2.1 implementation**
 Baseline: `v1.2.0-baseline` / `55092fc1fbfc87be1fe573806125d8b06481ba3c`  
 Schema ID: `sdd.measurement.stage_execution`  
-Schema version: `1.0.2`
+Schema version: `1.0.3`
 
 ## 1. Purpose and authority boundary
 
@@ -18,7 +18,7 @@ Every event is a canonical JSON object with these fields:
 | Field | Type | Required | Contract |
 |---|---:|:---:|---|
 | `schema_id` | string | yes | Always `sdd.measurement.stage_execution`. |
-| `schema_version` | string | yes | Always `1.0.2` for this contract. |
+| `schema_version` | string | yes | Always `1.0.3` for this contract. |
 | `event_type` | enum | yes | `stage_request`, `provider_call`, or `stage08_task`. |
 | `event_id` | string | yes | UUID string generated only for telemetry correlation. |
 | `observed_at` | string | yes | UTC RFC 3339 timestamp. It is observational, not an authority timestamp. |
@@ -205,12 +205,37 @@ For every layer, API keys, authorization headers, cookies, credentials, tokens u
 
 ## 8. Configuration
 
-The only v1 configuration names are:
+### 8.1 Configuration authority and enable grammar
 
-- `SDD_TELEMETRY_ENABLED`: default disabled. Telemetry is enabled only by an explicitly recognized true value; absence or invalid values resolve to disabled.
-- `SDD_TELEMETRY_DIR`: output-directory override. It is consulted only when telemetry is enabled.
+V1 configuration is environment-only. The only v1 configuration names are `SDD_TELEMETRY_ENABLED` and `SDD_TELEMETRY_DIR`. Implementations MUST NOT add CLI telemetry flags, telemetry settings to `.sdd/system.yaml`, or other telemetry configuration files. Consequently, v1 has no CLI/config/environment precedence stack. Adding another configuration authority requires a contract and schema amendment.
 
-The Windows default directory is `C:\Users\user\AppData\Local\SDD Orchestrator\telemetry`. On Windows implementations SHOULD derive the equivalent current-user Local AppData path rather than hard-code the example username. Any `SDD_TELEMETRY_DIR` override MUST resolve outside the repository root. An override resolving to the repository root or any descendant MUST be rejected and telemetry disabled or treated as a telemetry-only failure; it MUST NOT affect execution semantics.
+`SDD_TELEMETRY_ENABLED` defaults to disabled. Its value is parsed by trimming surrounding ASCII whitespace and then comparing case-insensitively. The recognized true values are exactly `1`, `true`, `yes`, and `on`. A missing, empty, invalid, or any other value means disabled. Disabled telemetry MUST NOT produce persistent telemetry side effects.
+
+`SDD_TELEMETRY_DIR` is the output-directory override and is consulted only when telemetry is enabled.
+
+### 8.2 Directory resolution, defaults, and safety
+
+An absolute `SDD_TELEMETRY_DIR` override resolves as an absolute path. A relative override resolves relative to the process current working directory, never relative to the repository root. The path MUST be normalized and resolved before repository-containment checking.
+
+The default external telemetry directory is:
+
+- Windows: `%LOCALAPPDATA%/sdd-orchestrator/telemetry`.
+- POSIX when `XDG_STATE_HOME` exists and is non-empty: `$XDG_STATE_HOME/sdd-orchestrator/telemetry`.
+- Other POSIX cases: `~/.local/state/sdd-orchestrator/telemetry`.
+
+Both overrides and defaults MUST pass repository-external validation. A resolved path equal to the repository root or within any repository-root descendant is unsafe. Windows containment comparison follows platform case-insensitive path semantics; POSIX containment comparison follows platform path semantics. Symlink, junction, and reparse-point resolution MUST be considered when safely resolvable. If repository-external safety cannot be established reliably, the destination is unsafe; an implementation MUST NOT guess that an ambiguous path is external.
+
+If a default or override cannot be safely resolved, created, or used, the implementation MUST fall back to `NullTelemetrySink`. Persistence is then effectively disabled. It MUST NOT fall back to repository or working-tree storage, abort or alter stage/provider/lifecycle execution, or define a second telemetry-only execution failure mode.
+
+### 8.3 Persistence format and lifecycle
+
+Persistent telemetry uses UTF-8 JSON Lines (JSONL). The filename is exactly `events.jsonl`, directly under the resolved telemetry directory. V1 does not create separate files per run or session; `event_id` and `run_id` remain correlation identifiers only. M2.1 does not implement rotation, retention, compression, or archival, and a producer MUST NOT invent alternate filenames.
+
+Each line is exactly one directly serialized schema object corresponding to `MeasurementEvent.to_dict()`, with no storage envelope, header, or footer. Existing canonical JSON rules apply: `ensure_ascii=false`, recursively sorted keys, compact separators, no BOM, and no Unicode normalization. Records are separated by exactly one LF newline. Persistent records remain subject to all metadata-only and prohibited-content restrictions in section 10; in particular, they MUST NOT store prompt or body content, stdout, stderr, raw provider responses, secrets, API keys, authorization headers, or other prohibited content.
+
+V1 guarantees single-process append semantics only. Each event MUST be fully canonical-serialized before persistence and written as one logical append operation. After a successful record write, the producer MUST flush the language/runtime buffer; `fsync` is not required. V1 does not guarantee multi-process locking or cross-process atomic append, and implementations MUST NOT introduce distributed locks or session managers.
+
+Serialization, write, and flush failures remain best-effort and non-interfering. A producer MUST NOT treat a partial write as a successfully persisted event. If a partial trailing record exists, a consumer may ignore the incomplete final record. M2.1 does not require a reader or recovery subsystem.
 
 ## 9. Non-interference requirements
 
@@ -228,7 +253,10 @@ A telemetry success, failure, exception, serialization error, directory error, o
 - convergence; or
 - next-stage selection.
 
+The same list is invariant when telemetry is enabled versus disabled. Telemetry MUST NOT become an authority input. An unsafe or unavailable destination has the sole v1 behavior defined in section 8: use `NullTelemetrySink`, making persistence effectively disabled without changing provider calls, stage/provider/lifecycle behavior, or lifecycle results.
+
 Telemetry MUST NOT write to `.sdd/state`, `.sdd/evidence`, `.sdd/runs`, the artifact registry, or any checkpoint. It MUST NOT create authority artifacts.
+Telemetry MUST NOT create fallback telemetry files anywhere inside the repository or working tree.
 
 ## 10. Data minimization and secrets
 
@@ -249,9 +277,13 @@ The following capability status is frozen for v1:
 | Codex CLI token usage | `NOT_RELIABLY_OBSERVABLE`. |
 | Codex CLI file-open activity | `NOT_RELIABLY_OBSERVABLE`. |
 | Component-level actual tokens without a valid mapped provider detail | Not observable; the corresponding required ComponentTokens member MUST be `null` when actual usage exists. |
+| Environment enable configuration | Observable only through `SDD_TELEMETRY_ENABLED` using the exact grammar in section 8.1; all non-true values disable persistence. |
+| Persistent telemetry destination | External-only when repository-external safety can be established; otherwise `NullTelemetrySink`. |
+| Persistent record framing | UTF-8 JSONL containing one canonical `MeasurementEvent.to_dict()` schema object per LF-terminated line in `events.jsonl`. |
 
 ## 12. Schema compatibility
 
+- Schema version `1.0.3` preserves the measurement-event meanings and frozen vocabularies of `1.0.2`; it amends v1 telemetry enablement, external-directory resolution and safety, persistence framing and file lifecycle, and best-effort append behavior. These persistence/configuration semantics are part of the schema contract and MUST NOT be independently reinterpreted by producers.
 - For the required envelope field `usage`, `null` means the event type does not carry provider usage; it is neither unavailable usage nor zero usage. Within a Usage object, a null aggregate token or ComponentTokens member means no valid actual observation was supplied for that known field; `component_tokens: null` is reserved for `availability: unavailable`. `0` means an observed numeric zero or empty measured set/content. These meanings are never interchangeable.
 - A missing required field is invalid. Producers MUST emit all required fields, including required nullable fields. A missing optional field means the optional feature was not emitted; it MUST NOT be interpreted as zero, empty, false, or null unless that optional field's later specification explicitly says so.
 - The `usage` field is always required: `stage_request` and `stage08_task` require JSON `null`, while `provider_call` requires a Usage object. A missing `usage` field is invalid, and an event-type/value mismatch is invalid.
@@ -264,4 +296,6 @@ The following capability status is frozen for v1:
 
 ## 13. IMPLEMENTATION ENTRY GATE
 
-**M1.4 MUST use this document as the single naming contract.** Implementation may begin only with `sdd.measurement.stage_execution` version `1.0.2` and the exact names and enum values frozen here. The required `usage` field MUST be implemented with the event-type semantics frozen in sections 2, 6, and 12: `null` for `stage_request`, a Usage object for `provider_call`, and `null` for `stage08_task`, with actual Codex process token availability represented by the associated `provider_call`. Each `provider_call` Usage object MUST match the frozen provenance matrix: OpenAI actual usage uses `available`/`actual`/`openai_responses_usage` and a `component_tokens` object containing exactly the required `cached_input_tokens` and `reasoning_output_tokens` members; unavailable OpenAI usage uses `unavailable`/`unavailable`/`openai_responses_unavailable` with null token fields; unavailable Codex CLI usage uses `unavailable`/`unavailable`/`codex_cli_unavailable` with null token fields. OpenAI component details MUST use only the exact source mappings in section 6. A missing or invalid detail under otherwise actual usage MUST produce the corresponding required null member, while a provider-reported zero MUST remain zero. Unavailable provider usage observation MUST NOT be treated as zero. Implementation MUST NOT estimate component tokens, omit either required canonical member, accept invalid detail values as actual observations, fabricate provider usage for an event type that requires `null`, treat that `null` as unavailable or zero, add component-token keys or aliases, add `not_applicable`, create a second schema, use alternate field names or compatibility aliases, invent private enum spellings, or create a parallel canonicalization vocabulary. Any necessary contract change must first revise this document through an explicit schema-version decision; production code is not the place to resolve a naming conflict.
+**M2.1 MUST use this document as the single naming, configuration, and persistence contract.** Implementation may begin only with `sdd.measurement.stage_execution` version `1.0.3` and the exact names, enum values, and semantics frozen here. Production MUST NOT independently invent the true-value grammar, relative-path base, unsafe-path fallback, persistence framing, filename, rotation behavior, or append semantics.
+
+The required `usage` field MUST be implemented with the event-type semantics frozen in sections 2, 6, and 12: `null` for `stage_request`, a Usage object for `provider_call`, and `null` for `stage08_task`, with actual Codex process token availability represented by the associated `provider_call`. Each `provider_call` Usage object MUST match the frozen provenance matrix: OpenAI actual usage uses `available`/`actual`/`openai_responses_usage` and a `component_tokens` object containing exactly the required `cached_input_tokens` and `reasoning_output_tokens` members; unavailable OpenAI usage uses `unavailable`/`unavailable`/`openai_responses_unavailable` with null token fields; unavailable Codex CLI usage uses `unavailable`/`unavailable`/`codex_cli_unavailable` with null token fields. OpenAI component details MUST use only the exact source mappings in section 6. A missing or invalid detail under otherwise actual usage MUST produce the corresponding required null member, while a provider-reported zero MUST remain zero. Unavailable provider usage observation MUST NOT be treated as zero. Implementation MUST NOT estimate component tokens, omit either required canonical member, accept invalid detail values as actual observations, fabricate provider usage for an event type that requires `null`, treat that `null` as unavailable or zero, add component-token keys or aliases, add `not_applicable`, create a second schema, use alternate field names or compatibility aliases, invent private enum spellings, or create a parallel canonicalization vocabulary. Any necessary contract change must first revise this document through an explicit schema-version decision; production code is not the place to resolve a naming conflict.
