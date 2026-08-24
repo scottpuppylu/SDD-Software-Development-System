@@ -14,6 +14,7 @@ from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
 from .codex_adapter import Stage08CodexRunner, CodexCLI, CodexAdapterError
 from .decisions import DecisionGateway, DecisionGatewayError
 from .system_controller import FullSystemController
+from .telemetry.recorder import TelemetryRecorder
 
 
 def _print(data):
@@ -157,10 +158,19 @@ def main():
         return
     if args.command == "auto":
         orch = Orchestrator(repo)
+        telemetry_recorder = TelemetryRecorder.from_environment(repo)
         reasoning = (
-            CodexExecReasoningExecutor(executable=args.codex_bin, model=args.model, repo_root=repo)
+            CodexExecReasoningExecutor(
+                executable=args.codex_bin,
+                model=args.model,
+                repo_root=repo,
+                telemetry_recorder=telemetry_recorder,
+            )
             if args.reasoning_provider == "codex"
-            else OpenAIResponsesExecutor(model=args.model or "gpt-5.6")
+            else OpenAIResponsesExecutor(
+                model=args.model or "gpt-5.6",
+                telemetry_recorder=telemetry_recorder,
+            )
         )
         codex_runner = Stage08CodexRunner(
             orch,
@@ -168,7 +178,12 @@ def main():
             project_python=args.project_python,
             heartbeat_seconds=args.heartbeat_seconds,
         )
-        controller = FullSystemController(orch, reasoning, codex_runner)
+        controller = FullSystemController(
+            orch,
+            reasoning,
+            codex_runner,
+            telemetry_recorder=telemetry_recorder,
+        )
         _print(controller.run(max_steps=args.max_steps, semantic_by_stage=_semantic_by_stage(args.semantic)))
         return
     if args.command.startswith("decision-"):
@@ -227,7 +242,8 @@ def main():
         return
 
     orch = Orchestrator(repo)
-    runner = StageRunner(orch)
+    telemetry_recorder = TelemetryRecorder.from_environment(repo)
+    runner = StageRunner(orch, telemetry_recorder=telemetry_recorder)
 
     if args.command == "status":
         _print(orch.status())
@@ -250,9 +266,17 @@ def main():
         _print({"packet": str(path)})
     elif args.command == "run":
         if args.codex:
-            executor = CodexExecReasoningExecutor(executable=args.codex_bin, model=args.model, repo_root=repo)
+            executor = CodexExecReasoningExecutor(
+                executable=args.codex_bin,
+                model=args.model,
+                repo_root=repo,
+                telemetry_recorder=telemetry_recorder,
+            )
         elif args.openai:
-            executor = OpenAIResponsesExecutor(model=args.model or "gpt-5.6")
+            executor = OpenAIResponsesExecutor(
+                model=args.model or "gpt-5.6",
+                telemetry_recorder=telemetry_recorder,
+            )
         else:
             executor = ExternalCommandExecutor(args.executor_command)
         _print(runner.run(
@@ -266,10 +290,20 @@ def main():
                 raise SystemExit("--executor-command is required for --provider command")
             executor = ExternalCommandExecutor(args.executor_command)
         elif args.provider == "openai":
-            executor = OpenAIResponsesExecutor(model=args.model or "gpt-5.6")
+            executor = OpenAIResponsesExecutor(
+                model=args.model or "gpt-5.6",
+                telemetry_recorder=telemetry_recorder,
+            )
         else:
-            executor = CodexExecReasoningExecutor(executable=args.codex_bin, model=args.model, repo_root=repo)
-        controller = PipelineController(orch)
+            executor = CodexExecReasoningExecutor(
+                executable=args.codex_bin,
+                model=args.model,
+                repo_root=repo,
+                telemetry_recorder=telemetry_recorder,
+            )
+        controller = PipelineController(
+            orch, telemetry_recorder=telemetry_recorder
+        )
         _print(controller.run_until(
             executor,
             stop_before=args.stop_before,

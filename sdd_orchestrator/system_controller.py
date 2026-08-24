@@ -26,9 +26,17 @@ class FullSystemController:
 
     REASONING_STAGES = {"01", "02", "03", "04", "05", "06", "07", "09", "10"}
 
-    def __init__(self, orchestrator: Orchestrator, reasoning_executor: StageExecutor, codex_runner: Stage08CodexRunner):
+    def __init__(
+        self,
+        orchestrator: Orchestrator,
+        reasoning_executor: StageExecutor,
+        codex_runner: Stage08CodexRunner,
+        telemetry_recorder: Any = None,
+    ):
         self.orchestrator = orchestrator
-        self.runner = StageRunner(orchestrator)
+        self.runner = StageRunner(
+            orchestrator, telemetry_recorder=telemetry_recorder
+        )
         self.reasoning_executor = reasoning_executor
         self.codex_runner = codex_runner
         self.decisions = DecisionGateway(orchestrator)

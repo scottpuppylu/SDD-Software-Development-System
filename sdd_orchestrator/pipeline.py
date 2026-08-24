@@ -24,9 +24,11 @@ class PipelineController:
     the Codex/repository coding adapter rather than the authoring reasoning adapter.
     """
 
-    def __init__(self, orchestrator: Orchestrator):
+    def __init__(self, orchestrator: Orchestrator, telemetry_recorder: Any = None):
         self.orchestrator = orchestrator
-        self.runner = StageRunner(orchestrator)
+        self.runner = StageRunner(
+            orchestrator, telemetry_recorder=telemetry_recorder
+        )
 
     def _repository_structure(self, max_entries: int = 500) -> str:
         ignored = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build"}
