@@ -38,8 +38,27 @@ class TelemetryModelTests(unittest.TestCase):
             input_tokens=2,
             output_tokens=3,
             total_tokens=5,
-            component_tokens=None,
+            component_tokens={
+                "cached_input_tokens": 1,
+                "reasoning_output_tokens": 1,
+            },
         )
+
+    def _available_usage(self, **overrides):
+        values = {
+            "availability": "available",
+            "quality": "actual",
+            "usage_source": "openai_responses_usage",
+            "input_tokens": 2,
+            "output_tokens": 3,
+            "total_tokens": 5,
+            "component_tokens": {
+                "cached_input_tokens": 1,
+                "reasoning_output_tokens": 1,
+            },
+        }
+        values.update(overrides)
+        return Usage(**values)
 
     def _event(self, event_type, usage):
         return MeasurementEvent(
@@ -56,7 +75,7 @@ class TelemetryModelTests(unittest.TestCase):
 
     def test_schema_identity_is_frozen(self):
         self.assertEqual(SCHEMA_ID, "sdd.measurement.stage_execution")
-        self.assertEqual(SCHEMA_VERSION, "1.0.1")
+        self.assertEqual(SCHEMA_VERSION, "1.0.2")
         event = self._event(EventType.STAGE_REQUEST, None)
         self.assertEqual(event.schema_id, SCHEMA_ID)
         self.assertEqual(event.schema_version, SCHEMA_VERSION)
@@ -92,6 +111,85 @@ class TelemetryModelTests(unittest.TestCase):
             usage.usage_source,
             UsageSource.OPENAI_RESPONSES_UNAVAILABLE,
         )
+
+    def test_available_usage_requires_component_tokens_object(self):
+        with self.assertRaises((TypeError, ValueError)):
+            self._available_usage(component_tokens=None)
+
+    def test_available_usage_component_tokens_accept_non_negative_integers_or_none(self):
+        for cached, reasoning in ((0, 0), (4, 2), (None, None), (0, None), (None, 0)):
+            with self.subTest(cached=cached, reasoning=reasoning):
+                usage = self._available_usage(component_tokens={
+                    "cached_input_tokens": cached,
+                    "reasoning_output_tokens": reasoning,
+                })
+                self.assertEqual(usage.component_tokens["cached_input_tokens"], cached)
+                self.assertEqual(usage.component_tokens["reasoning_output_tokens"], reasoning)
+
+    def test_available_usage_component_tokens_require_both_canonical_keys(self):
+        for component_tokens in (
+            {"cached_input_tokens": 1},
+            {"reasoning_output_tokens": 1},
+            {},
+        ):
+            with self.subTest(component_tokens=component_tokens), self.assertRaises(
+                (TypeError, ValueError)
+            ):
+                self._available_usage(component_tokens=component_tokens)
+
+    def test_available_usage_component_tokens_reject_extra_keys_and_aliases(self):
+        for extra_key in ("cached_tokens", "reasoning_tokens", "not_applicable", "other"):
+            component_tokens = {
+                "cached_input_tokens": 1,
+                "reasoning_output_tokens": 1,
+                extra_key: 1,
+            }
+            with self.subTest(extra_key=extra_key), self.assertRaises((TypeError, ValueError)):
+                self._available_usage(component_tokens=component_tokens)
+
+    def test_available_usage_rejects_invalid_component_token_values(self):
+        for invalid in (True, False, -1, 1.0, 1.5, "1", [], {}):
+            for key in ("cached_input_tokens", "reasoning_output_tokens"):
+                component_tokens = {
+                    "cached_input_tokens": 1,
+                    "reasoning_output_tokens": 1,
+                }
+                component_tokens[key] = invalid
+                with self.subTest(key=key, invalid=invalid), self.assertRaises(
+                    (TypeError, ValueError)
+                ):
+                    self._available_usage(component_tokens=component_tokens)
+
+    def test_unavailable_usage_requires_null_component_tokens_for_each_provider_source(self):
+        for source in ("openai_responses_unavailable", "codex_cli_unavailable"):
+            with self.subTest(source=source), self.assertRaises((TypeError, ValueError)):
+                Usage(
+                    availability="unavailable",
+                    quality="unavailable",
+                    usage_source=source,
+                    input_tokens=None,
+                    output_tokens=None,
+                    total_tokens=None,
+                    component_tokens={
+                        "cached_input_tokens": None,
+                        "reasoning_output_tokens": None,
+                    },
+                )
+
+    def test_available_usage_aggregate_tokens_accept_non_negative_integers_or_none(self):
+        for field in ("input_tokens", "output_tokens", "total_tokens"):
+            for value in (0, 7, None):
+                with self.subTest(field=field, value=value):
+                    usage = self._available_usage(**{field: value})
+                    self.assertEqual(getattr(usage, field), value)
+
+    def test_available_usage_rejects_invalid_aggregate_token_values(self):
+        for field in ("input_tokens", "output_tokens", "total_tokens"):
+            for invalid in (True, False, -1, 1.0, 1.5, "1", [], {}):
+                with self.subTest(field=field, invalid=invalid), self.assertRaises(
+                    (TypeError, ValueError)
+                ):
+                    self._available_usage(**{field: invalid})
 
     def test_usage_semantics_are_required_by_event_type(self):
         self._event(EventType.STAGE_REQUEST, None)

@@ -7,7 +7,7 @@ from typing import Any
 
 
 SCHEMA_ID = "sdd.measurement.stage_execution"
-SCHEMA_VERSION = "1.0.1"
+SCHEMA_VERSION = "1.0.2"
 CANONICALIZATION_ID = "sdd.canonical.utf8-sorted-compact-v1"
 
 
@@ -141,7 +141,7 @@ class Usage:
     input_tokens: int | None
     output_tokens: int | None
     total_tokens: int | None
-    component_tokens: dict[str, int] | None
+    component_tokens: dict[str, int | None] | None
 
     def __post_init__(self) -> None:
         try:
@@ -166,6 +166,14 @@ class Usage:
         else:
             if quality is not Quality.ACTUAL or source is not UsageSource.OPENAI_RESPONSES_USAGE:
                 raise ValueError("available usage requires actual provider usage")
+            if not isinstance(self.component_tokens, dict):
+                raise TypeError("available usage requires component_tokens to be an object")
+            expected_component_tokens = {
+                "cached_input_tokens",
+                "reasoning_output_tokens",
+            }
+            if set(self.component_tokens) != expected_component_tokens:
+                raise ValueError("component_tokens must contain exactly the canonical members")
         for name in ("input_tokens", "output_tokens", "total_tokens"):
             value = getattr(self, name)
             if value is not None:
@@ -173,10 +181,9 @@ class Usage:
         if self.component_tokens is not None:
             if not isinstance(self.component_tokens, dict):
                 raise TypeError("component_tokens must be an object or None")
-            for key, value in self.component_tokens.items():
-                if not isinstance(key, str):
-                    raise TypeError("component token names must be strings")
-                _non_negative_integer(value, "component token count")
+            for value in self.component_tokens.values():
+                if value is not None:
+                    _non_negative_integer(value, "component token count")
 
     def to_dict(self) -> dict[str, Any]:
         return {
