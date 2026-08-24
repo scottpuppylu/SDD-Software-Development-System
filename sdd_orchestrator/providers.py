@@ -7,10 +7,13 @@ import urllib.request
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from .executor import StageExecutionRequest, StageExecutionResult
+from .telemetry.measurement import measure_provider_call
+from .telemetry.models import Component, OutcomeCategory
 
 
 class ReasoningProviderError(RuntimeError):
@@ -175,6 +178,7 @@ class CodexExecReasoningExecutor:
         ephemeral: bool = True,
         ignore_user_config: bool = False,
         repo_root: str | Path | None = None,
+        telemetry_recorder=None,
     ):
         self.executable = executable
         self.model = model
@@ -182,6 +186,7 @@ class CodexExecReasoningExecutor:
         self.ephemeral = ephemeral
         self.ignore_user_config = ignore_user_config
         self.repo_root = Path(repo_root).resolve() if repo_root is not None else Path.cwd()
+        self.telemetry_recorder = telemetry_recorder
 
     def resolved_executable(self) -> str | None:
         resolved = shutil.which(self.executable)
@@ -234,16 +239,44 @@ class CodexExecReasoningExecutor:
             output_path = tmpdir / "result.json"
             schema_path.write_text(json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8")
 
-            proc = subprocess.run(
-                self.command(schema_path, output_path, executable=executable),
-                input=prompt,
-                text=True,
-                encoding="utf-8",
-                errors="strict",
-                capture_output=True,
-                cwd=self.repo_root,
-                timeout=self.timeout_seconds,
-            )
+            started = time.monotonic()
+            outcome = OutcomeCategory.FAILED
+            try:
+                proc = subprocess.run(
+                    self.command(schema_path, output_path, executable=executable),
+                    input=prompt,
+                    text=True,
+                    encoding="utf-8",
+                    errors="strict",
+                    capture_output=True,
+                    cwd=self.repo_root,
+                    timeout=self.timeout_seconds,
+                )
+                if proc.returncode == 0:
+                    outcome = OutcomeCategory.COMPLETED
+            except (subprocess.TimeoutExpired, TimeoutError):
+                outcome = OutcomeCategory.TIMEOUT
+                raise
+            finally:
+                if self.telemetry_recorder is not None:
+                    try:
+                        duration_ms = max(0, round((time.monotonic() - started) * 1000))
+                        event = measure_provider_call(
+                            stage_id=request.stage_id,
+                            rendered=[(prompt, Component.USER_INPUT)],
+                            wire=prompt.encode("utf-8"),
+                            outcome_category=outcome,
+                            metadata={
+                                "provider": "codex",
+                                "model": self.model or "codex-config-default",
+                                "adapter": "codex_exec_reasoning",
+                                "interface": "subprocess_stdin",
+                                "duration_ms": duration_ms,
+                            },
+                        )
+                        self.telemetry_recorder.record(event)
+                    except Exception:
+                        pass
             if proc.returncode != 0:
                 detail = (proc.stderr or proc.stdout or "").strip()
                 if len(detail) > 6000:
@@ -303,11 +336,13 @@ class OpenAIResponsesExecutor:
         api_key: str | None = None,
         timeout_seconds: int = 300,
         max_output_tokens: int = 12000,
+        telemetry_recorder=None,
     ):
         self.model = model
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.timeout_seconds = timeout_seconds
         self.max_output_tokens = max_output_tokens
+        self.telemetry_recorder = telemetry_recorder
         if not self.api_key:
             raise ReasoningProviderError(
                 "OPENAI_API_KEY is not set. Configure it in the environment; do not store it in repository files."
@@ -329,25 +364,58 @@ class OpenAIResponsesExecutor:
                 }
             },
         }
+        wire = json.dumps(body, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(
             self.endpoint,
-            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+            data=wire,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
             },
             method="POST",
         )
+        started = time.monotonic()
+        outcome = OutcomeCategory.FAILED
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise ReasoningProviderError(
-                f"OpenAI Responses API returned HTTP {exc.code}: {detail[:2000]}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise ReasoningProviderError(f"OpenAI Responses API request failed: {exc}") from exc
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                outcome = OutcomeCategory.COMPLETED
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                raise ReasoningProviderError(
+                    f"OpenAI Responses API returned HTTP {exc.code}: {detail[:2000]}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                if isinstance(exc.reason, TimeoutError):
+                    outcome = OutcomeCategory.TIMEOUT
+                raise ReasoningProviderError(f"OpenAI Responses API request failed: {exc}") from exc
+            except (TimeoutError, subprocess.TimeoutExpired):
+                outcome = OutcomeCategory.TIMEOUT
+                raise
+        finally:
+            if self.telemetry_recorder is not None:
+                try:
+                    duration_ms = max(0, round((time.monotonic() - started) * 1000))
+                    event = measure_provider_call(
+                        stage_id=request.stage_id,
+                        rendered=[
+                            (body["instructions"], Component.STAGE_INSTRUCTION),
+                            (body["input"], Component.USER_INPUT),
+                        ],
+                        wire=wire,
+                        outcome_category=outcome,
+                        metadata={
+                            "provider": "openai",
+                            "model": self.model,
+                            "adapter": "openai_responses",
+                            "interface": "https",
+                            "duration_ms": duration_ms,
+                        },
+                    )
+                    self.telemetry_recorder.record(event)
+                except Exception:
+                    pass
 
         text = _extract_output_text(payload)
         try:

@@ -8,12 +8,17 @@ from typing import Any
 from uuid import uuid4
 
 from .models import (
+    Availability,
     CANONICALIZATION_ID,
     Component,
     ContentMetric,
     EventType,
     Layer,
     MeasurementEvent,
+    OutcomeCategory,
+    Quality,
+    Usage,
+    UsageSource,
 )
 
 
@@ -33,6 +38,81 @@ def measure_text(text: str) -> TextMeasurement:
         chars=len(text),
         utf8_bytes=len(encoded),
         sha256=hashlib.sha256(encoded).hexdigest(),
+    )
+
+
+def measure_provider_call(
+    *,
+    stage_id: str | None,
+    rendered: list[tuple[str, Component]],
+    wire: bytes,
+    outcome_category: OutcomeCategory,
+    metadata: dict[str, Any],
+) -> MeasurementEvent:
+    """Build a metadata-only M1.3 provider-call observation."""
+    unavailable_sources = {
+        "openai": UsageSource.OPENAI_RESPONSES_UNAVAILABLE,
+        "codex": UsageSource.CODEX_CLI_UNAVAILABLE,
+    }
+    provider = metadata.get("provider")
+    try:
+        usage_source = unavailable_sources[provider]
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f"unknown provider identity: {provider!r}") from exc
+
+    metrics: list[ContentMetric] = []
+    for text, component in rendered:
+        measured = measure_text(text)
+        metrics.append(
+            ContentMetric(
+                classification=component,
+                classification_reason=None,
+                layer=Layer.RENDERED,
+                chars=measured.chars,
+                utf8_bytes=measured.utf8_bytes,
+                sha256=measured.sha256,
+                canonicalization_id=measured.canonicalization_id,
+                source_count=1,
+                source_paths=None,
+                truncated=False,
+                omitted_items=0,
+            )
+        )
+    wire_text = wire.decode("utf-8")
+    measured_wire = measure_text(wire_text)
+    metrics.append(
+        ContentMetric(
+            classification=Component.OTHER,
+            classification_reason="provider request payload",
+            layer=Layer.WIRE,
+            chars=measured_wire.chars,
+            utf8_bytes=measured_wire.utf8_bytes,
+            sha256=measured_wire.sha256,
+            canonicalization_id=measured_wire.canonicalization_id,
+            source_count=1,
+            source_paths=None,
+            truncated=False,
+            omitted_items=0,
+        )
+    )
+    return MeasurementEvent(
+        event_type=EventType.PROVIDER_CALL,
+        event_id=str(uuid4()),
+        observed_at=datetime.now(timezone.utc).isoformat(),
+        stage_id=stage_id,
+        run_id=None,
+        outcome_category=outcome_category,
+        metrics=metrics,
+        usage=Usage(
+            availability=Availability.UNAVAILABLE,
+            quality=Quality.UNAVAILABLE,
+            usage_source=usage_source,
+            input_tokens=None,
+            output_tokens=None,
+            total_tokens=None,
+            component_tokens=None,
+        ),
+        metadata=metadata,
     )
 
 
