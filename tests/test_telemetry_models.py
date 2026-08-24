@@ -10,6 +10,7 @@ from sdd_orchestrator.telemetry.models import (
     Layer,
     MeasurementEvent,
     Usage,
+    UsageSource,
 )
 
 
@@ -55,7 +56,7 @@ class TelemetryModelTests(unittest.TestCase):
 
     def test_schema_identity_is_frozen(self):
         self.assertEqual(SCHEMA_ID, "sdd.measurement.stage_execution")
-        self.assertEqual(SCHEMA_VERSION, "1.0.0")
+        self.assertEqual(SCHEMA_VERSION, "1.0.1")
         event = self._event(EventType.STAGE_REQUEST, None)
         self.assertEqual(event.schema_id, SCHEMA_ID)
         self.assertEqual(event.schema_version, SCHEMA_VERSION)
@@ -64,6 +65,32 @@ class TelemetryModelTests(unittest.TestCase):
         self.assertEqual(
             {member.value for member in EventType},
             {"stage_request", "provider_call", "stage08_task"},
+        )
+
+    def test_usage_source_vocabulary_is_frozen(self):
+        self.assertEqual(
+            {member.value for member in UsageSource},
+            {
+                "openai_responses_usage",
+                "openai_responses_unavailable",
+                "codex_cli_unavailable",
+            },
+        )
+
+    def test_openai_unavailable_usage_is_valid_with_null_token_fields(self):
+        usage = Usage(
+            availability="unavailable",
+            quality="unavailable",
+            usage_source="openai_responses_unavailable",
+            input_tokens=None,
+            output_tokens=None,
+            total_tokens=None,
+            component_tokens=None,
+        )
+
+        self.assertEqual(
+            usage.usage_source,
+            UsageSource.OPENAI_RESPONSES_UNAVAILABLE,
         )
 
     def test_usage_semantics_are_required_by_event_type(self):

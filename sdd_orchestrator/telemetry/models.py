@@ -7,7 +7,7 @@ from typing import Any
 
 
 SCHEMA_ID = "sdd.measurement.stage_execution"
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.0.1"
 CANONICALIZATION_ID = "sdd.canonical.utf8-sorted-compact-v1"
 
 
@@ -53,6 +53,7 @@ class Quality(str, Enum):
 
 class UsageSource(str, Enum):
     OPENAI_RESPONSES_USAGE = "openai_responses_usage"
+    OPENAI_RESPONSES_UNAVAILABLE = "openai_responses_unavailable"
     CODEX_CLI_UNAVAILABLE = "codex_cli_unavailable"
 
 
@@ -154,7 +155,11 @@ class Usage:
         object.__setattr__(self, "usage_source", source)
         token_fields = (self.input_tokens, self.output_tokens, self.total_tokens, self.component_tokens)
         if availability is Availability.UNAVAILABLE:
-            if quality is not Quality.UNAVAILABLE or source is not UsageSource.CODEX_CLI_UNAVAILABLE:
+            unavailable_sources = {
+                UsageSource.OPENAI_RESPONSES_UNAVAILABLE,
+                UsageSource.CODEX_CLI_UNAVAILABLE,
+            }
+            if quality is not Quality.UNAVAILABLE or source not in unavailable_sources:
                 raise ValueError("unavailable usage requires unavailable quality and source")
             if any(value is not None for value in token_fields):
                 raise ValueError("unavailable usage requires null token fields")

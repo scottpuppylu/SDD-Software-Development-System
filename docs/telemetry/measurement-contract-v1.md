@@ -3,7 +3,7 @@
 Status: **FROZEN for M1.1 implementation**  
 Baseline: `v1.2.0-baseline` / `55092fc1fbfc87be1fe573806125d8b06481ba3c`  
 Schema ID: `sdd.measurement.stage_execution`  
-Schema version: `1.0.0`
+Schema version: `1.0.1`
 
 ## 1. Purpose and authority boundary
 
@@ -18,7 +18,7 @@ Every event is a canonical JSON object with these fields:
 | Field | Type | Required | Contract |
 |---|---:|:---:|---|
 | `schema_id` | string | yes | Always `sdd.measurement.stage_execution`. |
-| `schema_version` | string | yes | Always `1.0.0` for this contract. |
+| `schema_version` | string | yes | Always `1.0.1` for this contract. |
 | `event_type` | enum | yes | `stage_request`, `provider_call`, or `stage08_task`. |
 | `event_id` | string | yes | UUID string generated only for telemetry correlation. |
 | `observed_at` | string | yes | UTC RFC 3339 timestamp. It is observational, not an authority timestamp. |
@@ -84,6 +84,7 @@ When `component` is `other`, `classification_reason` MUST be a present, non-empt
 `usage_source` is a string vocabulary whose v1 values are:
 
 - `openai_responses_usage`
+- `openai_responses_unavailable`
 - `codex_cli_unavailable`
 
 Additional sources require a schema-compatible contract revision; implementations MUST NOT invent source spellings locally. Estimates MUST NOT be recorded in any actual usage field or marked with `quality: actual`.
@@ -142,11 +143,29 @@ When `usage` is a Usage object, it has these exact fields:
 | `total_tokens` | non-negative integer or null | yes | Provider-reported actual value, else `null`. |
 | `component_tokens` | object or null | yes | Actual provider-reported component-level token counts, else `null`. |
 
-For `availability: available`, `quality` MUST be `actual`, `usage_source` MUST identify an actual provider usage source, and supplied token values MUST be provider-reported. For `availability: unavailable`, `quality` MUST be `unavailable` and every token field, including `component_tokens`, MUST be `null`.
+The valid provider usage provenance combinations are frozen as follows:
+
+| Provider observation | `availability` | `quality` | `usage_source` | Token fields |
+|---|---|---|---|---|
+| OpenAI Responses actual usage supplied | `available` | `actual` | `openai_responses_usage` | Provider-reported values; individually absent values may be `null`. |
+| OpenAI Responses usage unavailable | `unavailable` | `unavailable` | `openai_responses_unavailable` | All `null`. |
+| Codex CLI usage unavailable | `unavailable` | `unavailable` | `codex_cli_unavailable` | All `null`. |
+
+These are the only valid combinations. OpenAI Responses usage is unavailable when no actual provider usage observation is available, including an HTTP error, timeout, transport failure, or a response that is absent or does not supply actual usage. `unavailable` describes the provider usage observation, not a token count, and MUST NOT be interpreted or serialized as zero.
+
+For `availability: available`, `quality` MUST be `actual`, `usage_source` MUST be `openai_responses_usage`, and supplied token values MUST be provider-reported. For `availability: unavailable`, `quality` MUST be `unavailable`, `usage_source` MUST be the unavailable source corresponding to the provider, and every token field, including `component_tokens`, MUST be `null`.
 
 If a provider reports aggregate tokens but does not report component-level tokens, `component_tokens` MUST be `null`. Component tokens MUST NOT be estimated, inferred from bytes or characters, or proportionally allocated. Missing individual aggregate values remain `null`; `0` is used only when the provider explicitly reports zero.
 
 Codex CLI token telemetry and file-open telemetry are currently `NOT_RELIABLY_OBSERVABLE`. A `provider_call` event for a Codex CLI process therefore uses `availability: unavailable`, `quality: unavailable`, `usage_source: codex_cli_unavailable`, and null token fields unless a future contract revision establishes a reliable source. Its associated `stage08_task` event uses `usage: null`. A missing CLI observation MUST NOT be converted into zero.
+
+Normative Usage examples (shown independently of the enclosing `provider_call` event) are:
+
+```json
+{"availability":"available","quality":"actual","usage_source":"openai_responses_usage","input_tokens":10,"output_tokens":5,"total_tokens":15,"component_tokens":null}
+{"availability":"unavailable","quality":"unavailable","usage_source":"openai_responses_unavailable","input_tokens":null,"output_tokens":null,"total_tokens":null,"component_tokens":null}
+{"availability":"unavailable","quality":"unavailable","usage_source":"codex_cli_unavailable","input_tokens":null,"output_tokens":null,"total_tokens":null,"component_tokens":null}
+```
 
 ## 7. Snapshot boundaries
 
@@ -206,6 +225,7 @@ The following capability status is frozen for v1:
 | Capability | Status |
 |---|---|
 | Provider-reported OpenAI Responses usage | Reliably observable when the response supplies usage; source `openai_responses_usage`. |
+| OpenAI Responses usage when no actual usage is supplied or observable | Unavailable; source `openai_responses_unavailable`; token fields are `null`, not zero. |
 | Codex CLI token usage | `NOT_RELIABLY_OBSERVABLE`. |
 | Codex CLI file-open activity | `NOT_RELIABLY_OBSERVABLE`. |
 | Component-level actual tokens without provider component data | Not observable; MUST be `null`. |
@@ -215,6 +235,7 @@ The following capability status is frozen for v1:
 - For the required envelope field `usage`, `null` means the event type does not carry provider usage; it is neither unavailable usage nor zero usage. Within a Usage object and elsewhere in this schema, `null` means the field is known by this schema but its value is unavailable or inapplicable. `0` means an observed numeric zero or empty measured set/content. These meanings are never interchangeable.
 - A missing required field is invalid. Producers MUST emit all required fields, including required nullable fields. A missing optional field means the optional feature was not emitted; it MUST NOT be interpreted as zero, empty, false, or null unless that optional field's later specification explicitly says so.
 - The `usage` field is always required: `stage_request` and `stage08_task` require JSON `null`, while `provider_call` requires a Usage object. A missing `usage` field is invalid, and an event-type/value mismatch is invalid.
+- A `provider_call` Usage object MUST match one row of the frozen provenance matrix in section 6. In particular, OpenAI Responses failures or responses without actual usage use `openai_responses_unavailable`, while unavailable Codex CLI observations use `codex_cli_unavailable`; unavailable token fields are `null` and MUST NOT be interpreted as zero.
 - Within major version 1, minor or patch revisions MAY add optional fields. Consumers MUST ignore unknown optional fields while continuing to validate known fields. Producers MUST NOT change the meaning or type of an existing field or add enum values without a schema revision.
 - Unknown `event_type`, `component`/`classification`, `layer`, `availability`, `quality`, `usage_source`, or `outcome_category` values are not silently coerced. A consumer MAY preserve the raw event as unsupported telemetry, but MUST NOT interpret it as a known value or affect lifecycle behavior.
 - A consumer that does not support the schema's major version MUST treat the entire event as unsupported telemetry, skip semantic processing, and continue lifecycle execution unchanged. Future major versions require an explicit reader/adapter; they MUST NOT be parsed as v1 by best effort.
@@ -222,4 +243,4 @@ The following capability status is frozen for v1:
 
 ## 13. IMPLEMENTATION ENTRY GATE
 
-**M1.1 MUST use this document as the single naming contract.** Implementation may begin only with `sdd.measurement.stage_execution` version `1.0.0` and the exact names and enum values frozen here. The required `usage` field MUST be implemented with the event-type semantics frozen in sections 2, 6, and 12: `null` for `stage_request`, a Usage object for `provider_call`, and `null` for `stage08_task`, with actual Codex process token availability represented by the associated `provider_call`. Implementation MUST NOT fabricate provider usage for an event type that requires `null`, treat that `null` as unavailable or zero, add `not_applicable`, create a second schema, use alternate field names or compatibility aliases, invent private enum spellings, or create a parallel canonicalization vocabulary. Any necessary contract change must first revise this document through an explicit schema-version decision; production code is not the place to resolve a naming conflict.
+**M1.1 MUST use this document as the single naming contract.** Implementation may begin only with `sdd.measurement.stage_execution` version `1.0.1` and the exact names and enum values frozen here. The required `usage` field MUST be implemented with the event-type semantics frozen in sections 2, 6, and 12: `null` for `stage_request`, a Usage object for `provider_call`, and `null` for `stage08_task`, with actual Codex process token availability represented by the associated `provider_call`. Each `provider_call` Usage object MUST match the frozen provenance matrix: OpenAI actual usage uses `available`/`actual`/`openai_responses_usage`; unavailable OpenAI usage uses `unavailable`/`unavailable`/`openai_responses_unavailable` with null token fields; unavailable Codex CLI usage uses `unavailable`/`unavailable`/`codex_cli_unavailable` with null token fields. Unavailable provider usage observation MUST NOT be treated as zero. Implementation MUST NOT fabricate provider usage for an event type that requires `null`, treat that `null` as unavailable or zero, add `not_applicable`, create a second schema, use alternate field names or compatibility aliases, invent private enum spellings, or create a parallel canonicalization vocabulary. Any necessary contract change must first revise this document through an explicit schema-version decision; production code is not the place to resolve a naming conflict.
