@@ -4,8 +4,11 @@ from pathlib import Path
 import os
 import shutil
 import subprocess
+import time
 
 from .errors import CodexAdapterError
+from .telemetry.measurement import measure_provider_call
+from .telemetry.models import Component, OutcomeCategory
 
 
 class CodexCLI:
@@ -17,12 +20,14 @@ class CodexCLI:
         approval_policy: str = "never",
         timeout_seconds: int = 1800,
         ephemeral: bool = True,
+        telemetry_recorder=None,
     ):
         self.executable = executable
         self.sandbox = sandbox
         self.approval_policy = approval_policy
         self.timeout_seconds = timeout_seconds
         self.ephemeral = ephemeral
+        self.telemetry_recorder = telemetry_recorder
 
     def resolved_executable(self) -> str | None:
         resolved = shutil.which(self.executable)
@@ -59,13 +64,42 @@ class CodexCLI:
             raise CodexAdapterError(
                 "Codex CLI is not installed or not on PATH. Install/authenticate Codex before Stage 08 execution."
             )
-        return subprocess.run(
-            self.command(prompt, executable=executable),
-            cwd=repo_root,
-            input=prompt,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            capture_output=True,
-            timeout=self.timeout_seconds,
-        )
+        started = time.monotonic()
+        outcome = OutcomeCategory.FAILED
+        try:
+            result = subprocess.run(
+                self.command(prompt, executable=executable),
+                cwd=repo_root,
+                input=prompt,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                timeout=self.timeout_seconds,
+            )
+            if result.returncode == 0:
+                outcome = OutcomeCategory.COMPLETED
+            return result
+        except (subprocess.TimeoutExpired, TimeoutError):
+            outcome = OutcomeCategory.TIMEOUT
+            raise
+        finally:
+            if self.telemetry_recorder is not None:
+                try:
+                    duration_ms = max(0, round((time.monotonic() - started) * 1000))
+                    event = measure_provider_call(
+                        stage_id="08",
+                        rendered=[(prompt, Component.USER_INPUT)],
+                        wire=None,
+                        outcome_category=outcome,
+                        metadata={
+                            "provider": "codex",
+                            "model": "codex-config-default",
+                            "adapter": "codex_stage08",
+                            "interface": "subprocess_stdin",
+                            "duration_ms": duration_ms,
+                        },
+                    )
+                    self.telemetry_recorder.record(event)
+                except Exception:
+                    pass

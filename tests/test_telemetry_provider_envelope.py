@@ -124,7 +124,7 @@ class ProviderCallEnvelopeRedTests(unittest.TestCase):
             telemetry_recorder=recorder,
         )
 
-    def test_codex_invocation_emits_exactly_one_provider_call_with_rendered_and_wire_snapshots(self):
+    def test_codex_invocation_emits_rendered_snapshot_and_omits_unobservable_wire(self):
         recorder = _Recorder()
         executor = self._codex(recorder)
         request = _request()
@@ -143,16 +143,14 @@ class ProviderCallEnvelopeRedTests(unittest.TestCase):
         event, = _provider_events(recorder)
         prompt = executor.build_prompt(request)
         rendered = _metric(event, Layer.RENDERED)
-        wire = _metric(event, Layer.WIRE)
         self.assertEqual(captured["input"], prompt)
         self.assertEqual(rendered.chars, len(prompt))
         self.assertEqual(rendered.utf8_bytes, len(prompt.encode("utf-8")))
         self.assertEqual(rendered.sha256, hashlib.sha256(prompt.encode("utf-8")).hexdigest())
-        self.assertEqual(wire.utf8_bytes, len(captured["input"].encode("utf-8")))
-        self.assertEqual(wire.sha256, hashlib.sha256(captured["input"].encode("utf-8")).hexdigest())
-        self.assertIsNot(rendered, wire)
-        self.assertNotEqual(rendered.layer, wire.layer)
-        self.assertNotEqual(rendered.sha256, hashlib.sha256(" ".join(invocation.call_args.args[0]).encode()).hexdigest())
+        self.assertFalse(
+            [metric for metric in event.metrics if metric.layer is Layer.WIRE],
+            "Codex stdin is rendered content, not an exact observable transport payload",
+        )
 
     def test_openai_invocation_emits_exactly_one_provider_call_with_split_rendered_and_exact_request_data_wire(self):
         recorder = _Recorder()

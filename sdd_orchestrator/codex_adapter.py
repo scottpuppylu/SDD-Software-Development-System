@@ -30,6 +30,10 @@ from .verification_runtime import (
 )
 from .task_parser import AtomicTask, TaskFileParser
 from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
+from .telemetry.measurement import (
+    measure_stage08_task,
+    measure_stage08_task_exception,
+)
 
 
 
@@ -52,6 +56,7 @@ class Stage08CodexRunner:
         codex: CodexCLI | Any | None = None,
         project_python: str | None = None,
         heartbeat_seconds: int = 30,
+        telemetry_recorder: Any = None,
     ):
         self.orchestrator = orchestrator
         self.repo_root = orchestrator.repo_root
@@ -60,6 +65,8 @@ class Stage08CodexRunner:
         self.codex = codex or CodexCLI()
         self.project_python = project_python
         self.heartbeat_seconds = max(0, int(heartbeat_seconds))
+        self.telemetry_recorder = telemetry_recorder
+        self._telemetry_attempt_task: AtomicTask | None = None
         self._evidence_write_resume: tuple[str, str | None, list[str], Any] | None = None
 
     def tasks(self) -> list[AtomicTask]:
@@ -180,6 +187,23 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
 """
 
     def execute_one(self, task_id: str | None = None) -> CodexTaskRunResult:
+        self._telemetry_attempt_task = None
+        try:
+            result = self._execute_one(task_id)
+        except Exception as exc:
+            task = self._telemetry_attempt_task
+            if task is not None:
+                self._record_stage08_terminal(task, exception=exc)
+            raise
+        else:
+            task = self._telemetry_attempt_task
+            if task is not None:
+                self._record_stage08_terminal(task, result=result)
+            return result
+        finally:
+            self._telemetry_attempt_task = None
+
+    def _execute_one(self, task_id: str | None = None) -> CodexTaskRunResult:
         task = self.select_task(task_id)
         self.preflight(task)
 
@@ -260,6 +284,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         else:
             self._evidence_write_resume = None
             self._progress(f"{task.task_id} Codex started")
+            self._telemetry_attempt_task = task
             proc = self._call_with_heartbeat(
                 f"{task.task_id} Codex still running",
                 lambda: self.codex.execute(self.repo_root, self.build_prompt(task)),
@@ -382,6 +407,35 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             task.task_id, task.title, proc.returncode, proc.stdout, proc.stderr,
             changed, verification, commit, next_task, "DONE", evidence,
         )
+
+    def _record_stage08_terminal(
+        self,
+        task: AtomicTask,
+        *,
+        result: CodexTaskRunResult | None = None,
+        exception: BaseException | None = None,
+    ) -> None:
+        if self.telemetry_recorder is None:
+            return
+        try:
+            if result is not None:
+                event = measure_stage08_task(
+                    task_id=task.task_id,
+                    task_contract=task.raw_markdown,
+                    result=result,
+                    run_id=None,
+                )
+            else:
+                event = measure_stage08_task_exception(
+                    task_id=task.task_id,
+                    task_contract=task.raw_markdown,
+                    exception=exception,
+                    run_id=None,
+                )
+            if event is not None:
+                self.telemetry_recorder.record(event)
+        except Exception:
+            pass
 
     def _recover_written_pass_evidence(
         self, task: AtomicTask, pending: dict[str, Any]

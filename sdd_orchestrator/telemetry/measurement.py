@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import subprocess
 from typing import Any
+
+from ..errors import CodexAdapterError
 from uuid import uuid4
 
 from .models import (
@@ -45,7 +48,7 @@ def measure_provider_call(
     *,
     stage_id: str | None,
     rendered: list[tuple[str, Component]],
-    wire: bytes,
+    wire: bytes | None,
     outcome_category: OutcomeCategory,
     metadata: dict[str, Any],
     provider_usage: Usage | None = None,
@@ -79,23 +82,24 @@ def measure_provider_call(
                 omitted_items=0,
             )
         )
-    wire_text = wire.decode("utf-8")
-    measured_wire = measure_text(wire_text)
-    metrics.append(
-        ContentMetric(
-            classification=Component.OTHER,
-            classification_reason="provider request payload",
-            layer=Layer.WIRE,
-            chars=measured_wire.chars,
-            utf8_bytes=measured_wire.utf8_bytes,
-            sha256=measured_wire.sha256,
-            canonicalization_id=measured_wire.canonicalization_id,
-            source_count=1,
-            source_paths=None,
-            truncated=False,
-            omitted_items=0,
+    if wire is not None:
+        wire_text = wire.decode("utf-8")
+        measured_wire = measure_text(wire_text)
+        metrics.append(
+            ContentMetric(
+                classification=Component.OTHER,
+                classification_reason="provider request payload",
+                layer=Layer.WIRE,
+                chars=measured_wire.chars,
+                utf8_bytes=measured_wire.utf8_bytes,
+                sha256=measured_wire.sha256,
+                canonicalization_id=measured_wire.canonicalization_id,
+                source_count=1,
+                source_paths=None,
+                truncated=False,
+                omitted_items=0,
+            )
         )
-    )
     return MeasurementEvent(
         event_type=EventType.PROVIDER_CALL,
         event_id=str(uuid4()),
@@ -226,5 +230,86 @@ def measure_stage_request(request: Any) -> MeasurementEvent:
             "request_chars": len(canonical_request.decode("utf-8")),
             "request_utf8_bytes": len(canonical_request),
             "request_sha256": hashlib.sha256(canonical_request).hexdigest(),
+        },
+    )
+
+
+def measure_stage08_task(
+    *,
+    task_id: str,
+    task_contract: str | None,
+    result: Any,
+    run_id: str | None,
+) -> MeasurementEvent | None:
+    """Build a metadata-only observation for a returned Stage 08 task result."""
+    outcomes = {
+        "DONE": OutcomeCategory.COMPLETED,
+        "CODEX_FAILED": OutcomeCategory.FAILED,
+        "NO_CHANGES": OutcomeCategory.FAILED,
+        "VERIFICATION_FAILED": OutcomeCategory.FAILED,
+    }
+    outcome = outcomes.get(result.status)
+    if outcome is None:
+        return None
+
+    metrics = (
+        [_content_metric(task_contract, Component.STAGE_CONTRACT)]
+        if task_contract is not None
+        else []
+    )
+    return MeasurementEvent(
+        event_type=EventType.STAGE08_TASK,
+        event_id=str(uuid4()),
+        observed_at=datetime.now(timezone.utc).isoformat(),
+        stage_id="08",
+        run_id=run_id,
+        outcome_category=outcome,
+        metrics=metrics,
+        usage=None,
+        metadata={
+            "task_id": task_id,
+            "terminal_status": result.status,
+            "verification_count": len(result.verification),
+            "changed_path_count": len(result.changed_paths),
+            "checkpoint_created": result.checkpoint_commit is not None,
+        },
+    )
+
+
+def measure_stage08_task_exception(
+    *,
+    task_id: str,
+    task_contract: str | None,
+    exception: BaseException | None,
+    run_id: str | None,
+) -> MeasurementEvent:
+    """Build the closed terminal observation for a started attempt that raised."""
+    if isinstance(exception, (TimeoutError, subprocess.TimeoutExpired)):
+        outcome = OutcomeCategory.TIMEOUT
+    elif isinstance(exception, CodexAdapterError):
+        outcome = OutcomeCategory.BLOCKED
+    else:
+        outcome = OutcomeCategory.FAILED
+
+    metrics = (
+        [_content_metric(task_contract, Component.STAGE_CONTRACT)]
+        if task_contract is not None
+        else []
+    )
+    return MeasurementEvent(
+        event_type=EventType.STAGE08_TASK,
+        event_id=str(uuid4()),
+        observed_at=datetime.now(timezone.utc).isoformat(),
+        stage_id="08",
+        run_id=run_id,
+        outcome_category=outcome,
+        metrics=metrics,
+        usage=None,
+        metadata={
+            "task_id": task_id,
+            "terminal_status": None,
+            "verification_count": 0,
+            "changed_path_count": 0,
+            "checkpoint_created": False,
         },
     )

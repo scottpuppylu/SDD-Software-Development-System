@@ -174,9 +174,13 @@ def main():
         )
         codex_runner = Stage08CodexRunner(
             orch,
-            codex=CodexCLI(executable=args.codex_bin),
+            codex=CodexCLI(
+                executable=args.codex_bin,
+                telemetry_recorder=telemetry_recorder,
+            ),
             project_python=args.project_python,
             heartbeat_seconds=args.heartbeat_seconds,
+            telemetry_recorder=telemetry_recorder,
         )
         controller = FullSystemController(
             orch,
@@ -209,12 +213,18 @@ def main():
         return
     if args.command in {"codex-task", "codex-stage08"}:
         orch = Orchestrator(repo)
-        codex = CodexCLI(executable=args.codex_bin, timeout_seconds=args.timeout)
+        telemetry_recorder = TelemetryRecorder.from_environment(repo)
+        codex = CodexCLI(
+            executable=args.codex_bin,
+            timeout_seconds=args.timeout,
+            telemetry_recorder=telemetry_recorder,
+        )
         stage08 = Stage08CodexRunner(
             orch,
             codex=codex,
             project_python=args.project_python,
             heartbeat_seconds=args.heartbeat_seconds,
+            telemetry_recorder=telemetry_recorder,
         )
         if args.command == "codex-task":
             _print(stage08.execute_one(args.task))

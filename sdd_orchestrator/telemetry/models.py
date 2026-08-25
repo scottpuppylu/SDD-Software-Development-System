@@ -7,7 +7,7 @@ from typing import Any
 
 
 SCHEMA_ID = "sdd.measurement.stage_execution"
-SCHEMA_VERSION = "1.0.3"
+SCHEMA_VERSION = "1.0.4"
 CANONICALIZATION_ID = "sdd.canonical.utf8-sorted-compact-v1"
 
 

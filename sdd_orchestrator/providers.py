@@ -315,7 +315,7 @@ class CodexExecReasoningExecutor:
                         event = measure_provider_call(
                             stage_id=request.stage_id,
                             rendered=[(prompt, Component.USER_INPUT)],
-                            wire=prompt.encode("utf-8"),
+                            wire=None,
                             outcome_category=outcome,
                             metadata={
                                 "provider": "codex",

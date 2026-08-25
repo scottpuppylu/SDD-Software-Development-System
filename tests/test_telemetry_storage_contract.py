@@ -43,7 +43,7 @@ def _jsonl_sink(directory):
 
 class TelemetryConfigurationContractTests(unittest.TestCase):
     def test_m21_uses_amended_schema_version(self):
-        self.assertEqual(SCHEMA_VERSION, "1.0.3")
+        self.assertEqual(SCHEMA_VERSION, "1.0.4")
 
     def test_enable_grammar_accepts_only_frozen_true_values(self):
         with tempfile.TemporaryDirectory() as directory:

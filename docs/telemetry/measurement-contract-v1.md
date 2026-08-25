@@ -1,9 +1,9 @@
 # SDD Measurement Contract v1
 
-Status: **FROZEN for M2.1 implementation**
+Status: **FROZEN for M2.2 implementation**
 Baseline: `v1.2.0-baseline` / `55092fc1fbfc87be1fe573806125d8b06481ba3c`  
 Schema ID: `sdd.measurement.stage_execution`  
-Schema version: `1.0.3`
+Schema version: `1.0.4`
 
 ## 1. Purpose and authority boundary
 
@@ -18,7 +18,7 @@ Every event is a canonical JSON object with these fields:
 | Field | Type | Required | Contract |
 |---|---:|:---:|---|
 | `schema_id` | string | yes | Always `sdd.measurement.stage_execution`. |
-| `schema_version` | string | yes | Always `1.0.3` for this contract. |
+| `schema_version` | string | yes | Always `1.0.4` for this contract. |
 | `event_type` | enum | yes | `stage_request`, `provider_call`, or `stage08_task`. |
 | `event_id` | string | yes | UUID string generated only for telemetry correlation. |
 | `observed_at` | string | yes | UTC RFC 3339 timestamp. It is observational, not an authority timestamp. |
@@ -185,6 +185,72 @@ Normative Usage examples (shown independently of the enclosing `provider_call` e
 {"availability":"unavailable","quality":"unavailable","usage_source":"codex_cli_unavailable","input_tokens":null,"output_tokens":null,"total_tokens":null,"component_tokens":null}
 ```
 
+### 6.1 Stage 08 task observation
+
+A `stage08_task` event is one terminal, metadata-only observation of a Stage 08 atomic-task attempt. An attempt begins only after task selection and any pre-attempt checks have completed and `Stage08CodexRunner.execute_one` has entered the execution boundary for that selected task. Each started attempt MUST make exactly one best-effort terminal event-construction attempt after its terminal outcome is known. No start, progress, heartbeat, verification-start, evidence-start, or checkpoint-start event is emitted.
+
+If a started attempt returns a `CodexTaskRunResult`, telemetry MUST derive the terminal observation from that result without modifying it. If a started attempt raises after the attempt boundary, telemetry MUST still make one best-effort terminal `stage08_task` construction attempt using only contract-approved directly observable information. Telemetry MUST NOT fabricate or replace a lifecycle result.
+
+A selection or preflight rejection that occurs before the attempt boundary MUST NOT emit `stage08_task`. An already-completed-task skip, pure historical checkpoint reconciliation, or pure resume/recovery state repair that does not begin a new atomic-task attempt MUST NOT emit `stage08_task`. A retry that actually begins a new attempt MUST emit its own terminal observation. Multiple attempts of the same task are correlated by the same approved `task_id` and distinct `event_id` values; schema 1.0.4 does not add `attempt_id` or `retry_attempt`.
+
+Event construction and sink recording are best-effort. A valid constructed event is passed to the configured sink once. Invalid or failed telemetry construction is dropped without retry at this boundary and MUST NOT alter the underlying task attempt.
+
+For `stage08_task`, the envelope fields are frozen as follows:
+
+- `stage_id` MUST be the string `"08"`.
+- `run_id` MUST reuse an already-existing valid Stage 08 execution correlation identifier when one exists. If no such identifier already exists, it MUST be `null`. Telemetry MUST NOT create, persist, or synthesize a parallel run/session identity.
+- `usage` MUST be `null` as required by section 2.
+- `metrics` MAY contain one metadata-only `ContentMetric` for the current atomic-task instruction/contract text when that text is directly observable at the attempt boundary. That metric MUST use `component: stage_contract` and `layer: request`, MUST use the existing canonical text measurement rules, and MUST contain only approved metadata such as characters, UTF-8 bytes, SHA-256, canonicalization identifier, and existing ContentMetric structural fields; the task body itself MUST NOT be persisted.
+- Rendered Codex prompt measurement belongs to the associated `provider_call` event and MUST NOT be duplicated in `stage08_task`.
+- Allowed/protected path strings, verification command text, changed-path strings, evidence content, stdout, stderr, and raw Codex response content MUST NOT be persisted in `stage08_task.metrics`.
+- `source_paths` MUST NOT be used to encode changed paths, allowed/protected paths, verification commands, or other operational payload.
+- `outcome_category` MUST be derived only after the returned `CodexTaskRunResult.status` is known, using the closed mapping below. Telemetry MUST NOT alter or normalize the result status itself.
+
+| `CodexTaskRunResult.status` | `outcome_category` |
+|---|---|
+| `DONE` | `completed` |
+| `CODEX_FAILED` | `failed` |
+| `NO_CHANGES` | `failed` |
+| `VERIFICATION_FAILED` | `failed` |
+
+For a started attempt that raises instead of returning a `CodexTaskRunResult`, `outcome_category` is mapped only from directly observed execution semantics:
+
+- policy, authority, scope, dirty-tree, or prerequisite rejection after the attempt boundary => `blocked`
+- subprocess/process timeout => `timeout`
+- evidence-write, checkpoint, or unexpected runtime failure after the attempt boundary => `failed`
+
+Telemetry MUST NOT infer outcome from arbitrary exception text, stdout, stderr, or guessed return-code meaning. It MAY use the actual typed/structured failure path already produced by Stage 08 execution. Telemetry MUST NOT add or change a Stage 08 lifecycle status.
+
+For an unrecognized returned `CodexTaskRunResult.status`, telemetry MUST drop the event rather than guess a mapping, while returning the original result unchanged.
+
+The `metadata` object for `stage08_task` is closed and has exactly these members:
+
+| Field | Type | Contract |
+|---|---:|---|
+| `task_id` | string | Existing atomic-task identifier; non-empty when directly observable. |
+| `terminal_status` | string or null | Existing bounded Stage 08 terminal status when directly observable. For an exception path with no valid existing status value, MUST be `null`; telemetry MUST NOT invent a new status string. |
+| `verification_count` | non-negative integer | Number of verification result entries directly available for this attempt; use `0` when none exist. |
+| `changed_path_count` | non-negative integer | Number of changed paths directly available for this attempt; path strings themselves MUST NOT be included. |
+| `checkpoint_created` | boolean | `true` only when this attempt directly produced a checkpoint; checkpoint identifiers MUST NOT be included. |
+
+The `stage08_task.metadata` object is closed and MUST contain exactly these five members. No other Stage08-specific metadata key is permitted in schema 1.0.4.
+
+The task body, prompt body, raw Markdown, stdout, stderr, raw Codex response, verification command text, allowed/protected path values, changed path values, evidence body/path, checkpoint identifier, commit content, next-task identifier, exception text, secrets, credentials, API keys, or environment dumps MUST NOT be persisted.
+
+The following is a normative example of the complete event shape. The UUID and timestamp values are illustrative, but all keys, nulls, arrays, metadata members, and vocabulary values are exact:
+
+```json
+{"schema_id":"sdd.measurement.stage_execution","schema_version":"1.0.4","event_type":"stage08_task","event_id":"00000000-0000-4000-8000-000000000000","observed_at":"2026-01-01T00:00:00Z","stage_id":"08","run_id":null,"outcome_category":"completed","metrics":[],"usage":null,"metadata":{"task_id":"T001","terminal_status":"DONE","verification_count":1,"changed_path_count":2,"checkpoint_created":true}}
+```
+
+This example's `metrics: []` means only that this example has no task ContentMetric; it does not require all `stage08_task` events to use an empty metrics array.
+
+For a started task attempt, duration measurement begins at the attempt boundary and ends when the terminal outcome is known. Duration MUST use a monotonic elapsed clock. `observed_at` is captured when the terminal observation is constructed. Telemetry timing and clock failures are best-effort and MUST NOT change or delay Stage 08 lifecycle semantics. Schema 1.0.4 does not add a separate duration envelope field.
+
+A `stage08_task` observation and Codex `provider_call` observations are independent. `stage08_task.usage` is always `null`. Each actual Codex CLI process invocation is represented by its own `provider_call`; one task attempt may therefore have zero, one, or multiple provider-call observations.
+
+Codex CLI provider usage remains `availability: unavailable`, `quality: unavailable`, `usage_source: codex_cli_unavailable`, with `input_tokens`, `output_tokens`, `total_tokens`, and `component_tokens` all `null`. Producer code MUST NOT parse stdout or stderr to estimate token usage and MUST NOT duplicate provider usage into `stage08_task`.
+
 ## 7. Snapshot boundaries
 
 Snapshots are measurements, not stored bodies. They produce ContentMetric metadata only.
@@ -241,6 +307,10 @@ Serialization, write, and flush failures remain best-effort and non-interfering.
 
 `StageExecutionResult` and `CodexTaskRunResult` MUST NOT gain telemetry authority fields. Telemetry-only correlation or output state belongs outside these lifecycle result contracts.
 
+The best-effort non-interference boundary covers metric construction, metadata/outcome mapping, clock observation, event construction, and `TelemetryRecorder.record`. Any telemetry failure in those steps MUST be contained and MUST NOT change the task result, verification result, evidence, checkpoint behavior, retry/recovery behavior, Git state, provider-call count, or next-task selection.
+
+M2.2 MUST NOT modify `StageExecutionResult`, `CodexTaskRunResult`, or verification result schemas.
+
 A telemetry success, failure, exception, serialization error, directory error, or write error MUST NOT change:
 
 - provider call count;
@@ -280,10 +350,12 @@ The following capability status is frozen for v1:
 | Environment enable configuration | Observable only through `SDD_TELEMETRY_ENABLED` using the exact grammar in section 8.1; all non-true values disable persistence. |
 | Persistent telemetry destination | External-only when repository-external safety can be established; otherwise `NullTelemetrySink`. |
 | Persistent record framing | UTF-8 JSONL containing one canonical `MeasurementEvent.to_dict()` schema object per LF-terminated line in `events.jsonl`. |
+| Stage 08 task attempt | Observable as one terminal best-effort `stage08_task` construction attempt for each started atomic-task attempt. Normal returned results use the closed returned-status mapping; started attempts that terminate by approved structured exception paths use the exception outcome mapping in section 6.1. Pre-attempt rejection, already-completed skip, pure historical checkpoint reconciliation, and pure recovery/state repair without a new attempt emit no `stage08_task`. |
 
 ## 12. Schema compatibility
 
-- Schema version `1.0.3` preserves the measurement-event meanings and frozen vocabularies of `1.0.2`; it amends v1 telemetry enablement, external-directory resolution and safety, persistence framing and file lifecycle, and best-effort append behavior. These persistence/configuration semantics are part of the schema contract and MUST NOT be independently reinterpreted by producers.
+- Schema version `1.0.4` preserves the meanings of all existing `1.0.3` fields and vocabulary values; it adds and clarifies Stage 08 task-attempt telemetry and Codex absent-wire observability, including the `stage08_task` event-type value, attempt boundary, closed returned-status and structured-exception mappings, and closed metadata object in section 6.1. M1/M2.1 configuration, storage, and provider semantics remain unchanged and MUST NOT be independently reinterpreted by producers. Existing `component` and `layer` vocabularies remain closed.
+- Codex absent-wire observability follows section 7.3: when an exact wire snapshot is not observable, `wire` MUST be absent rather than approximated from rendered content.
 - For the required envelope field `usage`, `null` means the event type does not carry provider usage; it is neither unavailable usage nor zero usage. Within a Usage object, a null aggregate token or ComponentTokens member means no valid actual observation was supplied for that known field; `component_tokens: null` is reserved for `availability: unavailable`. `0` means an observed numeric zero or empty measured set/content. These meanings are never interchangeable.
 - A missing required field is invalid. Producers MUST emit all required fields, including required nullable fields. A missing optional field means the optional feature was not emitted; it MUST NOT be interpreted as zero, empty, false, or null unless that optional field's later specification explicitly says so.
 - The `usage` field is always required: `stage_request` and `stage08_task` require JSON `null`, while `provider_call` requires a Usage object. A missing `usage` field is invalid, and an event-type/value mismatch is invalid.
@@ -296,6 +368,8 @@ The following capability status is frozen for v1:
 
 ## 13. IMPLEMENTATION ENTRY GATE
 
-**M2.1 MUST use this document as the single naming, configuration, and persistence contract.** Implementation may begin only with `sdd.measurement.stage_execution` version `1.0.3` and the exact names, enum values, and semantics frozen here. Production MUST NOT independently invent the true-value grammar, relative-path base, unsafe-path fallback, persistence framing, filename, rotation behavior, or append semantics.
+**M2.2 MUST use this document as the single Stage 08 telemetry contract, while retaining the naming, configuration, persistence, provider-usage, and non-interference requirements already frozen for M2.1.** Implementation may begin only with `sdd.measurement.stage_execution` version `1.0.4` and the exact names, enum values, and semantics frozen here. Production MUST NOT independently decide or invent `stage08_task` cardinality, the attempt boundary, exception emission, returned-status mapping, structured exception outcome mapping, retry/reconciliation emission, metadata keys, run-ID policy, task metric classification, Codex wire approximation, true-value grammar, relative-path base, unsafe-path fallback, persistence framing, filename, rotation behavior, or append semantics.
 
 The required `usage` field MUST be implemented with the event-type semantics frozen in sections 2, 6, and 12: `null` for `stage_request`, a Usage object for `provider_call`, and `null` for `stage08_task`, with actual Codex process token availability represented by the associated `provider_call`. Each `provider_call` Usage object MUST match the frozen provenance matrix: OpenAI actual usage uses `available`/`actual`/`openai_responses_usage` and a `component_tokens` object containing exactly the required `cached_input_tokens` and `reasoning_output_tokens` members; unavailable OpenAI usage uses `unavailable`/`unavailable`/`openai_responses_unavailable` with null token fields; unavailable Codex CLI usage uses `unavailable`/`unavailable`/`codex_cli_unavailable` with null token fields. OpenAI component details MUST use only the exact source mappings in section 6. A missing or invalid detail under otherwise actual usage MUST produce the corresponding required null member, while a provider-reported zero MUST remain zero. Unavailable provider usage observation MUST NOT be treated as zero. Implementation MUST NOT estimate component tokens, omit either required canonical member, accept invalid detail values as actual observations, fabricate provider usage for an event type that requires `null`, treat that `null` as unavailable or zero, add component-token keys or aliases, add `not_applicable`, create a second schema, use alternate field names or compatibility aliases, invent private enum spellings, or create a parallel canonicalization vocabulary. Any necessary contract change must first revise this document through an explicit schema-version decision; production code is not the place to resolve a naming conflict.
+
+For `stage08_task`, M2.2 MUST make exactly one best-effort terminal construction attempt for every started atomic-task attempt after its terminal outcome is known, including approved structured exception paths, and no observation for pre-attempt rejection, already-completed skip, pure historical checkpoint reconciliation, or pure recovery/state repair without a new attempt. It MUST use `stage_id: "08"`, the existing-correlation-or-null `run_id` policy, `usage: null`, the optional single task-contract metric rule, the exact returned-status and structured-exception outcome mappings, and the exact closed metadata object in section 6.1. It MUST NOT emit progress events, synthesize lifecycle results or statuses, disclose identifiers or content prohibited by section 6.1, inspect authority state to recompute metadata, approximate Codex wire content, change the number of Codex/provider calls, or mutate, replace, delay, or suppress lifecycle behavior because telemetry construction or recording failed.
