@@ -60,18 +60,27 @@ class TelemetryModelTests(unittest.TestCase):
         values.update(overrides)
         return Usage(**values)
 
-    def _event(self, event_type, usage):
-        return MeasurementEvent(
+    def _event(self, event_type, usage, **overrides):
+        is_stage08 = event_type in (EventType.STAGE08_TASK, "stage08_task")
+        values = dict(
             event_type=event_type,
             event_id="123e4567-e89b-12d3-a456-426614174000",
             observed_at="2026-08-21T07:00:00Z",
-            stage_id="03",
+            stage_id="08" if is_stage08 else "03",
             run_id=None,
             outcome_category=None,
             metrics=[],
             usage=usage,
-            metadata={},
+            metadata={
+                "task_id": "T001",
+                "terminal_status": "DONE",
+                "verification_count": 1,
+                "changed_path_count": 2,
+                "checkpoint_created": True,
+            } if is_stage08 else {},
         )
+        values.update(overrides)
+        return MeasurementEvent(**values)
 
     def test_schema_identity_is_frozen(self):
         self.assertEqual(SCHEMA_ID, "sdd.measurement.stage_execution")
@@ -201,6 +210,96 @@ class TelemetryModelTests(unittest.TestCase):
             self._event(EventType.PROVIDER_CALL, None)
         with self.assertRaises((TypeError, ValueError)):
             self._event(EventType.STAGE08_TASK, self._usage())
+
+    def test_event_id_requires_a_uuid_string(self):
+        self._event(EventType.STAGE_REQUEST, None)
+        for invalid in ("not-a-uuid", "", 123, None):
+            with self.subTest(invalid=invalid), self.assertRaises((TypeError, ValueError)):
+                self._event(EventType.STAGE_REQUEST, None, event_id=invalid)
+
+    def test_envelope_fields_are_required_constructor_arguments(self):
+        required = {
+            "event_type": EventType.STAGE_REQUEST,
+            "event_id": "123e4567-e89b-12d3-a456-426614174000",
+            "observed_at": "2026-08-21T07:00:00Z",
+            "stage_id": "03",
+            "run_id": None,
+            "outcome_category": None,
+            "metrics": [],
+            "usage": None,
+            "metadata": {},
+        }
+        for field in required:
+            values = dict(required)
+            del values[field]
+            with self.subTest(field=field), self.assertRaises(TypeError):
+                MeasurementEvent(**values)
+
+    def test_observed_at_requires_a_valid_utc_rfc3339_timestamp(self):
+        for valid in (
+            "2026-08-21T07:00:00Z",
+            "2026-08-21T07:00:00.123456+00:00",
+            "2026-08-21t07:00:00z",
+        ):
+            with self.subTest(valid=valid):
+                self._event(EventType.STAGE_REQUEST, None, observed_at=valid)
+        for invalid in (
+            "2026-08-21T07:00:00+08:00",
+            "2026-08-21 07:00:00Z",
+            "2026-02-30T07:00:00Z",
+            "not-a-timestamp",
+            123,
+            None,
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises((TypeError, ValueError)):
+                self._event(EventType.STAGE_REQUEST, None, observed_at=invalid)
+
+    def test_stage_id_and_run_id_require_strings_or_none_without_coercion(self):
+        for field in ("stage_id", "run_id"):
+            for valid in ("", "03", None):
+                with self.subTest(field=field, valid=valid):
+                    self._event(EventType.STAGE_REQUEST, None, **{field: valid})
+            for invalid in (8, True, [], {}):
+                with self.subTest(field=field, invalid=invalid), self.assertRaises(
+                    (TypeError, ValueError)
+                ):
+                    self._event(EventType.STAGE_REQUEST, None, **{field: invalid})
+
+    def test_stage08_task_requires_stage_08_and_exact_metadata_shape(self):
+        metadata = {
+            "task_id": "T001",
+            "terminal_status": "DONE",
+            "verification_count": 1,
+            "changed_path_count": 2,
+            "checkpoint_created": True,
+        }
+        event = self._event(
+            EventType.STAGE08_TASK, None, stage_id="08", metadata=metadata
+        )
+        self.assertIs(event.metadata, metadata)
+        for invalid in (
+            {**metadata, "attempt_id": "A1"},
+            {key: value for key, value in metadata.items() if key != "task_id"},
+            {**metadata, "task_id": ""},
+            {**metadata, "terminal_status": 1},
+            {**metadata, "verification_count": True},
+            {**metadata, "changed_path_count": -1},
+            {**metadata, "checkpoint_created": 1},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises((TypeError, ValueError)):
+                self._event(EventType.STAGE08_TASK, None, stage_id="08", metadata=invalid)
+        with self.assertRaises((TypeError, ValueError)):
+            self._event(EventType.STAGE08_TASK, None, stage_id="8", metadata=metadata)
+
+    def test_valid_event_validation_does_not_mutate_payloads(self):
+        metrics = []
+        metadata = {"extension": ["unchanged"]}
+        event = self._event(
+            EventType.STAGE_REQUEST, None, metrics=metrics, metadata=metadata
+        )
+        self.assertIs(event.metrics, metrics)
+        self.assertIs(event.metadata, metadata)
+        self.assertEqual(metadata, {"extension": ["unchanged"]})
 
     def test_content_metric_has_exact_frozen_required_fields(self):
         metric = self._metric()

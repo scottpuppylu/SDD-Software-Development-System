@@ -1,14 +1,20 @@
 """Frozen v1 measurement schema models."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 import re
 from typing import Any
+from uuid import UUID
 
 
 SCHEMA_ID = "sdd.measurement.stage_execution"
 SCHEMA_VERSION = "1.0.4"
 CANONICALIZATION_ID = "sdd.canonical.utf8-sorted-compact-v1"
+
+_UTC_RFC3339 = re.compile(
+    r"\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|\+00:00)"
+)
 
 
 class EventType(str, Enum):
@@ -217,6 +223,27 @@ class MeasurementEvent:
         except (TypeError, ValueError) as exc:
             raise ValueError("unknown event_type") from exc
         object.__setattr__(self, "event_type", event_type)
+        if not isinstance(self.event_id, str):
+            raise TypeError("event_id must be a UUID string")
+        try:
+            UUID(self.event_id)
+        except (ValueError, AttributeError) as exc:
+            raise ValueError("event_id must be a UUID string") from exc
+        if not isinstance(self.observed_at, str):
+            raise TypeError("observed_at must be a UTC RFC3339 string")
+        if _UTC_RFC3339.fullmatch(self.observed_at) is None:
+            raise ValueError("observed_at must be a UTC RFC3339 timestamp")
+        try:
+            normalized_observed_at = self.observed_at.replace("t", "T")
+            if normalized_observed_at[-1] in "Zz":
+                normalized_observed_at = normalized_observed_at[:-1] + "+00:00"
+            datetime.fromisoformat(normalized_observed_at)
+        except ValueError as exc:
+            raise ValueError("observed_at must be a valid UTC RFC3339 timestamp") from exc
+        for name in ("stage_id", "run_id"):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, str):
+                raise TypeError(f"{name} must be a string or None")
         if event_type is EventType.PROVIDER_CALL:
             if not isinstance(self.usage, Usage):
                 raise ValueError("provider_call requires Usage")
@@ -231,6 +258,37 @@ class MeasurementEvent:
             raise TypeError("metrics must be a list of ContentMetric")
         if not isinstance(self.metadata, dict):
             raise TypeError("metadata must be an object")
+        if event_type is EventType.STAGE08_TASK:
+            if self.stage_id != "08":
+                raise ValueError('stage08_task requires stage_id="08"')
+            expected_metadata = {
+                "task_id",
+                "terminal_status",
+                "verification_count",
+                "changed_path_count",
+                "checkpoint_created",
+            }
+            if set(self.metadata) != expected_metadata:
+                raise ValueError("stage08_task metadata must contain exactly the frozen members")
+            if not isinstance(self.metadata["task_id"], str) or not self.metadata["task_id"]:
+                raise ValueError("stage08_task task_id must be a non-empty string")
+            terminal_status = self.metadata["terminal_status"]
+            valid_terminal_statuses = {
+                "DONE",
+                "CODEX_FAILED",
+                "NO_CHANGES",
+                "VERIFICATION_FAILED",
+            }
+            if terminal_status is not None and terminal_status not in valid_terminal_statuses:
+                raise ValueError("stage08_task terminal_status is invalid")
+            _non_negative_integer(
+                self.metadata["verification_count"], "verification_count"
+            )
+            _non_negative_integer(
+                self.metadata["changed_path_count"], "changed_path_count"
+            )
+            if not isinstance(self.metadata["checkpoint_created"], bool):
+                raise TypeError("checkpoint_created must be a boolean")
 
     def to_dict(self) -> dict[str, Any]:
         return {
