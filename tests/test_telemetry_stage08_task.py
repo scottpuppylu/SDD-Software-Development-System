@@ -90,6 +90,41 @@ class Stage08TaskMeasurementContractTests(unittest.TestCase):
             run_id=None,
         ))
 
+    def test_unknown_returned_status_drops_telemetry_without_mutating_result(self):
+        changed_paths = ["deterministic/path.py"]
+        verification = [VerificationResult("deterministic verify", 0, "", "")]
+        result = CodexTaskRunResult(
+            task_id="T-UNKNOWN",
+            title="Deterministic task",
+            codex_returncode=0,
+            codex_stdout="",
+            codex_stderr="",
+            changed_paths=changed_paths,
+            verification=verification,
+            checkpoint_commit="deterministic-checkpoint",
+            next_task=None,
+            status="UNKNOWN_STATUS",
+            evidence_file=".sdd/evidence/deterministic.json",
+        )
+        original_result = result
+        original_attributes = dict(vars(result))
+
+        event = measurement.measure_stage08_task(
+            task_id="T-UNKNOWN",
+            task_contract="deterministic task contract",
+            result=result,
+            run_id="deterministic-run-id",
+        )
+
+        self.assertIsNone(event)
+        self.assertIs(result, original_result)
+        self.assertEqual(result.status, "UNKNOWN_STATUS")
+        self.assertEqual(result.task_id, "T-UNKNOWN")
+        self.assertEqual(result.changed_paths, changed_paths)
+        self.assertEqual(result.verification, verification)
+        self.assertEqual(result.checkpoint_commit, "deterministic-checkpoint")
+        self.assertEqual(vars(result), original_attributes)
+
     def test_lifecycle_result_schemas_remain_telemetry_free(self):
         forbidden = {"telemetry", "measurement", "usage", "stage08_task", "event_id"}
         self.assertFalse({field.name for field in fields(CodexTaskRunResult)} & forbidden)
@@ -101,6 +136,214 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
         parameters = inspect.signature(Stage08CodexRunner.__init__).parameters
         self.assertIn("telemetry_recorder", parameters)
         self.assertIsNone(parameters["telemetry_recorder"].default)
+
+    def test_stage08_lifecycle_done_emits_exactly_one_terminal_event(self):
+        events = []
+        runner = Stage08CodexRunner.__new__(Stage08CodexRunner)
+        runner.telemetry_recorder = type(
+            "Recorder",
+            (),
+            {"record": lambda _self, event: events.append(event)},
+        )()
+        task = type(
+            "Task",
+            (),
+            {"task_id": "T007", "raw_markdown": "deterministic task contract"},
+        )()
+        result = CodexTaskRunResult(
+            task_id="T007",
+            title="Deterministic task",
+            codex_returncode=0,
+            codex_stdout="",
+            codex_stderr="",
+            changed_paths=["allowed.py"],
+            verification=[VerificationResult("deterministic verify", 0, "", "")],
+            checkpoint_commit="checkpoint-id",
+            next_task=None,
+            status="DONE",
+            evidence_file=".sdd/evidence/test.json",
+        )
+
+        def deterministic_started_attempt(task_id=None):
+            self.assertEqual(task_id, "T007")
+            runner._telemetry_attempt_task = task
+            return result
+
+        runner._execute_one = deterministic_started_attempt
+
+        self.assertIs(runner.execute_one("T007"), result)
+        terminal_events = [event for event in events if event.event_type == EventType.STAGE08_TASK]
+        self.assertEqual(len(terminal_events), 1)
+        event = terminal_events[0]
+        self.assertEqual(event.outcome_category.value, "completed")
+        self.assertEqual(event.stage_id, "08")
+        self.assertIsNone(event.usage)
+        self.assertEqual(set(event.metadata), {
+            "task_id",
+            "terminal_status",
+            "verification_count",
+            "changed_path_count",
+            "checkpoint_created",
+        })
+        self.assertEqual(event.metadata["terminal_status"], "DONE")
+        for forbidden in ("attempt_id", "retry_attempt", "duration", "duration_ms"):
+            self.assertNotIn(forbidden, event.metadata)
+
+    def test_stage08_lifecycle_codex_failed_emits_exactly_one_terminal_event(self):
+        events = []
+        runner = Stage08CodexRunner.__new__(Stage08CodexRunner)
+        runner.telemetry_recorder = type(
+            "Recorder",
+            (),
+            {"record": lambda _self, event: events.append(event)},
+        )()
+        task = type(
+            "Task",
+            (),
+            {"task_id": "T007", "raw_markdown": "deterministic task contract"},
+        )()
+        result = CodexTaskRunResult(
+            task_id="T007",
+            title="Deterministic task",
+            codex_returncode=1,
+            codex_stdout="",
+            codex_stderr="deterministic failure",
+            changed_paths=[],
+            verification=[],
+            checkpoint_commit=None,
+            next_task=None,
+            status="CODEX_FAILED",
+            evidence_file=".sdd/evidence/test.json",
+        )
+
+        def deterministic_started_attempt(task_id=None):
+            self.assertEqual(task_id, "T007")
+            runner._telemetry_attempt_task = task
+            return result
+
+        runner._execute_one = deterministic_started_attempt
+
+        self.assertIs(runner.execute_one("T007"), result)
+        terminal_events = [event for event in events if event.event_type == EventType.STAGE08_TASK]
+        self.assertEqual(len(terminal_events), 1)
+        event = terminal_events[0]
+        self.assertEqual(event.outcome_category.value, "failed")
+        self.assertEqual(event.stage_id, "08")
+        self.assertIsNone(event.usage)
+        self.assertEqual(set(event.metadata), {
+            "task_id",
+            "terminal_status",
+            "verification_count",
+            "changed_path_count",
+            "checkpoint_created",
+        })
+        self.assertEqual(event.metadata["terminal_status"], "CODEX_FAILED")
+        for forbidden in ("attempt_id", "retry_attempt", "duration", "duration_ms"):
+            self.assertNotIn(forbidden, event.metadata)
+
+    def test_stage08_lifecycle_no_changes_emits_exactly_one_terminal_event(self):
+        events = []
+        runner = Stage08CodexRunner.__new__(Stage08CodexRunner)
+        runner.telemetry_recorder = type(
+            "Recorder",
+            (),
+            {"record": lambda _self, event: events.append(event)},
+        )()
+        task = type(
+            "Task",
+            (),
+            {"task_id": "T007", "raw_markdown": "deterministic task contract"},
+        )()
+        result = CodexTaskRunResult(
+            task_id="T007",
+            title="Deterministic task",
+            codex_returncode=0,
+            codex_stdout="",
+            codex_stderr="",
+            changed_paths=[],
+            verification=[],
+            checkpoint_commit=None,
+            next_task=None,
+            status="NO_CHANGES",
+            evidence_file=".sdd/evidence/test.json",
+        )
+
+        def deterministic_started_attempt(task_id=None):
+            self.assertEqual(task_id, "T007")
+            runner._telemetry_attempt_task = task
+            return result
+
+        runner._execute_one = deterministic_started_attempt
+
+        self.assertIs(runner.execute_one("T007"), result)
+        terminal_events = [event for event in events if event.event_type == EventType.STAGE08_TASK]
+        self.assertEqual(len(terminal_events), 1)
+        event = terminal_events[0]
+        self.assertEqual(event.outcome_category.value, "failed")
+        self.assertEqual(event.stage_id, "08")
+        self.assertIsNone(event.usage)
+        self.assertEqual(set(event.metadata), {
+            "task_id",
+            "terminal_status",
+            "verification_count",
+            "changed_path_count",
+            "checkpoint_created",
+        })
+        self.assertEqual(event.metadata["terminal_status"], "NO_CHANGES")
+        for forbidden in ("attempt_id", "retry_attempt", "duration", "duration_ms"):
+            self.assertNotIn(forbidden, event.metadata)
+
+    def test_stage08_lifecycle_verification_failed_emits_exactly_one_terminal_event(self):
+        events = []
+        runner = Stage08CodexRunner.__new__(Stage08CodexRunner)
+        runner.telemetry_recorder = type(
+            "Recorder",
+            (),
+            {"record": lambda _self, event: events.append(event)},
+        )()
+        task = type(
+            "Task",
+            (),
+            {"task_id": "T007", "raw_markdown": "deterministic task contract"},
+        )()
+        result = CodexTaskRunResult(
+            task_id="T007",
+            title="Deterministic task",
+            codex_returncode=0,
+            codex_stdout="",
+            codex_stderr="",
+            changed_paths=["allowed.py"],
+            verification=[VerificationResult("deterministic verify", 1, "", "failure")],
+            checkpoint_commit=None,
+            next_task=None,
+            status="VERIFICATION_FAILED",
+            evidence_file=".sdd/evidence/test.json",
+        )
+
+        def deterministic_started_attempt(task_id=None):
+            self.assertEqual(task_id, "T007")
+            runner._telemetry_attempt_task = task
+            return result
+
+        runner._execute_one = deterministic_started_attempt
+
+        self.assertIs(runner.execute_one("T007"), result)
+        terminal_events = [event for event in events if event.event_type == EventType.STAGE08_TASK]
+        self.assertEqual(len(terminal_events), 1)
+        event = terminal_events[0]
+        self.assertEqual(event.outcome_category.value, "failed")
+        self.assertEqual(event.stage_id, "08")
+        self.assertIsNone(event.usage)
+        self.assertEqual(set(event.metadata), {
+            "task_id",
+            "terminal_status",
+            "verification_count",
+            "changed_path_count",
+            "checkpoint_created",
+        })
+        self.assertEqual(event.metadata["terminal_status"], "VERIFICATION_FAILED")
+        for forbidden in ("attempt_id", "retry_attempt", "duration", "duration_ms"):
+            self.assertNotIn(forbidden, event.metadata)
 
 if __name__ == "__main__":
     unittest.main()
