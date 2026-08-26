@@ -15,8 +15,13 @@ from sdd_orchestrator.telemetry.models import (
 
 
 class TelemetryModelTests(unittest.TestCase):
-    def _metric(self, classification=Component.CODE, classification_reason=None):
-        return ContentMetric(
+    def _metric(
+        self,
+        classification=Component.CODE,
+        classification_reason=None,
+        **overrides,
+    ):
+        values = dict(
             classification=classification,
             classification_reason=classification_reason,
             layer=Layer.REQUEST,
@@ -29,6 +34,8 @@ class TelemetryModelTests(unittest.TestCase):
             truncated=False,
             omitted_items=0,
         )
+        values.update(overrides)
+        return ContentMetric(**values)
 
     def _usage(self):
         return Usage(
@@ -343,6 +350,49 @@ class TelemetryModelTests(unittest.TestCase):
     def test_known_component_requires_null_classification_reason(self):
         with self.assertRaises((TypeError, ValueError)):
             self._metric(Component.CODE, "unnecessary override")
+
+    def test_source_paths_accept_safe_repository_relative_posix_paths(self):
+        source_paths = [
+            "a/b/c.txt",
+            "docs/spec.md",
+            "src/main.py",
+            "tests/test_main.py",
+        ]
+        metric = self._metric(source_count=len(source_paths), source_paths=source_paths)
+
+        self.assertIs(metric.source_paths, source_paths)
+
+    def test_source_paths_reject_unsafe_serialized_path_values(self):
+        invalid_paths = (
+            "C:\\repo\\file.py",
+            "C:/repo/file.py",
+            "/root/file.py",
+            "/home/user/file.py",
+            "../secret.txt",
+            "src/../secret.txt",
+            "https://example.com/file",
+            "http://example.com/file",
+            "file:///tmp/file",
+            "file:/tmp/file",
+            "~/secret.txt",
+            "~user/secret.txt",
+            "src\\file.py",
+            "$HOME/secret.txt",
+            "${USERPROFILE}/secret.txt",
+            "%USERPROFILE%/secret.txt",
+        )
+        for path in invalid_paths:
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self._metric(source_count=1, source_paths=[path])
+
+    def test_source_paths_require_deduplication_sorting_and_source_count(self):
+        for source_count, source_paths in (
+            (2, ["src/main.py", "src/main.py"]),
+            (2, ["tests/test_main.py", "src/main.py"]),
+            (2, ["src/main.py"]),
+        ):
+            with self.subTest(source_paths=source_paths), self.assertRaises(ValueError):
+                self._metric(source_count=source_count, source_paths=source_paths)
 
 
 if __name__ == "__main__":

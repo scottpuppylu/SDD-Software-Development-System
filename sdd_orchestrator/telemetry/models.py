@@ -15,6 +15,11 @@ CANONICALIZATION_ID = "sdd.canonical.utf8-sorted-compact-v1"
 _UTC_RFC3339 = re.compile(
     r"\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|\+00:00)"
 )
+_URI_PREFIX = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
+_WINDOWS_DRIVE_PREFIX = re.compile(r"[A-Za-z]:")
+_ENVIRONMENT_REFERENCE = re.compile(
+    r"(?:\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[^}]+\})|%[^%]+%)"
+)
 
 
 class EventType(str, Enum):
@@ -122,6 +127,18 @@ class ContentMetric:
                 raise ValueError("source_paths length must equal source_count")
             if self.source_paths != sorted(set(self.source_paths)):
                 raise ValueError("source_paths must be sorted and deduplicated")
+            for path in self.source_paths:
+                if (
+                    path.startswith(("/", "~"))
+                    or "\\" in path
+                    or _WINDOWS_DRIVE_PREFIX.match(path) is not None
+                    or _URI_PREFIX.match(path) is not None
+                    or ".." in path.split("/")
+                    or _ENVIRONMENT_REFERENCE.search(path) is not None
+                ):
+                    raise ValueError(
+                        "source_paths entries must be safe repository-relative POSIX paths"
+                    )
 
     def to_dict(self) -> dict[str, Any]:
         return {
