@@ -435,6 +435,150 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
         for forbidden in ("attempt_id", "retry_attempt", "duration", "duration_ms"):
             self.assertNotIn(forbidden, event.metadata)
 
+    def test_stage08_recorder_failure_does_not_change_returned_result(self):
+        recorder_calls = []
+        underlying_calls = []
+        runner = Stage08CodexRunner.__new__(Stage08CodexRunner)
+
+        def fail_record(_self, event):
+            recorder_calls.append(event)
+            raise RuntimeError("telemetry recorder failure")
+
+        runner.telemetry_recorder = type("FailingRecorder", (), {"record": fail_record})()
+        task = type(
+            "Task",
+            (),
+            {"task_id": "T007", "raw_markdown": "deterministic task contract"},
+        )()
+        verification = [VerificationResult("deterministic verify", 0, "", "")]
+        result = CodexTaskRunResult(
+            task_id="T007",
+            title="Deterministic task",
+            codex_returncode=0,
+            codex_stdout="",
+            codex_stderr="",
+            changed_paths=["allowed.py"],
+            verification=verification,
+            checkpoint_commit="checkpoint-id",
+            next_task="T008",
+            status="DONE",
+            evidence_file=".sdd/evidence/test.json",
+        )
+
+        def deterministic_started_attempt(task_id=None):
+            underlying_calls.append(task_id)
+            runner._telemetry_attempt_task = task
+            return result
+
+        runner._execute_one = deterministic_started_attempt
+
+        returned = runner.execute_one("T007")
+
+        self.assertIs(returned, result)
+        self.assertEqual(returned.status, "DONE")
+        self.assertEqual(returned.task_id, "T007")
+        self.assertEqual(returned.changed_paths, ["allowed.py"])
+        self.assertEqual(returned.verification, verification)
+        self.assertEqual(returned.checkpoint_commit, "checkpoint-id")
+        self.assertEqual(returned.next_task, "T008")
+        self.assertEqual(underlying_calls, ["T007"])
+        self.assertEqual(len(recorder_calls), 1)
+
+    def test_stage08_measurement_builder_failure_does_not_change_returned_result(self):
+        recorder_calls = []
+        underlying_calls = []
+        runner = Stage08CodexRunner.__new__(Stage08CodexRunner)
+        runner.telemetry_recorder = type(
+            "Recorder",
+            (),
+            {"record": lambda _self, event: recorder_calls.append(event)},
+        )()
+        task = type(
+            "Task",
+            (),
+            {"task_id": "T007", "raw_markdown": "deterministic task contract"},
+        )()
+        verification = [VerificationResult("deterministic verify", 0, "", "")]
+        result = CodexTaskRunResult(
+            task_id="T007",
+            title="Deterministic task",
+            codex_returncode=0,
+            codex_stdout="",
+            codex_stderr="",
+            changed_paths=["allowed.py"],
+            verification=verification,
+            checkpoint_commit="checkpoint-id",
+            next_task="T008",
+            status="DONE",
+            evidence_file=".sdd/evidence/test.json",
+        )
+        original_result_fields = vars(result).copy()
+
+        def deterministic_started_attempt(task_id=None):
+            underlying_calls.append(task_id)
+            runner._telemetry_attempt_task = task
+            return result
+
+        runner._execute_one = deterministic_started_attempt
+
+        with patch(
+            "sdd_orchestrator.codex_adapter.measure_stage08_task",
+            side_effect=RuntimeError("telemetry measurement failure"),
+        ) as measurement_builder:
+            returned = runner.execute_one("T007")
+
+        self.assertIs(returned, result)
+        self.assertEqual(returned.status, "DONE")
+        self.assertEqual(returned.task_id, "T007")
+        self.assertEqual(returned.changed_paths, ["allowed.py"])
+        self.assertEqual(returned.verification, verification)
+        self.assertEqual(returned.checkpoint_commit, "checkpoint-id")
+        self.assertEqual(returned.next_task, "T008")
+        self.assertEqual(underlying_calls, ["T007"])
+        measurement_builder.assert_called_once_with(
+            task_id="T007",
+            task_contract="deterministic task contract",
+            result=result,
+            run_id=None,
+        )
+        self.assertEqual(recorder_calls, [])
+        self.assertEqual(vars(returned), original_result_fields)
+
+    def test_stage08_recorder_failure_does_not_replace_underlying_exception(self):
+        recorder_calls = []
+        underlying_calls = []
+        runner = Stage08CodexRunner.__new__(Stage08CodexRunner)
+
+        def fail_record(_self, event):
+            recorder_calls.append(event)
+            raise RuntimeError("telemetry recorder failure")
+
+        runner.telemetry_recorder = type("FailingRecorder", (), {"record": fail_record})()
+        task = type(
+            "Task",
+            (),
+            {"task_id": "T007", "raw_markdown": "deterministic task contract"},
+        )()
+        original_exception = CodexAdapterError("deterministic lifecycle failure")
+
+        def deterministic_started_attempt(task_id=None):
+            underlying_calls.append(task_id)
+            runner._telemetry_attempt_task = task
+            raise original_exception
+
+        runner._execute_one = deterministic_started_attempt
+
+        with self.assertRaises(CodexAdapterError) as caught:
+            runner.execute_one("T007")
+
+        self.assertIs(caught.exception, original_exception)
+        self.assertNotIsInstance(caught.exception, RuntimeError)
+        self.assertEqual(str(caught.exception), "deterministic lifecycle failure")
+        self.assertEqual(underlying_calls, ["T007"])
+        self.assertLessEqual(len(recorder_calls), 1)
+        self.assertEqual(len(recorder_calls), 1)
+        self.assertIsNone(runner._telemetry_attempt_task)
+
     def test_stage08_lifecycle_codex_failed_emits_exactly_one_terminal_event(self):
         events = []
         runner = Stage08CodexRunner.__new__(Stage08CodexRunner)

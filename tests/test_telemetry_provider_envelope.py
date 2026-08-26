@@ -333,6 +333,30 @@ class ProviderCallEnvelopeRedTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), str(original))
         self.assertEqual(invocation.call_count, 1)
 
+    def test_provider_telemetry_failure_does_not_repeat_provider_execution(self):
+        recorder = _Recorder(fail=True)
+        executor = self._codex(recorder)
+        with patch.object(executor, "resolved_executable", return_value="codex"), patch(
+            "sdd_orchestrator.providers.subprocess.run", side_effect=_codex_run_success
+        ) as invocation:
+            result = executor.execute(_request())
+
+        self.assertEqual(invocation.call_count, 1)
+        self.assertIsInstance(result, StageExecutionResult)
+        self.assertEqual(result.status, "COMPLETED")
+
+        original = subprocess.TimeoutExpired(["codex"], 13)
+        recorder = _Recorder(fail=True)
+        executor = self._codex(recorder)
+        with patch.object(executor, "resolved_executable", return_value="codex"), patch(
+            "sdd_orchestrator.providers.subprocess.run", side_effect=original
+        ) as invocation:
+            with self.assertRaises(subprocess.TimeoutExpired) as caught:
+                executor.execute(_request())
+
+        self.assertEqual(invocation.call_count, 1)
+        self.assertIs(caught.exception, original)
+
     def test_none_recorder_leaves_provider_behavior_unchanged(self):
         executor = self._codex(None)
         with patch.object(executor, "resolved_executable", return_value="codex"), patch(
