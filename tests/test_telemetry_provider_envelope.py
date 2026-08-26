@@ -21,6 +21,7 @@ from sdd_orchestrator.telemetry.models import (
     Layer,
     OutcomeCategory,
     Quality,
+    Usage,
     UsageSource,
 )
 from sdd_orchestrator.telemetry.measurement import measure_provider_call
@@ -233,6 +234,73 @@ class ProviderCallEnvelopeRedTests(unittest.TestCase):
             event.usage.usage_source,
             UsageSource.OPENAI_RESPONSES_UNAVAILABLE,
         )
+
+    def test_provider_call_rejects_cross_provider_usage_provenance(self):
+        def unavailable(source):
+            return Usage(
+                availability=Availability.UNAVAILABLE,
+                quality=Quality.UNAVAILABLE,
+                usage_source=source,
+                input_tokens=None,
+                output_tokens=None,
+                total_tokens=None,
+                component_tokens=None,
+            )
+        openai_actual = Usage(
+            availability=Availability.AVAILABLE,
+            quality=Quality.ACTUAL,
+            usage_source=UsageSource.OPENAI_RESPONSES_USAGE,
+            input_tokens=1,
+            output_tokens=2,
+            total_tokens=3,
+            component_tokens={
+                "cached_input_tokens": None,
+                "reasoning_output_tokens": None,
+            },
+        )
+        cases = (
+            ("openai", unavailable(UsageSource.CODEX_CLI_UNAVAILABLE)),
+            ("codex", unavailable(UsageSource.OPENAI_RESPONSES_UNAVAILABLE)),
+            ("codex", openai_actual),
+        )
+        for provider, usage in cases:
+            with self.subTest(provider=provider, source=usage.usage_source):
+                with self.assertRaisesRegex(ValueError, "incompatible with provider identity"):
+                    measure_provider_call(
+                        stage_id="03",
+                        rendered=[("request", Component.USER_INPUT)],
+                        wire=None,
+                        outcome_category=OutcomeCategory.COMPLETED,
+                        metadata={"provider": provider, "model": "test"},
+                        provider_usage=usage,
+                    )
+
+    def test_provenance_construction_failure_is_telemetry_only(self):
+        recorder = _Recorder()
+        executor = self._openai(recorder)
+        with patch(
+            "sdd_orchestrator.providers.urllib.request.urlopen", return_value=_Response()
+        ) as invocation, patch(
+            "sdd_orchestrator.providers.measure_provider_call",
+            side_effect=ValueError("usage provenance mismatch"),
+        ):
+            result = executor.execute(_request())
+
+        self.assertEqual(result.status, "COMPLETED")
+        self.assertEqual(invocation.call_count, 1)
+
+        original = urllib.error.URLError(OSError("original transport failure"))
+        with patch(
+            "sdd_orchestrator.providers.urllib.request.urlopen", side_effect=original
+        ) as invocation, patch(
+            "sdd_orchestrator.providers.measure_provider_call",
+            side_effect=ValueError("usage provenance mismatch"),
+        ):
+            with self.assertRaises(ReasoningProviderError) as caught:
+                executor.execute(_request())
+
+        self.assertIs(caught.exception.__cause__, original)
+        self.assertEqual(invocation.call_count, 1)
 
     def test_duration_uses_monotonic_clock_and_is_non_negative(self):
         recorder = _Recorder()

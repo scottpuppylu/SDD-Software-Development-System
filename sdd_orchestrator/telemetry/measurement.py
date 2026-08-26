@@ -63,6 +63,20 @@ def measure_provider_call(
         usage_source = unavailable_sources[provider]
     except (KeyError, TypeError) as exc:
         raise ValueError(f"unknown provider identity: {provider!r}") from exc
+    compatible_sources = {
+        "openai": {
+            UsageSource.OPENAI_RESPONSES_USAGE,
+            UsageSource.OPENAI_RESPONSES_UNAVAILABLE,
+        },
+        "codex": {UsageSource.CODEX_CLI_UNAVAILABLE},
+    }
+    if (
+        provider_usage is not None
+        and provider_usage.usage_source not in compatible_sources[provider]
+    ):
+        raise ValueError(
+            f"usage provenance is incompatible with provider identity: {provider!r}"
+        )
 
     metrics: list[ContentMetric] = []
     for text, component in rendered:
