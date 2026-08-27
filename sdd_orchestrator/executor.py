@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 import json
 import shlex
 import subprocess
@@ -52,6 +51,37 @@ class StageExecutor(Protocol):
         ...
 
 
+class AtomicPreparationError(RuntimeError):
+    """Typed boundary for future atomic preparation coordination."""
+
+
+class SharedExecutorPrerequisiteError(AtomicPreparationError):
+    """A request-independent prerequisite prevents any dispatch."""
+
+
+class OptimizationPreparationError(AtomicPreparationError):
+    """Preparation of a selected optimized request failed."""
+
+
+@runtime_checkable
+class AtomicStageExecutor(Protocol):
+    """Explicit, non-speculative capability for atomic prepare/dispatch."""
+
+    def prepare(self, request: StageExecutionRequest) -> Any:
+        ...
+
+    def dispatch(self, prepared: Any) -> StageExecutionResult:
+        ...
+
+
+@dataclass(frozen=True)
+class PreparedExternalCommandExecution:
+    request: StageExecutionRequest
+    command: tuple[str, ...]
+    stdin: str
+    timeout_seconds: int
+
+
 class ExternalCommandExecutor:
     """Adapter for a future LLM/OpenClaw/Codex executor.
 
@@ -64,12 +94,23 @@ class ExternalCommandExecutor:
         self.timeout_seconds = timeout_seconds
 
     def execute(self, request: StageExecutionRequest) -> StageExecutionResult:
+        return self.dispatch(self.prepare(request))
+
+    def prepare(self, request: StageExecutionRequest) -> PreparedExternalCommandExecution:
+        return PreparedExternalCommandExecution(
+            request=request,
+            command=tuple(self.command),
+            stdin=json.dumps(request.to_dict(), ensure_ascii=False),
+            timeout_seconds=self.timeout_seconds,
+        )
+
+    def dispatch(self, prepared: PreparedExternalCommandExecution) -> StageExecutionResult:
         proc = subprocess.run(
-            self.command,
-            input=json.dumps(request.to_dict(), ensure_ascii=False),
+            list(prepared.command),
+            input=prepared.stdin,
             text=True,
             capture_output=True,
-            timeout=self.timeout_seconds,
+            timeout=prepared.timeout_seconds,
         )
         if proc.returncode != 0:
             raise RuntimeError(
@@ -90,5 +131,17 @@ class StaticExecutor:
         self.last_request: StageExecutionRequest | None = None
 
     def execute(self, request: StageExecutionRequest) -> StageExecutionResult:
-        self.last_request = request
-        return self.result
+        return self.dispatch(self.prepare(request))
+
+    def prepare(self, request: StageExecutionRequest) -> "PreparedStaticExecution":
+        return PreparedStaticExecution(request=request, result=self.result)
+
+    def dispatch(self, prepared: "PreparedStaticExecution") -> StageExecutionResult:
+        self.last_request = prepared.request
+        return prepared.result
+
+
+@dataclass(frozen=True)
+class PreparedStaticExecution:
+    request: StageExecutionRequest
+    result: StageExecutionResult

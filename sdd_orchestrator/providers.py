@@ -8,10 +8,15 @@ import shutil
 import subprocess
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .executor import StageExecutionRequest, StageExecutionResult
+from .executor import (
+    SharedExecutorPrerequisiteError,
+    StageExecutionRequest,
+    StageExecutionResult,
+)
 from .telemetry.measurement import measure_provider_call
 from .telemetry.models import (
     Availability,
@@ -25,6 +30,28 @@ from .telemetry.models import (
 
 class ReasoningProviderError(RuntimeError):
     pass
+
+
+class SharedReasoningProviderPrerequisiteError(
+    ReasoningProviderError, SharedExecutorPrerequisiteError
+):
+    pass
+
+
+@dataclass(frozen=True)
+class PreparedCodexExecution:
+    request: StageExecutionRequest
+    executable: str
+    schema_json: str
+    prompt: str
+
+
+@dataclass(frozen=True)
+class PreparedOpenAIExecution:
+    request: StageExecutionRequest
+    wire: bytes
+    instructions: str
+    user_input: str
 
 
 def _allowed_output_paths(request: StageExecutionRequest) -> list[str]:
@@ -276,25 +303,37 @@ class CodexExecReasoningExecutor:
         return _provider_system_instructions(request) + "\n\n" + _provider_user_input(request)
 
     def execute(self, request: StageExecutionRequest) -> StageExecutionResult:
+        return self.dispatch(self.prepare(request))
+
+    def prepare(self, request: StageExecutionRequest) -> PreparedCodexExecution:
         executable = self.resolved_executable()
         if not executable:
-            raise ReasoningProviderError(
+            raise SharedReasoningProviderPrerequisiteError(
                 "Codex CLI is not installed or not on PATH. Install Codex and run `codex login` with ChatGPT before using the default reasoning provider."
             )
-
         schema = _result_schema(request)
         prompt = self.build_prompt(request)
+        return PreparedCodexExecution(
+            request=request,
+            executable=executable,
+            schema_json=json.dumps(schema, ensure_ascii=False, indent=2),
+            prompt=prompt,
+        )
+
+    def dispatch(self, prepared: PreparedCodexExecution) -> StageExecutionResult:
+        request = prepared.request
+        prompt = prepared.prompt
         with tempfile.TemporaryDirectory(prefix=f"sdd-stage-{request.stage_id}-") as tmp:
             tmpdir = Path(tmp)
             schema_path = tmpdir / "result.schema.json"
             output_path = tmpdir / "result.json"
-            schema_path.write_text(json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8")
+            schema_path.write_text(prepared.schema_json, encoding="utf-8")
 
             started = time.monotonic()
             outcome = OutcomeCategory.FAILED
             try:
                 proc = subprocess.run(
-                    self.command(schema_path, output_path, executable=executable),
+                    self.command(schema_path, output_path, executable=prepared.executable),
                     input=prompt,
                     text=True,
                     encoding="utf-8",
@@ -395,16 +434,21 @@ class OpenAIResponsesExecutor:
         self.max_output_tokens = max_output_tokens
         self.telemetry_recorder = telemetry_recorder
         if not self.api_key:
-            raise ReasoningProviderError(
+            raise SharedReasoningProviderPrerequisiteError(
                 "OPENAI_API_KEY is not set. Configure it in the environment; do not store it in repository files."
             )
 
     def execute(self, request: StageExecutionRequest) -> StageExecutionResult:
+        return self.dispatch(self.prepare(request))
+
+    def prepare(self, request: StageExecutionRequest) -> PreparedOpenAIExecution:
         schema = _result_schema(request)
+        instructions = _provider_system_instructions(request)
+        user_input = _provider_user_input(request)
         body = {
             "model": self.model,
-            "instructions": _provider_system_instructions(request),
-            "input": _provider_user_input(request),
+            "instructions": instructions,
+            "input": user_input,
             "max_output_tokens": self.max_output_tokens,
             "text": {
                 "format": {
@@ -416,6 +460,16 @@ class OpenAIResponsesExecutor:
             },
         }
         wire = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        return PreparedOpenAIExecution(
+            request=request,
+            wire=wire,
+            instructions=instructions,
+            user_input=user_input,
+        )
+
+    def dispatch(self, prepared: PreparedOpenAIExecution) -> StageExecutionResult:
+        request = prepared.request
+        wire = prepared.wire
         req = urllib.request.Request(
             self.endpoint,
             data=wire,
@@ -456,8 +510,8 @@ class OpenAIResponsesExecutor:
                     event = measure_provider_call(
                         stage_id=request.stage_id,
                         rendered=[
-                            (body["instructions"], Component.STAGE_INSTRUCTION),
-                            (body["input"], Component.USER_INPUT),
+                            (prepared.instructions, Component.STAGE_INSTRUCTION),
+                            (prepared.user_input, Component.USER_INPUT),
                         ],
                         wire=wire,
                         outcome_category=outcome,
