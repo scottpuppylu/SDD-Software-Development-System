@@ -7,6 +7,7 @@ from typing import Any, Callable
 from .core import Orchestrator
 from .executor import StageExecutor
 from .runner import StageRunner, StageExecutionValidationError
+from .context_compiler import CompilationMode
 
 
 @dataclass
@@ -24,10 +25,18 @@ class PipelineController:
     the Codex/repository coding adapter rather than the authoring reasoning adapter.
     """
 
-    def __init__(self, orchestrator: Orchestrator, telemetry_recorder: Any = None):
+    def __init__(
+        self,
+        orchestrator: Orchestrator,
+        telemetry_recorder: Any = None,
+        *,
+        compilation_mode: CompilationMode = CompilationMode.BASELINE,
+    ):
         self.orchestrator = orchestrator
         self.runner = StageRunner(
-            orchestrator, telemetry_recorder=telemetry_recorder
+            orchestrator,
+            telemetry_recorder=telemetry_recorder,
+            compilation_mode=compilation_mode,
         )
 
     def _repository_structure(self, max_entries: int = 500) -> str:

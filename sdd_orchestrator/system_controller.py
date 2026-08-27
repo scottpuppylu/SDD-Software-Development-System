@@ -10,6 +10,7 @@ from .runner import StageRunner
 from .codex_adapter import Stage08CodexRunner
 from .decisions import DecisionGateway
 from .git_runtime import GitRepository
+from .context_compiler import CompilationMode
 
 
 @dataclass
@@ -32,10 +33,14 @@ class FullSystemController:
         reasoning_executor: StageExecutor,
         codex_runner: Stage08CodexRunner,
         telemetry_recorder: Any = None,
+        *,
+        compilation_mode: CompilationMode = CompilationMode.BASELINE,
     ):
         self.orchestrator = orchestrator
         self.runner = StageRunner(
-            orchestrator, telemetry_recorder=telemetry_recorder
+            orchestrator,
+            telemetry_recorder=telemetry_recorder,
+            compilation_mode=compilation_mode,
         )
         self.reasoning_executor = reasoning_executor
         self.codex_runner = codex_runner

@@ -15,6 +15,7 @@ from .codex_adapter import Stage08CodexRunner, CodexCLI, CodexAdapterError
 from .decisions import DecisionGateway, DecisionGatewayError
 from .system_controller import FullSystemController
 from .telemetry.recorder import TelemetryRecorder
+from .context_activation import resolve_context_compilation_mode
 
 
 def _print(data):
@@ -149,6 +150,7 @@ def main():
 
     args = parser.parse_args()
     repo = Path(args.repo)
+    compilation_mode = resolve_context_compilation_mode()
 
     if args.command == "git-status":
         _print(GitRepository(repo).snapshot())
@@ -187,6 +189,7 @@ def main():
             reasoning,
             codex_runner,
             telemetry_recorder=telemetry_recorder,
+            compilation_mode=compilation_mode,
         )
         _print(controller.run(max_steps=args.max_steps, semantic_by_stage=_semantic_by_stage(args.semantic)))
         return
@@ -253,7 +256,11 @@ def main():
 
     orch = Orchestrator(repo)
     telemetry_recorder = TelemetryRecorder.from_environment(repo)
-    runner = StageRunner(orch, telemetry_recorder=telemetry_recorder)
+    runner = StageRunner(
+        orch,
+        telemetry_recorder=telemetry_recorder,
+        compilation_mode=compilation_mode,
+    )
 
     if args.command == "status":
         _print(orch.status())
@@ -312,7 +319,9 @@ def main():
                 telemetry_recorder=telemetry_recorder,
             )
         controller = PipelineController(
-            orch, telemetry_recorder=telemetry_recorder
+            orch,
+            telemetry_recorder=telemetry_recorder,
+            compilation_mode=compilation_mode,
         )
         _print(controller.run_until(
             executor,

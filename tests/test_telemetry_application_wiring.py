@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 from sdd_orchestrator.pipeline import PipelineController
 from sdd_orchestrator.system_controller import FullSystemController
+from sdd_orchestrator.context_compiler import CompilationMode
 
 
 class TelemetryControllerWiringTests(unittest.TestCase):
@@ -19,7 +20,9 @@ class TelemetryControllerWiringTests(unittest.TestCase):
         PipelineController(self.orchestrator, telemetry_recorder=self.recorder)
 
         runner_type.assert_called_once_with(
-            self.orchestrator, telemetry_recorder=self.recorder
+            self.orchestrator,
+            telemetry_recorder=self.recorder,
+            compilation_mode=CompilationMode.BASELINE,
         )
 
     @patch("sdd_orchestrator.system_controller.GitRepository")
@@ -36,7 +39,9 @@ class TelemetryControllerWiringTests(unittest.TestCase):
         )
 
         runner_type.assert_called_once_with(
-            self.orchestrator, telemetry_recorder=self.recorder
+            self.orchestrator,
+            telemetry_recorder=self.recorder,
+            compilation_mode=CompilationMode.BASELINE,
         )
 
 
@@ -55,6 +60,11 @@ class TelemetryCliWiringTests(unittest.TestCase):
         recorder = Mock(name="telemetry_recorder")
         orchestrator = SimpleNamespace(repo_root=repo)
         with (
+            patch.object(
+                cli,
+                "resolve_context_compilation_mode",
+                return_value=CompilationMode.BASELINE,
+            ),
             patch.object(recorder_type, "from_environment", return_value=recorder) as factory,
             patch.object(cli, "Orchestrator", return_value=orchestrator),
             patch.object(cli, "StageRunner") as runner_type,
@@ -88,14 +98,18 @@ class TelemetryCliWiringTests(unittest.TestCase):
         observed = self._run_cli(["packet", "--stage", "03"])
 
         observed.runner_type.assert_called_once_with(
-            observed.orchestrator, telemetry_recorder=observed.recorder
+            observed.orchestrator,
+            telemetry_recorder=observed.recorder,
+            compilation_mode=CompilationMode.BASELINE,
         )
 
     def test_openai_run_shares_one_recorder_with_runner_and_provider(self):
         observed = self._run_cli(["run", "--stage", "03", "--openai"])
 
         observed.runner_type.assert_called_once_with(
-            observed.orchestrator, telemetry_recorder=observed.recorder
+            observed.orchestrator,
+            telemetry_recorder=observed.recorder,
+            compilation_mode=CompilationMode.BASELINE,
         )
         observed.openai_type.assert_called_once_with(
             model="gpt-5.6", telemetry_recorder=observed.recorder
@@ -111,7 +125,9 @@ class TelemetryCliWiringTests(unittest.TestCase):
             telemetry_recorder=observed.recorder,
         )
         observed.pipeline_type.assert_called_once_with(
-            observed.orchestrator, telemetry_recorder=observed.recorder
+            observed.orchestrator,
+            telemetry_recorder=observed.recorder,
+            compilation_mode=CompilationMode.BASELINE,
         )
 
     def test_auto_shares_one_recorder_with_controller_and_reasoning_provider(self):
@@ -125,6 +141,7 @@ class TelemetryCliWiringTests(unittest.TestCase):
             observed.openai_type.return_value,
             observed.stage08_type.return_value,
             telemetry_recorder=observed.recorder,
+            compilation_mode=CompilationMode.BASELINE,
         )
 
 
