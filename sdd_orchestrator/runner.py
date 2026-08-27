@@ -11,6 +11,8 @@ import tempfile
 import fnmatch
 
 from .core import Orchestrator, SDDOrchestratorError
+from .context_compiler import CompilationMode, ContextCompiler
+from .context_dispatch import ContextDispatchCoordinator
 from .executor import StageExecutionRequest, StageExecutionResult, StageExecutor
 from .telemetry.measurement import measure_stage_request
 
@@ -20,10 +22,19 @@ class StageExecutionValidationError(SDDOrchestratorError):
 
 
 class StageRunner:
-    def __init__(self, orchestrator: Orchestrator, telemetry_recorder: Any = None):
+    def __init__(
+        self,
+        orchestrator: Orchestrator,
+        telemetry_recorder: Any = None,
+        *,
+        compilation_mode: CompilationMode = CompilationMode.BASELINE,
+    ):
+        if not isinstance(compilation_mode, CompilationMode):
+            raise TypeError("compilation_mode must be a CompilationMode")
         self.orchestrator = orchestrator
         self.repo_root = orchestrator.repo_root
         self.telemetry_recorder = telemetry_recorder
+        self.compilation_mode = compilation_mode
 
     def build_request(
         self,
@@ -458,7 +469,15 @@ class StageRunner:
                 self.telemetry_recorder.record(measure_stage_request(request))
             except Exception:
                 pass
-        result = executor.execute(request)
+        if self.compilation_mode is CompilationMode.BASELINE:
+            result = executor.execute(request)
+        else:
+            compiler = ContextCompiler()
+            baseline_package = compiler.compile_baseline(request)
+            optimized_package = compiler.compile_optimized(request)
+            result = ContextDispatchCoordinator().execute(
+                executor, baseline_package, optimized_package
+            )
         self._validate_result(request, result)
         written = self._write_outputs_atomically(result.artifacts)
         convergence_written = self._persist_convergence_tasks(request, result)
