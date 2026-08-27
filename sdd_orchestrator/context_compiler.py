@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import copy
 from enum import Enum
 import hashlib
 import json
@@ -10,6 +11,7 @@ from .executor import StageExecutionRequest
 
 
 CANONICALIZATION_ID = "sdd.canonical.utf8-sorted-compact-v1"
+GIT_HISTORY_REDUCTION_POLICY_ID = "sdd.git-history.newest8-oldest2-v1"
 
 
 class CompilationMode(str, Enum):
@@ -89,6 +91,44 @@ class CompiledContextPackage:
     request: StageExecutionRequest
     manifest: ContextManifest
     entries: tuple[CompiledContextEntry, ...]
+
+
+@dataclass(frozen=True)
+class GitHistoryReduction:
+    source_body: Any
+    result_body: Any
+    disposition: InclusionDisposition
+    reduction_policy_id: str | None
+
+
+def reduce_git_history(value: Any) -> GitHistoryReduction:
+    exact = GitHistoryReduction(value, value, InclusionDisposition.EXACT, None)
+    if not isinstance(value, str):
+        return exact
+    if value == "":
+        return exact
+    if "\r" in value or value.startswith("\n") or value.endswith("\n"):
+        return exact
+    lines = value.split("\n")
+    if len(lines) > 20:
+        return exact
+    for line in lines:
+        if line.count("\t") != 1:
+            return exact
+        commit_hash, subject = line.split("\t")
+        if (len(commit_hash) != 40
+                or any(character not in "0123456789abcdef" for character in commit_hash)
+                or "\t" in subject or "\n" in subject or "\r" in subject):
+            return exact
+    if len(lines) <= 10:
+        return exact
+    omitted = len(lines) - 10
+    result = "\n".join(
+        lines[:8] + [f"[[GIT_HISTORY_OMITTED_ENTRIES:{omitted}]]"] + lines[-2:]
+    )
+    return GitHistoryReduction(
+        value, result, InclusionDisposition.REDUCED, GIT_HISTORY_REDUCTION_POLICY_ID
+    )
 
 
 _ARTIFACT_ROLES = {
@@ -294,9 +334,60 @@ def build_baseline_package(request: StageExecutionRequest) -> CompiledContextPac
     return package
 
 
+def build_optimized_package(request: StageExecutionRequest) -> CompiledContextPackage:
+    source_snapshot = copy.deepcopy(request)
+    baseline = build_baseline_package(request)
+    optimized_request = copy.deepcopy(request)
+    reduction = reduce_git_history(request.runtime_inputs.get("GIT_HISTORY")) \
+        if "GIT_HISTORY" in request.runtime_inputs else None
+    if reduction is None or reduction.disposition is InclusionDisposition.EXACT:
+        optimized_entries = baseline.entries
+    else:
+        optimized_request.runtime_inputs["GIT_HISTORY"] = reduction.result_body
+        git_id = f"request/runtime-inputs/{encode_component_key('GIT_HISTORY')}"
+        changed: list[CompiledContextEntry] = []
+        for compiled in baseline.entries:
+            if compiled.manifest_entry.component_id != git_id:
+                changed.append(compiled)
+                continue
+            result_bytes = canonical_text_bytes(reduction.result_body)
+            entry = compiled.manifest_entry
+            changed.append(CompiledContextEntry(
+                ContextManifestEntry(
+                    component_id=entry.component_id,
+                    source_role=entry.source_role,
+                    classification=entry.classification,
+                    authority_treatment=entry.authority_treatment,
+                    disposition=InclusionDisposition.REDUCED,
+                    content_kind=entry.content_kind,
+                    source_metadata=entry.source_metadata,
+                    result_metadata=metadata_for_canonical_bytes(result_bytes),
+                    reduction_policy_id=GIT_HISTORY_REDUCTION_POLICY_ID,
+                ),
+                reduction.source_body,
+                reduction.result_body,
+            ))
+        optimized_entries = tuple(changed)
+    manifest = ContextManifest(
+        CompilationMode.OPTIMIZED,
+        CANONICALIZATION_ID,
+        tuple(entry.manifest_entry for entry in optimized_entries),
+    )
+    package = CompiledContextPackage(
+        CompilationMode.OPTIMIZED, optimized_request, manifest, optimized_entries
+    )
+    validate_compiled_package(package)
+    if request != source_snapshot:
+        raise ValueError("source request was mutated during optimized compilation")
+    return package
+
+
 class ContextCompiler:
     def compile_baseline(self, request: StageExecutionRequest) -> CompiledContextPackage:
         return build_baseline_package(request)
+
+    def compile_optimized(self, request: StageExecutionRequest) -> CompiledContextPackage:
+        return build_optimized_package(request)
 
 
 def _body_bytes(entry: CompiledContextEntry, *, result: bool) -> bytes:
@@ -306,8 +397,8 @@ def _body_bytes(entry: CompiledContextEntry, *, result: bool) -> bytes:
 
 
 def validate_compiled_package(package: CompiledContextPackage) -> None:
-    if not isinstance(package.mode, CompilationMode) or package.mode is not CompilationMode.BASELINE:
-        raise ValueError("M4.1-A supports BASELINE compiled output only")
+    if not isinstance(package.mode, CompilationMode):
+        raise ValueError("invalid compilation mode")
     if package.manifest.mode is not package.mode:
         raise ValueError("package and manifest modes differ")
     if package.manifest.canonicalization_id != CANONICALIZATION_ID:
@@ -330,9 +421,11 @@ def validate_compiled_package(package: CompiledContextPackage) -> None:
                     isinstance(entry.disposition, InclusionDisposition),
                     isinstance(entry.content_kind, ContentKind))):
             raise ValueError("invalid enum value")
-        if entry.disposition is not InclusionDisposition.EXACT:
-            raise ValueError("BASELINE entries must be EXACT and never OMITTED")
-        if entry.reduction_policy_id is not None:
+        if entry.disposition is InclusionDisposition.OMITTED:
+            raise ValueError("M4.1 entries must never be OMITTED")
+        if package.mode is CompilationMode.BASELINE and entry.disposition is not InclusionDisposition.EXACT:
+            raise ValueError("BASELINE entries must be EXACT")
+        if entry.disposition is InclusionDisposition.EXACT and entry.reduction_policy_id is not None:
             raise ValueError("EXACT entries require null reduction policy")
         if entry.classification in (ManifestClassification.UNKNOWN, ManifestClassification.MIXED_AUTHORITY):
             if entry.authority_treatment is not AuthorityTreatment.EXACT_REQUIRED:
@@ -353,16 +446,41 @@ def validate_compiled_package(package: CompiledContextPackage) -> None:
         )[0]
         if actual_kind is not entry.content_kind:
             raise ValueError("content kind does not match source body")
-        if source_bytes != result_bytes:
-            raise ValueError("EXACT source and result canonical bytes differ")
-        if entry.source_metadata != entry.result_metadata:
-            raise ValueError("EXACT source and result metadata differ")
+        if entry.disposition is InclusionDisposition.REDUCED:
+            if (package.mode is not CompilationMode.OPTIMIZED
+                    or entry.component_id != git_id
+                    or entry.classification is not ManifestClassification.APPROVED_REDUCIBLE_OPERATIONAL_HISTORY
+                    or entry.authority_treatment is not AuthorityTreatment.APPROVED_OPERATIONAL_REDUCTION_ELIGIBLE
+                    or entry.reduction_policy_id != GIT_HISTORY_REDUCTION_POLICY_ID):
+                raise ValueError("invalid reduced GIT_HISTORY entry")
+            if source_bytes == result_bytes:
+                raise ValueError("REDUCED source and result must differ")
+            reduction = reduce_git_history(compiled.source_body)
+            if (reduction.disposition is not InclusionDisposition.REDUCED
+                    or reduction.result_body != compiled.result_body):
+                raise ValueError("REDUCED result does not match approved policy")
+        else:
+            if source_bytes != result_bytes:
+                raise ValueError("EXACT source and result canonical bytes differ")
+            if entry.source_metadata != entry.result_metadata:
+                raise ValueError("EXACT source and result metadata differ")
         if entry.source_metadata != metadata_for_canonical_bytes(source_bytes):
             raise ValueError("source metadata does not match body")
         if entry.result_metadata != metadata_for_canonical_bytes(result_bytes):
             raise ValueError("result metadata does not match body")
         if entry.source_metadata.canonicalization_id != CANONICALIZATION_ID:
             raise ValueError("invalid metadata canonicalization ID")
+        if entry.result_metadata.canonicalization_id != CANONICALIZATION_ID:
+            raise ValueError("invalid result metadata canonicalization ID")
+    if package.mode is CompilationMode.OPTIMIZED:
+        redecomposed = build_baseline_package(package.request)
+        if len(redecomposed.entries) != len(package.entries):
+            raise ValueError("optimized request decomposition count differs")
+        for candidate, expected_entry in zip(redecomposed.entries, package.entries):
+            if candidate.manifest_entry.component_id != expected_entry.manifest_entry.component_id:
+                raise ValueError("optimized request decomposition identity differs")
+            if _body_bytes(candidate, result=True) != _body_bytes(expected_entry, result=True):
+                raise ValueError("optimized request does not match manifest result")
 
 
 def build_expected_component_order(request: StageExecutionRequest) -> list[str]:
