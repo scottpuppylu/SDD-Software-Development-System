@@ -12,6 +12,9 @@ from .executor import StageExecutionRequest
 
 CANONICALIZATION_ID = "sdd.canonical.utf8-sorted-compact-v1"
 GIT_HISTORY_REDUCTION_POLICY_ID = "sdd.git-history.newest8-oldest2-v1"
+IDENTITY_NAMESPACE = "sdd.context.component"
+IDENTITY_VERSION = "m4.2-v1"
+TASK_COORDINATE = "task-absent"
 
 
 class CompilationMode(str, Enum):
@@ -52,6 +55,55 @@ class ContentKind(str, Enum):
     ABSENT = "ABSENT"
     EMPTY_MAPPING = "EMPTY_MAPPING"
     EMPTY_LIST = "EMPTY_LIST"
+
+
+class ComponentTreatment(str, Enum):
+    ALWAYS_REQUIRED = "ALWAYS_REQUIRED"
+    FAIL_CLOSED_EXACT = "FAIL_CLOSED_EXACT"
+    DELTA_ONLY_CANDIDATE = "DELTA_ONLY_CANDIDATE"
+    STAGE_REQUIRED_CANDIDATE = "STAGE_REQUIRED_CANDIDATE"
+
+
+@dataclass(frozen=True)
+class ComponentIdentity:
+    namespace: str
+    version: str
+    stage_coordinate: str
+    task_coordinate: str
+    component_coordinate: str
+
+    def __post_init__(self) -> None:
+        if self.namespace != IDENTITY_NAMESPACE:
+            raise ValueError("unrecognized component identity namespace")
+        if self.version != IDENTITY_VERSION:
+            raise ValueError("unrecognized component identity version")
+        _validate_stage_coordinate(self.stage_coordinate)
+        if self.task_coordinate != TASK_COORDINATE:
+            raise ValueError("task coordinate must remain task-absent")
+        _validate_component_coordinate(self.component_coordinate)
+
+    @property
+    def text(self) -> str:
+        return "/".join((
+            self.namespace,
+            self.version,
+            self.stage_coordinate,
+            self.task_coordinate,
+            self.component_coordinate,
+        ))
+
+
+@dataclass(frozen=True)
+class ComponentSelection:
+    identity: ComponentIdentity
+    treatment: ComponentTreatment
+    candidate_treatment: ComponentTreatment | None
+    stage_required: bool
+    task_required: bool
+    preserve_exact: bool
+    authority_protected: bool
+    canonical_bytes: bytes
+    content_digest: str
 
 
 @dataclass(frozen=True)
@@ -223,6 +275,101 @@ def encode_component_key(key: str) -> str:
     if not isinstance(key, str):
         raise TypeError("component dictionary keys must be strings")
     return key.encode("utf-8").hex()
+
+
+_FIXED_COMPONENT_COORDINATES = frozenset((
+    "request/stage-contract",
+    "request/stage-instructions",
+    "request/metadata/stage-id",
+    "request/metadata/stage-name",
+    "request/metadata/stage-type",
+    "request/metadata/core-question",
+))
+_KEYED_COMPONENT_PREFIXES = (
+    "request/artifacts/",
+    "request/semantic-inputs/",
+    "request/runtime-inputs/",
+)
+
+
+def _validate_encoded_utf8(value: str, *, label: str, allow_empty: bool) -> None:
+    if not isinstance(value, str) or (not value and not allow_empty):
+        raise ValueError(f"invalid {label} encoding")
+    if value != value.lower() or any(character not in "0123456789abcdef" for character in value):
+        raise ValueError(f"invalid {label} encoding")
+    if len(value) % 2:
+        raise ValueError(f"invalid {label} encoding")
+    try:
+        decoded = bytes.fromhex(value).decode("utf-8")
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise ValueError(f"invalid {label} UTF-8") from exc
+    if decoded.encode("utf-8").hex() != value:
+        raise ValueError(f"non-canonical {label} encoding")
+
+
+def _validate_stage_coordinate(value: str) -> None:
+    if value == "stage-absent":
+        return
+    if not isinstance(value, str) or not value.startswith("stage-id/"):
+        raise ValueError("invalid stage coordinate")
+    _validate_encoded_utf8(value[len("stage-id/"):], label="stage", allow_empty=True)
+
+
+def _validate_component_coordinate(value: str) -> None:
+    if value in _FIXED_COMPONENT_COORDINATES:
+        return
+    for prefix in _KEYED_COMPONENT_PREFIXES:
+        if isinstance(value, str) and value.startswith(prefix):
+            _validate_encoded_utf8(value[len(prefix):], label="component key", allow_empty=True)
+            return
+    raise ValueError("invalid component coordinate")
+
+
+def build_component_identity(
+    component_coordinate: str, stage_id: str | None
+) -> ComponentIdentity:
+    if stage_id is not None and not isinstance(stage_id, str):
+        raise TypeError("stage identity must be a string or absent")
+    stage_coordinate = (
+        "stage-absent" if stage_id is None
+        else f"stage-id/{stage_id.encode('utf-8').hex()}"
+    )
+    return ComponentIdentity(
+        IDENTITY_NAMESPACE,
+        IDENTITY_VERSION,
+        stage_coordinate,
+        TASK_COORDINATE,
+        component_coordinate,
+    )
+
+
+def parse_component_identity(text: str) -> ComponentIdentity:
+    if not isinstance(text, str):
+        raise TypeError("component identity text must be a string")
+    parts = text.split("/")
+    if len(parts) < 6 or parts[0] != IDENTITY_NAMESPACE or parts[1] != IDENTITY_VERSION:
+        raise ValueError("malformed component identity")
+    if parts[2] == "stage-absent":
+        stage_coordinate = parts[2]
+        task_index = 3
+    elif parts[2] == "stage-id" and len(parts) >= 7:
+        stage_coordinate = "/".join(parts[2:4])
+        task_index = 4
+    else:
+        raise ValueError("malformed stage coordinate")
+    identity = ComponentIdentity(
+        parts[0], parts[1], stage_coordinate, parts[task_index],
+        "/".join(parts[task_index + 1:]),
+    )
+    if identity.text != text:
+        raise ValueError("non-canonical component identity")
+    return identity
+
+
+def content_digest(canonical: bytes) -> str:
+    if not isinstance(canonical, bytes):
+        raise TypeError("content digest requires canonical bytes")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def _recursive_artifact_role(key: str) -> tuple[str, ManifestClassification] | None:
@@ -504,3 +651,102 @@ def build_expected_component_order(request: StageExecutionRequest) -> list[str]:
         "request/metadata/stage-type", "request/metadata/core-question",
     ))
     return identities
+
+
+def _declared_required_coordinates(
+    stage_id: str | None, stages: dict[str, Any]
+) -> frozenset[str]:
+    if not isinstance(stages, dict):
+        raise TypeError("authoritative stage mapping must be a dictionary")
+    if stage_id is None or stage_id not in stages:
+        return frozenset()
+    declaration = stages[stage_id]
+    if not isinstance(declaration, dict):
+        raise ValueError("stage declaration must be a dictionary")
+    required = declaration.get("required_inputs", {})
+    if not isinstance(required, dict):
+        raise ValueError("required_inputs must be a dictionary")
+    coordinates: set[str] = set()
+    groups = (
+        ("files", "request/artifacts/"),
+        ("semantic", "request/semantic-inputs/"),
+        ("runtime", "request/runtime-inputs/"),
+    )
+    for group, prefix in groups:
+        keys = required.get(group, [])
+        if not isinstance(keys, list) or any(not isinstance(key, str) for key in keys):
+            raise ValueError(f"required_inputs.{group} must be a list of strings")
+        coordinates.update(prefix + encode_component_key(key) for key in keys)
+    return frozenset(coordinates)
+
+
+def validate_component_selections(
+    selections: tuple[ComponentSelection, ...] | list[ComponentSelection],
+) -> None:
+    identities: dict[ComponentIdentity, bytes] = {}
+    digest_bodies: dict[str, bytes] = {}
+    for selection in selections:
+        if not isinstance(selection, ComponentSelection):
+            raise TypeError("invalid component selection")
+        if selection.identity in identities:
+            raise ValueError("duplicate complete component identity")
+        if content_digest(selection.canonical_bytes) != selection.content_digest:
+            raise ValueError("content digest does not match canonical bytes")
+        previous = digest_bodies.get(selection.content_digest)
+        if previous is not None and previous != selection.canonical_bytes:
+            raise ValueError("digest collision or canonical-content ambiguity")
+        if (not selection.preserve_exact or selection.task_required
+                or (selection.authority_protected and not selection.preserve_exact)):
+            raise ValueError("Slice 1 selection must preserve exact content")
+        if selection.candidate_treatment is not None and (
+            selection.candidate_treatment is not ComponentTreatment.STAGE_REQUIRED_CANDIDATE
+            or not selection.stage_required
+        ):
+            raise ValueError("invalid stage-required candidate treatment")
+        identities[selection.identity] = selection.canonical_bytes
+        digest_bodies[selection.content_digest] = selection.canonical_bytes
+
+
+def select_stage_candidates(
+    request: StageExecutionRequest, stages: dict[str, Any]
+) -> tuple[ComponentSelection, ...]:
+    """Plan conservative Slice 1 treatments without omitting or transforming input.
+
+    ``stages`` must be the mapping under ``stages`` from the authoritative
+    ``.sdd/stages.yaml`` document. This pure helper never loads or persists it.
+    """
+    required = _declared_required_coordinates(request.stage_id, stages)
+    baseline = build_baseline_package(request)
+    selected: list[ComponentSelection] = []
+    git_coordinate = f"request/runtime-inputs/{encode_component_key('GIT_HISTORY')}"
+    for compiled in baseline.entries:
+        coordinate = compiled.manifest_entry.component_id
+        stage_required = coordinate in required
+        if coordinate in _FIXED_COMPONENT_COORDINATES:
+            treatment = ComponentTreatment.ALWAYS_REQUIRED
+        elif coordinate == git_coordinate:
+            treatment = ComponentTreatment.DELTA_ONLY_CANDIDATE
+        else:
+            treatment = ComponentTreatment.FAIL_CLOSED_EXACT
+        canonical = _body_bytes(compiled, result=False)
+        authority_protected = (
+            compiled.manifest_entry.authority_treatment
+            is AuthorityTreatment.EXACT_REQUIRED
+        )
+        selected.append(ComponentSelection(
+            identity=build_component_identity(coordinate, request.stage_id),
+            treatment=treatment,
+            candidate_treatment=(
+                ComponentTreatment.STAGE_REQUIRED_CANDIDATE
+                if stage_required else None
+            ),
+            stage_required=stage_required,
+            task_required=False,
+            preserve_exact=True,
+            authority_protected=authority_protected,
+            canonical_bytes=canonical,
+            content_digest=content_digest(canonical),
+        ))
+    result = tuple(selected)
+    validate_component_selections(result)
+    return result
