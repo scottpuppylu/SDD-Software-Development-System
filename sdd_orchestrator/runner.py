@@ -11,7 +11,11 @@ import tempfile
 import fnmatch
 
 from .core import Orchestrator, SDDOrchestratorError
-from .context_compiler import CompilationMode, ContextCompiler
+from .context_compiler import (
+    CompilationMode,
+    ContextCompiler,
+    OptimizationCompilationError,
+)
 from .context_dispatch import ContextDispatchCoordinator
 from .executor import StageExecutionRequest, StageExecutionResult, StageExecutor
 from .telemetry.measurement import measure_stage_request
@@ -474,7 +478,10 @@ class StageRunner:
         else:
             compiler = ContextCompiler()
             baseline_package = compiler.compile_baseline(request)
-            optimized_package = compiler.compile_optimized(request)
+            try:
+                optimized_package = compiler.compile_optimized(request)
+            except OptimizationCompilationError:
+                optimized_package = None
             result = ContextDispatchCoordinator().execute(
                 executor, baseline_package, optimized_package
             )

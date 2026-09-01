@@ -4,7 +4,11 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from sdd_orchestrator.context_compiler import CompilationMode, ContextCompiler
+from sdd_orchestrator.context_compiler import (
+    CompilationMode,
+    ContextCompiler,
+    OptimizationCompilationError,
+)
 from sdd_orchestrator.executor import (
     OptimizationPreparationError,
     SharedExecutorPrerequisiteError,
@@ -195,6 +199,42 @@ class RunnerContextIntegrationTests(unittest.TestCase):
         HarnessRunner(request, compilation_mode=CompilationMode.OPTIMIZED).run(executor)
         self.assertEqual(executor.requests, [request])
         self.assertIs(executor.requests[0], request)
+
+    def test_optimized_compilation_failure_dispatches_original_baseline_once(self):
+        request = make_request()
+        before = copy.deepcopy(request)
+        recorder = Recorder()
+        executor = AtomicExecutor()
+        with patch.object(
+            ContextCompiler,
+            "compile_optimized",
+            side_effect=OptimizationCompilationError("candidate invalid"),
+        ):
+            HarnessRunner(
+                request,
+                telemetry_recorder=recorder,
+                compilation_mode=CompilationMode.OPTIMIZED,
+            ).run(executor)
+
+        self.assertEqual(executor.prepared, [request])
+        self.assertEqual(executor.dispatched, [request])
+        self.assertIs(executor.dispatched[0], request)
+        self.assertEqual(request, before)
+        self.assertEqual(len(recorder.events), 1)
+
+    def test_unrelated_optimized_compilation_error_propagates_without_dispatch(self):
+        executor = AtomicExecutor()
+        with patch.object(
+            ContextCompiler,
+            "compile_optimized",
+            side_effect=RuntimeError("programming error"),
+        ), self.assertRaisesRegex(RuntimeError, "programming error"):
+            HarnessRunner(
+                make_request(), compilation_mode=CompilationMode.OPTIMIZED
+            ).run(executor)
+
+        self.assertEqual(executor.prepared, [])
+        self.assertEqual(executor.dispatched, [])
 
     def test_optimized_preparation_fallback_dispatches_baseline_once(self):
         request = make_request()

@@ -19,6 +19,10 @@ class CompilationMode(str, Enum):
     OPTIMIZED = "OPTIMIZED"
 
 
+class OptimizationCompilationError(ValueError):
+    """An optimized candidate failed construction-time integrity checks."""
+
+
 class ManifestClassification(str, Enum):
     KNOWN_AUTHORITY = "KNOWN_AUTHORITY"
     KNOWN_GOVERNANCE = "KNOWN_GOVERNANCE"
@@ -376,9 +380,16 @@ def build_optimized_package(request: StageExecutionRequest) -> CompiledContextPa
     package = CompiledContextPackage(
         CompilationMode.OPTIMIZED, optimized_request, manifest, optimized_entries
     )
-    validate_compiled_package(package)
+    try:
+        validate_compiled_package(package)
+    except ValueError as exc:
+        raise OptimizationCompilationError(
+            "optimized candidate package validation failed"
+        ) from exc
     if request != source_snapshot:
-        raise ValueError("source request was mutated during optimized compilation")
+        raise OptimizationCompilationError(
+            "source request was mutated during optimized compilation"
+        )
     return package
 
 
