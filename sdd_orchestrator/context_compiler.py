@@ -64,6 +64,14 @@ class ComponentTreatment(str, Enum):
     STAGE_REQUIRED_CANDIDATE = "STAGE_REQUIRED_CANDIDATE"
 
 
+class ComponentDeltaKind(str, Enum):
+    UNCHANGED = "UNCHANGED"
+    CHANGED = "CHANGED"
+    ADDED = "ADDED"
+    REMOVED = "REMOVED"
+    REORDERED = "REORDERED"
+
+
 @dataclass(frozen=True)
 class ComponentIdentity:
     namespace: str
@@ -104,6 +112,60 @@ class ComponentSelection:
     authority_protected: bool
     canonical_bytes: bytes
     content_digest: str
+
+
+@dataclass(frozen=True)
+class ExactContextComponent:
+    identity: ComponentIdentity
+    canonical_bytes: bytes
+    content_digest: str
+    authority_protected: bool
+
+
+@dataclass(frozen=True)
+class EphemeralContextBaseline:
+    namespace: str
+    version: str
+    stage_coordinate: str
+    task_coordinate: str
+    canonicalization_id: str
+    components: tuple[ExactContextComponent, ...]
+    scope: object
+
+    @property
+    def identity_sequence(self) -> tuple[ComponentIdentity, ...]:
+        return tuple(component.identity for component in self.components)
+
+
+@dataclass(frozen=True)
+class ComponentDelta:
+    kind: ComponentDeltaKind
+    identity: ComponentIdentity
+    baseline_position: int | None
+    current_position: int | None
+    current_component: ExactContextComponent | None
+
+
+@dataclass(frozen=True)
+class ContextDelta:
+    changes: tuple[ComponentDelta, ...]
+    baseline_components: tuple[ExactContextComponent, ...]
+    current_components: tuple[ExactContextComponent, ...]
+    direct_reuse_eligible: bool
+    exact_reconstruction_eligible: bool
+    invalid_reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReconstructionResult:
+    components: tuple[ExactContextComponent, ...]
+    reconstructed: bool
+    used_fresh_exact: bool
+    fresh_exact_required: bool
+    exact_match: bool
+    authority_coverage_percent: int
+    authority_byte_mismatch: int
+    invalid_reasons: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -750,3 +812,239 @@ def select_stage_candidates(
     result = tuple(selected)
     validate_component_selections(result)
     return result
+
+
+def _exact_components(
+    components: tuple[ComponentSelection | ExactContextComponent, ...]
+    | list[ComponentSelection | ExactContextComponent],
+) -> tuple[ExactContextComponent, ...]:
+    exact: list[ExactContextComponent] = []
+    for component in components:
+        if isinstance(component, ComponentSelection):
+            exact.append(ExactContextComponent(
+                component.identity,
+                component.canonical_bytes,
+                component.content_digest,
+                component.authority_protected,
+            ))
+        elif isinstance(component, ExactContextComponent):
+            exact.append(component)
+        else:
+            raise TypeError("invalid exact context component")
+    return tuple(exact)
+
+
+def _component_validation_reasons(
+    components: tuple[ExactContextComponent, ...],
+    *,
+    expected_stage_coordinate: str | None = None,
+) -> tuple[str, ...]:
+    reasons: list[str] = []
+    identities: set[ComponentIdentity] = set()
+    digest_bodies: dict[str, bytes] = {}
+    for component in components:
+        if not isinstance(component.identity, ComponentIdentity):
+            reasons.append("malformed_identity")
+            continue
+        identity = component.identity
+        if (identity.namespace != IDENTITY_NAMESPACE
+                or identity.version != IDENTITY_VERSION):
+            reasons.append("identity_namespace_or_version_mismatch")
+        if identity.task_coordinate != TASK_COORDINATE:
+            reasons.append("task_coordinate_not_absent")
+        if (expected_stage_coordinate is not None
+                and identity.stage_coordinate != expected_stage_coordinate):
+            reasons.append("stage_coordinate_mismatch")
+        if identity in identities:
+            reasons.append("duplicate_identity")
+        identities.add(identity)
+        if not isinstance(component.canonical_bytes, bytes):
+            reasons.append("canonical_bytes_unavailable")
+            continue
+        actual_digest = content_digest(component.canonical_bytes)
+        if component.content_digest != actual_digest:
+            reasons.append("content_digest_mismatch")
+        previous = digest_bodies.get(component.content_digest)
+        if previous is not None and previous != component.canonical_bytes:
+            reasons.append("digest_canonical_ambiguity")
+        digest_bodies[component.content_digest] = component.canonical_bytes
+    return tuple(dict.fromkeys(reasons))
+
+
+def build_ephemeral_baseline(
+    fresh_exact_components: tuple[ComponentSelection | ExactContextComponent, ...]
+    | list[ComponentSelection | ExactContextComponent],
+    *,
+    scope: object,
+) -> EphemeralContextBaseline:
+    """Capture an in-memory baseline from one already fresh exact assembly."""
+    if scope is None:
+        raise ValueError("an ephemeral scope object is required")
+    components = _exact_components(fresh_exact_components)
+    if not components:
+        raise ValueError("fresh exact assembly must establish its coordinate envelope")
+    stage_coordinate = components[0].identity.stage_coordinate
+    reasons = _component_validation_reasons(
+        components, expected_stage_coordinate=stage_coordinate
+    )
+    if reasons:
+        raise ValueError("invalid fresh exact assembly: " + ", ".join(reasons))
+    return EphemeralContextBaseline(
+        IDENTITY_NAMESPACE,
+        IDENTITY_VERSION,
+        stage_coordinate,
+        TASK_COORDINATE,
+        CANONICALIZATION_ID,
+        components,
+        scope,
+    )
+
+
+def compare_baseline_to_current(
+    baseline: EphemeralContextBaseline,
+    current_fresh_exact: tuple[ComponentSelection | ExactContextComponent, ...]
+    | list[ComponentSelection | ExactContextComponent] | None,
+    *,
+    scope: object,
+) -> ContextDelta:
+    """Classify exact component changes without granting omission authority."""
+    reasons: list[str] = []
+    if not isinstance(baseline, EphemeralContextBaseline):
+        raise TypeError("invalid ephemeral baseline")
+    if baseline.scope is not scope:
+        reasons.append("scope_mismatch")
+    if (baseline.namespace != IDENTITY_NAMESPACE
+            or baseline.version != IDENTITY_VERSION):
+        reasons.append("identity_namespace_or_version_mismatch")
+    if baseline.task_coordinate != TASK_COORDINATE:
+        reasons.append("task_coordinate_not_absent")
+    if baseline.canonicalization_id != CANONICALIZATION_ID:
+        reasons.append("canonicalization_mismatch")
+    reasons.extend(_component_validation_reasons(
+        baseline.components, expected_stage_coordinate=baseline.stage_coordinate
+    ))
+    if current_fresh_exact is None:
+        reasons.append("current_fresh_exact_unavailable")
+        return ContextDelta(
+            (), baseline.components, (), False, False,
+            tuple(dict.fromkeys(reasons)),
+        )
+
+    current = _exact_components(current_fresh_exact)
+    reasons.extend(_component_validation_reasons(
+        current, expected_stage_coordinate=baseline.stage_coordinate
+    ))
+    baseline_by_id = {item.identity: (position, item)
+                      for position, item in enumerate(baseline.components)}
+    current_by_id = {item.identity: (position, item)
+                     for position, item in enumerate(current)}
+    changes: list[ComponentDelta] = []
+    for position, component in enumerate(baseline.components):
+        current_match = current_by_id.get(component.identity)
+        if current_match is None:
+            changes.append(ComponentDelta(
+                ComponentDeltaKind.REMOVED, component.identity, position, None, None
+            ))
+            if component.authority_protected:
+                reasons.append("authority_protected_component_removed")
+            continue
+        current_position, current_component = current_match
+        if (component.content_digest == current_component.content_digest
+                and component.canonical_bytes != current_component.canonical_bytes):
+            reasons.append("digest_canonical_ambiguity")
+        kind = (ComponentDeltaKind.UNCHANGED
+                if (component.content_digest == current_component.content_digest
+                    and component.canonical_bytes == current_component.canonical_bytes)
+                else ComponentDeltaKind.CHANGED)
+        changes.append(ComponentDelta(
+            kind, component.identity, position, current_position, current_component
+        ))
+        if current_position != position:
+            changes.append(ComponentDelta(
+                ComponentDeltaKind.REORDERED, component.identity, position,
+                current_position, current_component,
+            ))
+    for position, component in enumerate(current):
+        if component.identity not in baseline_by_id:
+            changes.append(ComponentDelta(
+                ComponentDeltaKind.ADDED, component.identity, None, position, component
+            ))
+    invalid_reasons = tuple(dict.fromkeys(reasons))
+    direct = not invalid_reasons and all(
+        change.kind is ComponentDeltaKind.UNCHANGED for change in changes
+    ) and len(changes) == len(current)
+    return ContextDelta(
+        tuple(changes), baseline.components, current, direct,
+        not invalid_reasons, invalid_reasons,
+    )
+
+
+def reconstruct_exact_context(
+    baseline: EphemeralContextBaseline,
+    delta: ContextDelta,
+    *,
+    scope: object,
+) -> ReconstructionResult:
+    """Atomically reconstruct and prove equality to the fresh exact target."""
+    reasons = list(delta.invalid_reasons)
+    if baseline.scope is not scope:
+        reasons.append("scope_mismatch")
+    if baseline.components != delta.baseline_components:
+        reasons.append("delta_baseline_mismatch")
+    if not delta.exact_reconstruction_eligible:
+        return _fresh_exact_fallback(delta.current_components, reasons)
+
+    baseline_by_id = {component.identity: component
+                      for component in baseline.components}
+    change_by_id = {
+        change.identity: change.current_component
+        for change in delta.changes
+        if change.kind in (ComponentDeltaKind.CHANGED, ComponentDeltaKind.ADDED)
+    }
+    candidate: list[ExactContextComponent] = []
+    for target in delta.current_components:
+        component = change_by_id.get(target.identity, baseline_by_id.get(target.identity))
+        if component is None:
+            reasons.append("missing_reconstructed_component")
+            break
+        candidate.append(component)
+    candidate_tuple = tuple(candidate)
+    reasons.extend(validate_reconstruction(candidate_tuple, delta.current_components))
+    if reasons:
+        return _fresh_exact_fallback(delta.current_components, reasons)
+    return ReconstructionResult(
+        candidate_tuple, True, False, False, True, 100, 0, ()
+    )
+
+
+def validate_reconstruction(
+    reconstructed: tuple[ExactContextComponent, ...],
+    current_fresh_exact: tuple[ExactContextComponent, ...],
+) -> tuple[str, ...]:
+    reasons = list(_component_validation_reasons(current_fresh_exact))
+    reasons.extend(_component_validation_reasons(reconstructed))
+    if len(reconstructed) != len(current_fresh_exact):
+        reasons.append("component_count_mismatch")
+    if tuple(item.identity for item in reconstructed) != tuple(
+        item.identity for item in current_fresh_exact
+    ):
+        reasons.append("identity_sequence_mismatch")
+    for candidate, target in zip(reconstructed, current_fresh_exact):
+        if candidate.canonical_bytes != target.canonical_bytes:
+            reasons.append("canonical_byte_mismatch")
+        if candidate.content_digest != target.content_digest:
+            reasons.append("content_digest_mismatch")
+        if candidate.authority_protected != target.authority_protected:
+            reasons.append("authority_mapping_mismatch")
+    return tuple(dict.fromkeys(reasons))
+
+
+def _fresh_exact_fallback(
+    current: tuple[ExactContextComponent, ...], reasons: list[str]
+) -> ReconstructionResult:
+    available = bool(current) and not _component_validation_reasons(current)
+    fallback = current if available else ()
+    return ReconstructionResult(
+        fallback, False, available, True, available, 100 if available else 0, 0,
+        tuple(dict.fromkeys(reasons)),
+    )
