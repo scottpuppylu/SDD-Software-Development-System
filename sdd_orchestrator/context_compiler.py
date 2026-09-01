@@ -609,6 +609,66 @@ class ContextCompiler:
     def compile_optimized(self, request: StageExecutionRequest) -> CompiledContextPackage:
         return build_optimized_package(request)
 
+    def validate_m42_candidate(
+        self,
+        baseline_package: CompiledContextPackage,
+        optimized_package: CompiledContextPackage,
+        stages: dict[str, Any],
+    ) -> None:
+        """Prove a complete M4.2 candidate before the existing dispatch boundary."""
+        try:
+            validate_compiled_package(baseline_package)
+            validate_compiled_package(optimized_package)
+            if baseline_package.mode is not CompilationMode.BASELINE:
+                raise ValueError("M4.2 baseline association is not BASELINE")
+            if optimized_package.mode is not CompilationMode.OPTIMIZED:
+                raise ValueError("M4.2 candidate association is not OPTIMIZED")
+
+            scope = object()
+            baseline_exact = select_stage_candidates(
+                baseline_package.request, stages
+            )
+            current_exact = select_stage_candidates(
+                optimized_package.request, stages
+            )
+            ephemeral_baseline = build_ephemeral_baseline(
+                baseline_exact, scope=scope
+            )
+            delta = compare_baseline_to_current(
+                ephemeral_baseline, current_exact, scope=scope
+            )
+            reconstruction = reconstruct_exact_context(
+                ephemeral_baseline, delta, scope=scope
+            )
+            if (not reconstruction.reconstructed
+                    or not reconstruction.exact_match
+                    or reconstruction.used_fresh_exact
+                    or reconstruction.fresh_exact_required
+                    or reconstruction.authority_coverage_percent != 100
+                    or reconstruction.authority_byte_mismatch != 0):
+                raise ValueError("M4.2 exact reconstruction validation failed")
+
+            expected_coordinates = tuple(
+                entry.manifest_entry.component_id for entry in optimized_package.entries
+            )
+            reconstructed_coordinates = tuple(
+                component.identity.component_coordinate
+                for component in reconstruction.components
+            )
+            expected_bytes = tuple(
+                _body_bytes(entry, result=True) for entry in optimized_package.entries
+            )
+            reconstructed_bytes = tuple(
+                component.canonical_bytes for component in reconstruction.components
+            )
+            if (reconstructed_coordinates != expected_coordinates
+                    or reconstructed_bytes != expected_bytes):
+                raise ValueError("M4.2 candidate is not the complete effective input")
+        except (TypeError, ValueError) as exc:
+            raise OptimizationCompilationError(
+                "M4.2 optimized candidate preparation failed"
+            ) from exc
+
 
 def _body_bytes(entry: CompiledContextEntry, *, result: bool) -> bytes:
     body = entry.result_body if result else entry.source_body

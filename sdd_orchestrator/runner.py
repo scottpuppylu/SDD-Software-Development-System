@@ -478,8 +478,14 @@ class StageRunner:
         else:
             compiler = ContextCompiler()
             baseline_package = compiler.compile_baseline(request)
+            get_stage = getattr(self.orchestrator, "get_stage", None)
+            stages = ({request.stage_id: get_stage(request.stage_id)}
+                      if callable(get_stage) else {})
             try:
                 optimized_package = compiler.compile_optimized(request)
+                compiler.validate_m42_candidate(
+                    baseline_package, optimized_package, stages
+                )
             except OptimizationCompilationError:
                 optimized_package = None
             result = ContextDispatchCoordinator().execute(
