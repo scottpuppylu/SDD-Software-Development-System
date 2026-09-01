@@ -237,3 +237,160 @@ Deferral means these capabilities are neither required nor authorized by this mi
 These TBDs must be resolved without changing the established constraints or expanding the M4.1 reduction boundary. This document deliberately does not invent those details merely to mark the gate ready.
 
 Until the required contracts are approved, planning status is **APPROVE WITH AMENDMENTS**, and implementation readiness is **BLOCKED**.
+
+## 16. M4.2 planning authority: Stage/Task-Aware Context Selection and Baseline+Delta Reuse
+
+### 16.1 Status and problem
+
+**M4.2 planning authority is APPROVED.** This section approves planning authority only. It does not approve implementation contracts, authorize production coding, or alter the authority established in Sections 1-15.
+
+M4.1 reduced an already-selected operational component safely. M4.2 addresses the upstream selection of context and the repeated inclusion of unchanged context.
+
+### 16.2 Scope
+
+M4.2 planning scope is limited to:
+
+- deterministic stage-aware context selection;
+- task-aware selection only where explicit task identity already exists;
+- stable content-addressed identity for unchanged context;
+- ephemeral baseline plus delta assembly;
+- measurement of redundant unchanged bytes; and
+- provider-input token usage only when reliable actual schema-1.0.4 usage exists.
+
+### 16.3 Non-goals
+
+M4.2 does not authorize:
+
+- a persistent cache;
+- automatic authority truncation;
+- authority summarization;
+- semantic retrieval or ranking;
+- provider or model routing;
+- new lifecycle authority;
+- new task identity;
+- an arbitrary percentage reduction target; or
+- inferred token-savings claims.
+
+### 16.4 Context treatment model
+
+The M4.2 context treatment model consists of:
+
+- **always required**;
+- **stage-required**;
+- **task-required**;
+- **reusable unchanged**;
+- **delta-only candidate**; and
+- **fail-closed exact**.
+
+### 16.5 Authority preservation
+
+M4.2 preserves the following authority rules:
+
+- Product Requirement authority is the PRD.
+- Technical Contract authority is the Spec.
+- Implementation Decision authority is the Design.
+- Tasks cannot override authoritative artifacts.
+- Cross-domain conflicts block the affected implementation.
+- Authority coverage must equal 100%.
+- Authority byte mismatch must equal 0 wherever exact inclusion is required.
+- `UNKNOWN` and `MIXED_AUTHORITY` fail closed.
+- Summaries cannot replace authority for efficiency.
+
+### 16.6 Stable identity
+
+Stable identity must be deterministic. Later approved contracts must freeze the canonical boundary, namespace and version, digest algorithm and encoding, collision behavior, ordering, duplicate treatment, empty-versus-absent semantics, and stage/task coordinates needed to avoid aliasing.
+
+Identity establishes reuse eligibility only. It creates no persistence or lifecycle authority.
+
+### 16.7 Baseline plus delta
+
+A validated baseline plus delta must reconstruct exactly the same effective ordered provider input as fresh exact assembly.
+
+Any uncertainty, mismatch, stale identity, unsupported provider behavior, or reconstruction failure must fall back to fresh exact assembly.
+
+Local byte reduction must not be described as provider-input savings unless the provider boundary actually avoids retransmitting those unchanged bytes.
+
+### 16.8 Measurement
+
+At minimum, M4.2 evaluation must measure or evaluate:
+
+- total source-context UTF-8 bytes;
+- selected-context bytes;
+- authority bytes and coverage;
+- unchanged repeated bytes;
+- delta bytes;
+- reuse-eligible and reuse-ineligible bytes, with reasons;
+- bytes actually avoided at the provider boundary, if demonstrable;
+- authority mismatch;
+- semantic regression;
+- lifecycle regression;
+- gate regression; and
+- actual provider input tokens only from reliable schema-1.0.4 usage.
+
+Codex CLI `tokens used`, byte counts, estimates, and tokenizer estimates are not provider-token evidence.
+
+### 16.9 Activation and default
+
+The existing exact BASELINE remains the default. Any future M4.2 evaluation must be explicit opt-in. No migration or state repair may be required merely to disable optimization. Stage08 remains outside scope unless separately authorized.
+
+### 16.10 Failure and fallback
+
+No partial optimized context may be dispatched. Optimization failure cannot introduce retries, lifecycle failures, or altered provider-call cardinality. Existing authority conflicts continue to block the affected implementation.
+
+### 16.11 Telemetry
+
+No telemetry schema change is authorized. The schema remains 1.0.4. M4.2 evaluation metadata remains ephemeral, in-memory, or test-local unless separate authority later approves persistence.
+
+### 16.12 Deterministic evaluation
+
+Controlled repeated executions must cover:
+
+- stage changes;
+- task identity present and missing;
+- changed and unchanged components;
+- duplicates;
+- empty and absent inputs;
+- `UNKNOWN` and `MIXED_AUTHORITY`;
+- authority conflicts;
+- identity mismatch and collision simulation;
+- stale or missing baseline; and
+- unsupported provider reuse.
+
+The required invariants are:
+
+- effective reconstructed provider input equals fresh exact assembly;
+- authority coverage equals 100%;
+- authority mismatch equals 0;
+- semantic regression equals 0;
+- lifecycle regression equals 0; and
+- gate regression equals 0.
+
+### 16.13 Implementation blockers
+
+Exactly 10 planning blockers remain unresolved before implementation:
+
+1. **Component mapping:** complete the component inventory and always/stage/task mapping.
+2. **Stage and task semantics:** identify the authoritative stage-mapping source and existing task-identity semantics.
+3. **Authority equivalence:** define exact authority-coverage and byte-equivalence boundaries.
+4. **Identity contract:** define namespace, canonicalization, digest, collision, version, order, duplicate, empty, and absent rules.
+5. **Baseline and delta contract:** define baseline coordinates, lifetime, trust, invalidation, and atomic delta reconstruction and equivalence.
+6. **Provider-boundary proof:** prove any provider boundary where unchanged bytes can actually avoid retransmission without changing effective input.
+7. **Activation and fallback contract:** define activation, fallback, call cardinality, and default compatibility.
+8. **Evaluation contract:** define measurement boundaries, reuse reasons, controlled corpus, evidence location, and semantic-comparison rubric.
+9. **Provider-usage validity:** establish reliable schema-1.0.4 actual-usage availability and its validity test.
+10. **Persistence decision:** decide to keep evaluation metadata non-persistent, or obtain separate authority for any persistence or telemetry-schema change.
+
+### 16.14 Non-authoritative suggested implementation slices
+
+Until the blockers in Section 16.13 are resolved, the following suggested slices are **NON-AUTHORITATIVE**:
+
+- component inventory plus stage/task selection;
+- stable identity plus unchanged eligibility;
+- ephemeral baseline/delta reconstruction;
+- provider-boundary reuse evaluation, if supported;
+- measurement and evaluation; and
+- opt-in integration and regression closure.
+
+**M4.2 IMPLEMENTATION STATUS: BLOCKED**
+
+Coding must not begin until all Section 16 planning blockers required for the affected implementation slice are resolved through separately approved contracts/planning authority.
