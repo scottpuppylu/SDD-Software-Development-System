@@ -173,61 +173,148 @@ For this decision brief and the current MVP boundary:
 
 ### 1. Idea intake
 
+`DECISION_STATUS = APPROVED`
+
 What may a user provide as the initial idea (for example, plain language, files, or references), how little information is acceptable, and should SDD respond to material ambiguity by asking focused questions and pausing the affected work rather than guessing?
 
 ### 2. Requirement clarification
+
+`DECISION_STATUS = APPROVED`
 
 Which product choices may AI tentatively infer for review, which must always remain unresolved until a human answers, and what plain-language condition means the idea is clear enough to proceed into specification?
 
 ### 3. User-visible development flow
 
+`DECISION_STATUS = APPROVED`
+
 Which parts of the governed chain must the MVP expose to users, and must users be able to pause/resume, inspect current status and unresolved items, and reject or request revision of a proposed decision?
 
 ### 4. Human Decision
+
+`DECISION_STATUS = APPROVED`
 
 Which categories always need explicit human approval, what should users see while work is waiting, and may a user reverse a current approval with affected later work visibly returned for review?
 
 ### 5. AI-assisted coding
 
+`DECISION_STATUS = APPROVED`
+
 What user-visible result must coding produce, and if coding cannot finish or goes outside approved scope, must SDD stop, preserve truthful progress, explain the problem, and offer retry, revision, or escalation without claiming completion?
 
 ### 6. Testing and verification
+
+`DECISION_STATUS = APPROVED`
 
 What minimum testing/verification summary must users receive, what must it say when tests fail or evidence is incomplete, and which claims—such as complete, verified, ready, released, or safe—must be forbidden until their governing decisions actually permit them?
 
 ### 7. Git and traceability
 
+`DECISION_STATUS = APPROVED`
+
 What must a non-programmer be able to see or rely on about the current version, changes, checkpoints, decision history, and links from goals through verification, while leaving repository mechanics to later technical and design authority?
 
 ### 8. Errors and recovery
+
+`DECISION_STATUS = APPROVED`
 
 When a stage, tool, AI service, or operation fails, should SDD preserve completed work, identify the affected point, avoid unsafe automatic continuation, and offer understandable retry, alternate-path, revision, or human-help choices—and which of these are mandatory for MVP?
 
 ### 9. Security and safety
 
+`DECISION_STATUS = APPROVED`
+
 What minimum user-facing protections must the MVP promise for sensitive information, destructive actions, unauthorized scope, security concerns, and conflicting authority, and which situations must always be blocked for explicit human action?
 
 ### 10. Maintenance and modification
+
+`DECISION_STATUS = APPROVED`
 
 How should users request changes to an existing app, what approved behavior or data must SDD attempt to preserve, and what regression evidence or warning is required before the change may be described as complete?
 
 ### 11. Remote and LINE interaction
 
+`DECISION_STATUS = APPROVED`
+
 May the MVP use a local or otherwise non-LINE interaction while providing the same essential submit, continue, status, decision, approve, and reject journey, or is any remote capability required now? Which LINE/cloud details should remain future TBDs?
 
 ### 12. MVP completion
 
+`DECISION_STATUS = APPROVED`
+
 What observable end-to-end demonstration proves the SDD product MVP is complete, distinct from the completion of one generated app, and must that demonstration include intake, clarification, governed decisions, coding, verification, traceability, failure/status reporting, and a maintenance change?
 
-## 13. PRD readiness status
+## 13. Approved Product Requirement Decisions
 
-The approved proposal is sufficient to frame the PRD, but not sufficient to establish complete `PRODUCT_REQUIREMENT` authority. The 12 grouped project-authority topics above contain product choices that materially determine MVP behavior and must be answered before an accurate PRD can be drafted and later approved. Matters listed as permitted TBDs may remain unresolved only if they do not block those product choices.
+The following CURRENT `PRODUCT_REQUIREMENT` decisions are approved by project authority. They authorize drafting the PRD baseline but do not themselves create the formal authority artifact.
 
-This brief does not authorize a PRD draft. The next step is explicit project-authority decisions on the questions above. Recovery Gate and Stage09 remain unevaluated.
+### A. Idea intake
+
+The MVP accepts highly incomplete input, including a vague one-sentence idea, plain-language requirements, documents, images or UI references, website or system references, and an existing program or app to modify. SDD is responsible for clarifying requirements from incomplete ideas.
+
+### B. AI inference boundary
+
+AI may infer possibilities, identify likely omissions, propose options, recommend a preferred option, and explain its reasoning. An AI recommendation is not authority: AI must not treat an important inferred product choice as approved or resolve material ambiguity affecting functionality, scope, or user behavior without required Human Decision.
+
+### C. Requirement readiness
+
+Requirements may proceed when the problem, target users, core MVP scope, and important behaviors or flows are clear; no unresolved critical exception or risk remains; no material scope-changing TBD remains; and project authority has approved the current requirement baseline. Non-critical implementation or technical details may remain for Spec or Design.
+
+### D. User-visible development flow
+
+MVP users must see the current stage, completed work, current work, next step, `BLOCKED` or `INCOMPLETE` state, pending Human Decision, approved and unapproved authority, and whether execution may continue. The MVP must provide product-level actions equivalent to `PAUSE`, `RESUME`, `REQUEST_REVISION`, `REJECT_PROPOSAL`, and `APPROVE_DECISION`.
+
+### E. Human Decision
+
+Explicit Human Decision is required for material product-requirement or MVP-scope changes, formal authority-artifact approval, upstream authority conflicts requiring a choice, high-risk or destructive operations, new implementation authorization, release or deployment decisions, and every lifecycle-defined Human Decision. Affected work pauses while a decision is pending and cannot be completed before retrospective approval. Revised or withdrawn approval requires affected downstream artifacts and work to be identified and re-reviewed or re-run.
+
+### F. AI-assisted coding product behavior
+
+Successful coding remains within approved scope, reports changes, preserves Git traceability, performs applicable verification, and never claims unverified work complete. On failure or an authority overrun, affected work stops while valid progress is preserved; the boundary or failure is reported truthfully; and an appropriate retry, revision, remediation, escalation, or Human Decision route is provided. Out-of-authority work follows `STOP -> REPORT -> REQUEST AUTHORITY / HUMAN DECISION`.
+
+### G. Testing and verification
+
+Users must be able to determine what verification ran, its `PASS`, `FAIL`, or `NOT RUN` state, which requirements or behaviors have evidence, which lack evidence, known regression risk, and whether the state may truthfully be called complete, verified, or ready. Incomplete tests cannot mean verified, partial PASS cannot mean fully complete, absence of evidence cannot mean safe, and a non-PASS Stage09 cannot mean release-ready.
+
+### H. Error, security, and recovery
+
+When a stage, tool, AI service, command, test, Git operation, or security-related operation fails, the MVP preserves valid completed work, identifies the failure point, stops unsafe continuation, explains the issue understandably, and provides applicable retry, alternate, revision, or Human Decision routes. High-risk, destructive, security, and authority-conflict conditions block rather than being silently bypassed.
+
+### I. Maintenance and modification
+
+For an existing program or app, the MVP identifies affected existing behavior, preserves behavior and data not requested to change where applicable, performs applicable regression verification, and explicitly warns when non-regression cannot be established. Success of the requested new behavior alone does not prove the overall modification complete.
+
+### J. Remote MVP boundary
+
+LINE and cloud deployment are not required for the current MVP. A local CLI or other suitable interface is acceptable when the essential journey supports submitting a request, continuing or resuming, inspecting status, receiving Human Decision, and approving, rejecting, or revising.
+
+### K. Future LINE and remote capability
+
+The intended future remote or LINE experience supports new ideas and change requests, stage and status inspection, pause and continue, Human Decision requests, approve, reject, and request revision actions, plus errors, `BLOCKED` state, test summaries, and verification summaries. Webhook provider, hosting, message format, authentication, and related implementation choices remain Technical or Design authority.
+
+### L. SDD MVP completion
+
+MVP completion requires an observable end-to-end demonstration of `IDEA -> requirement clarification -> approved product requirements -> specification -> design -> task decomposition -> Human Decision -> authorized AI coding -> testing / verification -> Git traceability -> truthful status/failure handling -> maintenance change -> regression verification`, not merely one generated app. The demonstration must show that authority is not bypassed, AI does not independently decide product requirements, Human Decision governs execution, blockers stop affected work, unverified work is not called complete, and maintenance changes receive regression protection.
+
+## 14. PRD readiness status
+
+Project authority has approved the 12 product-requirement decisions above. The decisions are complete enough to authorize drafting `docs/PRD.md`, but the draft must still be reviewed and approved before it becomes current formal `PRODUCT_REQUIREMENT` authority. Matters listed as permitted TBDs may remain unresolved only if they do not block the approved product choices.
+
+`PRD_DRAFT_AUTHORIZED = YES` does not mean `PRODUCT_REQUIREMENT` authority is approved. `docs/PRD.md` must still follow:
+
+```text
+DRAFT
+-> PROJECT_AUTHORITY_REVIEW
+-> APPROVED_CURRENT_AUTHORITY
+```
+
+Recovery Gate and Stage09 remain unevaluated.
 
 ```text
 CURRENT_PRD_DECISION_BRIEF =
 COMPLETE
+
+PRODUCT_REQUIREMENT_DECISIONS_COMPLETE =
+YES
 
 PRODUCT_REQUIREMENT_AUTHORITY_COMPLETE =
 NO
@@ -254,8 +341,8 @@ STAGE09_DECISION =
 NOT_EVALUATED
 
 PRD_DRAFT_AUTHORIZED =
-NO
+YES
 
 NEXT_STEP =
-PROJECT_AUTHORITY_PRODUCT_REQUIREMENT_DECISIONS
+CURRENT_PRD_DRAFT
 ```
