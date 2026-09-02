@@ -628,6 +628,68 @@ stages:
         release_authorization: false
         next: RELEASE_REMEDIATION
 
+PRE_EXISTING_IMPLEMENTATION_RECOVERY:
+  authority_domain: IMPLEMENTATION_RECOVERY_DECISION
+  decision_artifact: "docs/handoff/implementation-recovery-gate-report.md"
+  gate_name: CURRENT_IMPLEMENTATION_RECOVERY_GATE
+  eligibility:
+    all:
+      - "implementation materially predates current recovery authority"
+      - "historical project-specific Stage07 decision == NOT_FOUND"
+      - "project-authority recovery approval == true"
+      - "retroactive Stage07 PASS == FORBIDDEN"
+      - "retroactive implementation authorization == FORBIDDEN"
+      - "recovery is for pre-existing implementation authority/conformance/closure"
+      - "recovery is not ordinary/new development"
+      - "recovery does not authorize new implementation"
+  required_inputs_before_gate_evaluation:
+    approved_current_authority_artifacts:
+      approval_requirement: "Each artifact must be explicitly approved current authority; existence alone is insufficient."
+      files:
+        - "docs/proposal.md"
+        - "docs/PRD.md"
+        - "docs/spec.md"
+        - "docs/Design.md"
+        - "AGENTS.md"
+        - "tasks.md"
+    approved_lifecycle_recovery_authority:
+      - "docs/project/pre-existing-implementation-recovery-amendment-draft.md"
+  result_vocabulary:
+    - PASS
+    - FAIL
+    - INCOMPLETE
+  result_semantics:
+    PASS:
+      means:
+        - "recovery prerequisites satisfied"
+        - "Stage09 conformance-verification entry permitted"
+      does_not_mean:
+        - "historical Stage07 PASS"
+        - "historical Stage08 authorization"
+        - "implementation authorization"
+        - "implementation conformance"
+        - "all tasks DONE"
+        - "tests PASS"
+        - "Stage09 PASS"
+        - "Stage10 authorization"
+        - "release authorization"
+      stage09_verification_entry: true
+      implementation_authorization: false
+      next: "09"
+    FAIL:
+      stage09_verification_entry: false
+      implementation_authorization: false
+      next: AUTHORITY_REMEDIATION
+    INCOMPLETE:
+      stage09_verification_entry: false
+      implementation_authorization: false
+      next: AUTHORITY_REMEDIATION
+  stage08_relationship:
+    shortcut_to_stage08: false
+    implementation_authorization: false
+  implementation_gap_after_stage09:
+    requirement: "New implementation must use valid current authority and the normal Stage07 -> Stage08 authorization path before execution."
+
 routers:
   REMEDIATION_ROUTER:
     strategy: "CLASSIFY_BY_AUTHORITY_DOMAIN_AND_FAILURE_TYPE"
@@ -703,9 +765,18 @@ rerun_rules:
       upstream_authoring_rerun_required: false
 
 completion_definition:
-  minimum:
-    - "stage_07 == PASS"
-    - "all_required_stage_08_tasks == DONE"
+  provenance:
+    exactly_one_of:
+      NORMAL_PROVENANCE:
+        - "stage_07 == PASS"
+      RECOVERY_PROVENANCE:
+        - "pre_existing_implementation_recovery == APPROVED"
+        - "historical_stage_07_decision == NOT_FOUND"
+        - "current_implementation_recovery_gate == PASS"
+        - "retroactive_stage_07_pass == FORBIDDEN"
+        - "retroactive_implementation_authorization == FORBIDDEN"
+  shared_minimum:
+    - "all applicable required task/completion conditions are DONE/satisfied"
     - "stage_09 == PASS"
     - "stage_10 in [READY, READY_WITH_KNOWN_ISSUES]"
   optional_if_in_scope:

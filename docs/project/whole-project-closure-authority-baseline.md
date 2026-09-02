@@ -38,12 +38,13 @@ The sole purpose of this baseline is to authorize evaluation of whether the curr
 
 This current and prospective authority must not be represented as authority that existed during Phase 01, Phase 02, or Phase 03.
 
-## 5. Authorized next lifecycle actions
+## 5. Superseded direct-Stage09 authority and current lifecycle actions
 
-This baseline authorizes:
+The earlier version of this baseline stated direct Stage09 authorization. That historical statement remains recorded here as a fact about the former baseline, but that portion is prospectively superseded and is no longer current authority. Current lifecycle authority requires completion and explicit approval of the current authority package followed by evaluation of `CURRENT_IMPLEMENTATION_RECOVERY_GATE`.
 
-1. Stage 09 whole-project verification against current authority and current repository evidence.
-2. If and only if Stage 09 returns `PASS`, Stage 10 handoff and release-readiness evaluation.
+If and only if the Recovery Gate returns `PASS`, Stage09 conformance verification may begin. If and only if Stage09 then returns `PASS`, Stage10 handoff and release-readiness evaluation may begin.
+
+This correction does not create historical Stage07 `PASS`, does not retrospectively authorize historical Stage08, and authorizes no new implementation. The Recovery Gate, Stage09, and Stage10 are all `NOT_EVALUATED`; release and deployment remain unauthorized.
 
 Neither decision is predetermined. Stage 09 retains the repository-native result vocabulary `PASS`, `FAIL`, and `INCOMPLETE`. Stage 10 entry continues to require Stage 09 `PASS`, and its decision vocabulary remains `READY`, `READY_WITH_KNOWN_ISSUES`, and `BLOCKED`.
 
@@ -69,16 +70,18 @@ The current closure sequence is frozen as:
 
 ```text
 CURRENT_CLOSURE_BASELINE
--> STAGE09_VERIFICATION
+-> CURRENT_AUTHORITY_PACKAGE_COMPLETION
+-> CURRENT_IMPLEMENTATION_RECOVERY_GATE
+-> if PASS: STAGE09_VERIFICATION
 -> if PASS: STAGE10_HANDOFF_RELEASE_DECISION
 -> project/release closure only according to repository-native lifecycle rules
 ```
 
-Stage 09 must use the existing repository authority model and current repository evidence. Stage 10 entry still requires Stage 09 `PASS`. This baseline does not alter `.sdd/system.yaml` or `.sdd/stages.yaml`, and it does not change their lifecycle semantics or minimum completion definition.
+Stage09 must use the existing repository authority model and current repository evidence. Stage10 entry still requires Stage09 `PASS`. The lifecycle recovery amendment and lifecycle YAML define distinct recovery provenance without changing normal Stage07 or Stage08 semantics.
 
 ## 8. Final authority decision
 
-The Whole-Project Closure Authority Baseline is established for current and prospective closure evaluation only. The authorized next project step is Stage 09 whole-project verification. Stage 10 remains conditionally authorized only after a Stage 09 `PASS`; release and project completion remain undecided.
+The Whole-Project Closure Authority Baseline is established for current and prospective closure evaluation only. The next project step is current authority package completion. Recovery Gate and Stage09 results remain independent and undecided; Stage10 remains conditionally evaluable only after Stage09 `PASS`. Release and project completion remain undecided.
 
 WHOLE_PROJECT_CLOSURE_AUTHORITY_BASELINE =
 ESTABLISHED
@@ -113,8 +116,23 @@ NOT_AUTHORIZED
 NEW_IMPLEMENTATION_AUTHORIZED =
 NO
 
-STAGE09_VERIFICATION_AUTHORIZED =
+LIFECYCLE_RECOVERY_MODEL =
+PRE_EXISTING_IMPLEMENTATION_RECOVERY
+
+DIRECT_STAGE09_AUTHORIZATION =
+SUPERSEDED
+
+CURRENT_AUTHORITY_PACKAGE_REQUIRED =
 YES
+
+CURRENT_IMPLEMENTATION_RECOVERY_GATE_REQUIRED =
+YES
+
+CURRENT_IMPLEMENTATION_RECOVERY_GATE_RESULT =
+NOT_EVALUATED
+
+STAGE09_VERIFICATION_AUTHORIZED =
+CONDITIONAL_ON_RECOVERY_GATE_PASS
 
 STAGE09_RESULT_PREDETERMINED =
 NO
@@ -132,4 +150,4 @@ PROJECT_COMPLETE_DECLARED =
 NO
 
 NEXT_PROJECT_STEP =
-STAGE09_WHOLE_PROJECT_VERIFICATION
+CURRENT_AUTHORITY_PACKAGE_COMPLETION

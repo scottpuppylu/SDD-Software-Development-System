@@ -62,6 +62,9 @@ authority_domains:
   PRE_IMPLEMENTATION_GATE_DECISION:
     authoritative_artifact: docs/handoff/pre-implementation-gate-report.md
     owner_stage: '07'
+  IMPLEMENTATION_RECOVERY_DECISION:
+    authoritative_artifact: docs/handoff/implementation-recovery-gate-report.md
+    owner_stage: RECOVERY
   VERIFICATION_DECISION:
     authoritative_artifact: docs/handoff/verification-report.md
     owner_stage: 09
