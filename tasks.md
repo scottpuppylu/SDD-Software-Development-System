@@ -34,6 +34,7 @@ Authority is domain-specific and non-linear. A discovered cross-domain conflict 
   - `G-01, G-02, G-05 -> FR-06, FR-11, NFR-01 -> AC-06, AC-11, AC-23 -> SPEC-001 -> DES-008 -> TASK-001`
   - `G-01, G-04, G-05 -> FR-11, FR-12, NFR-03 -> AC-11, AC-12, AC-25 -> SPEC-007 -> DES-008 -> TASK-001`
 - **Dependencies:** None.
+- **Allowed files:** `sdd_orchestrator/governed_state.py`, `tests/test_governed_state.py`.
 - **Allowed implementation scope:** Governed state/persistence responsibility; repository-native, reviewable records; Git/version identity references; atomic state publication; and a derived, rebuildable link index. No concrete database or full repository layout is selected by this task.
 - **Required behavior/outcome:** Persist lifecycle position, authority references/status, Human Decision references, affected scope, task/execution state when owned, verification references, failures, invalidations, and Recovery Gate provenance. Extend stable links through `G -> FR/NFR/EC -> AC -> SPEC -> DES -> TASK`, retain source/target identity and affected scope, support forward and backward navigation, and reconstruct current state without chat memory. Failed writes must not advance the visible state.
 - **Preservation obligations:** Preserve upstream identifiers and artifact ownership; append later links without rewriting upstream authority; retain current version/change/checkpoint and governing-decision identity; keep any projection or cache disposable and rebuildable from canonical repository/Git-backed records.
