@@ -7,7 +7,7 @@ lifecycle:
   current_stage: '07'
   current_stage_name: PRE_IMPLEMENTATION_GATE
   last_completed_stage: '06'
-  next_action: REMEDIATION_ROUTER
+  next_action: RERUN_STAGE
 stages:
   '01':
     status: DONE
@@ -28,8 +28,8 @@ stages:
     status: DONE
     result: success
   '07':
-    status: DONE
-    result: FAIL
+    status: IN_PROGRESS
+    result: null
   08:
     status: TODO
     result: null
@@ -57,7 +57,7 @@ artifacts:
   handoff_report: null
 git:
   branch: telemetry-measurement-v2
-  head_commit: b9a12971c2cac8177dea1de7a49d7dfdc57c874e
+  head_commit: e7bb32cd92aaaaf93656b51a7cc8936a1471264d
   last_verified_commit: null
 provenance:
   current_authority_package:
