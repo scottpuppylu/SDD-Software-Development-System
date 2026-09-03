@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
+import re
 import subprocess
 
 import yaml
@@ -140,13 +141,25 @@ class GitRepository:
 
         root = self.repo_root
         normalized: list[str] = []
+        evidence_paths: list[str] = []
         for rel in paths:
             target = (root / rel).resolve()
             try:
-                target.relative_to(root)
+                resolved_rel = target.relative_to(root)
             except ValueError as exc:
                 raise GitRuntimeError(f"Checkpoint path escapes repository: {rel}") from exc
-            normalized.append(Path(rel).as_posix())
+            normalized_rel = Path(rel).as_posix()
+            normalized.append(normalized_rel)
+            evidence_name = re.fullmatch(
+                rf"\d{{8}}T\d{{6}}\.\d{{6}}Z-{re.escape(task_id)}\.json",
+                resolved_rel.name,
+            )
+            if (
+                resolved_rel.parent == Path(".sdd/evidence")
+                and evidence_name
+                and target.is_file()
+            ):
+                evidence_paths.append(normalized_rel)
 
         before = self.snapshot()
         unrelated = [p for p in before.dirty_paths if not self._covered_by_paths(p, normalized)]
@@ -155,7 +168,11 @@ class GitRepository:
                 "Unrelated dirty paths exist; refusing checkpoint: " + ", ".join(unrelated)
             )
 
-        self._run(["add", "--", *normalized])
+        ordinary_paths = [path for path in normalized if path not in evidence_paths]
+        if ordinary_paths:
+            self._run(["add", "--", *ordinary_paths])
+        for evidence_path in evidence_paths:
+            self._run(["add", "-f", "--", evidence_path])
         staged = self._run(["diff", "--cached", "--name-only"]).stdout.splitlines()
         if not staged:
             raise GitRuntimeError("No staged changes for checkpoint")

@@ -111,6 +111,18 @@ class M6CodexAdapterTests(unittest.TestCase):
 
     def test_successful_task_verifies_and_checkpoints(self):
         self._write_tasks('''\n### T001 — Add calculator\n- **Status:** TODO\n- **Traceability:** FR-001 → SPEC-001 → DES-001\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n''')
+        (self.repo / ".gitignore").write_text(
+            ".sdd/evidence/\nignored/\n", encoding="utf-8"
+        )
+        run_git(self.repo, "add", ".gitignore")
+        run_git(self.repo, "commit", "-m", "configure ignored runtime evidence")
+        unrelated_ignored = self.repo / "ignored/unrelated.txt"
+        unrelated_ignored.parent.mkdir()
+        unrelated_ignored.write_text("must remain ignored\n", encoding="utf-8")
+        self.assertEqual(
+            run_git(self.repo, "check-ignore", ".sdd/evidence/probe-T001.json"),
+            ".sdd/evidence/probe-T001.json",
+        )
         def callback(repo, prompt):
             (repo / "src").mkdir(exist_ok=True)
             (repo / "tests").mkdir(exist_ok=True)
@@ -129,6 +141,23 @@ class M6CodexAdapterTests(unittest.TestCase):
         subject = run_git(self.repo, "log", "-1", "--pretty=%s")
         self.assertIn("[T001]", subject)
         self.assertIn("do not commit", fake.prompts[0].lower())
+        checkpoint_paths = run_git(
+            self.repo, "show", "--name-only", "--pretty=format:", result.checkpoint_commit
+        ).splitlines()
+        evidence_paths = [
+            path for path in checkpoint_paths
+            if path.startswith(".sdd/evidence/") and path.endswith("-T001.json")
+        ]
+        self.assertEqual(len(evidence_paths), 1)
+        self.assertEqual(
+            set(checkpoint_paths),
+            {"src/calculator.py", "tests/test_calculator.py", evidence_paths[0]},
+        )
+        self.assertTrue(unrelated_ignored.is_file())
+        self.assertNotIn("ignored/unrelated.txt", checkpoint_paths)
+        self.assertEqual(
+            run_git(self.repo, "ls-files", "--", "ignored/unrelated.txt"), ""
+        )
 
     def test_checkpoint_failure_does_not_report_task_done_or_advance_recovery_state(self):
         self._write_tasks('''
