@@ -140,6 +140,13 @@ class Stage08CodexRunner:
         for cmd in task.verification_commands:
             VerificationCommandPolicy.argv(cmd)
 
+    @staticmethod
+    def safety_preflight(
+        request: path_scope_policy.SafetyPreflightRequest,
+    ) -> path_scope_policy.SafetyPreflightResult:
+        """Central, non-bypassable safety decision for protected operations/resume."""
+        return path_scope_policy.safety_preflight(request)
+
     def build_prompt(self, task: AtomicTask) -> str:
         trace = ", ".join(task.traceability) if task.traceability else "Use the task's explicit references in tasks.md."
         allowed = "\n".join(f"- {p}" for p in task.allowed_paths)

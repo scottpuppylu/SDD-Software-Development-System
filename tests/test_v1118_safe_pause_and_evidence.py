@@ -10,6 +10,7 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
 
 import yaml
 
@@ -24,6 +25,9 @@ from sdd_orchestrator.evidence_writer import (
     EvidenceRegistry,
     InvalidEvidence,
     qualification_inputs,
+)
+from sdd_orchestrator.path_scope_policy import (
+    SafetyAuthorization, SafetyBlocker, SafetyPreflightRequest, safety_preflight,
 )
 
 SOURCE = Path(__file__).resolve().parents[1]
@@ -301,6 +305,62 @@ class T008EvidenceRegistryTests(unittest.TestCase):
     def test_sensitive_evidence_reference_is_rejected(self):
         with self.assertRaises(InvalidEvidence):
             self.record(evidence_reference="api_key=do-not-store")
+
+
+class T011SafetyInterlockTests(unittest.TestCase):
+    def request(self, **changes):
+        values = dict(
+            operation="delete cache", risk_level="DESTRUCTIVE", target="cache/item-7",
+            scope=("cache/item-7",), actor="operator-1", authority_identity="AUTH-v2",
+            snapshot_identity="git:abc", authorization=None,
+        )
+        values.update(changes)
+        return SafetyPreflightRequest(**values)
+
+    def authorization(self, **changes):
+        values = dict(reference="HD-011", target="cache/item-7", scope=("cache/item-7",),
+                      actor="operator-1", authority_identity="AUTH-v2", snapshot_identity="git:abc")
+        values.update(changes)
+        return SafetyAuthorization(**values)
+
+    def test_protected_operation_requires_exact_current_explicit_authorization(self):
+        self.assertEqual(safety_preflight(self.request()).status, "BLOCKED")
+        eligible = safety_preflight(self.request(authorization=self.authorization()))
+        self.assertEqual(eligible.status, "ELIGIBLE")
+        self.assertTrue(eligible.safe_to_continue)
+        for authorization in (
+            self.authorization(target="cache/other"),
+            self.authorization(actor="intruder"),
+            self.authorization(snapshot_identity="git:old"),
+            self.authorization(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)),
+        ):
+            with self.subTest(authorization=authorization):
+                self.assertEqual(safety_preflight(self.request(authorization=authorization)).status, "BLOCKED")
+
+    def test_conflict_resume_is_blocked_and_routes_without_sensitive_payload(self):
+        blocker = SafetyBlocker(
+            reference="secret=do-not-leak", category="AUTHORITY_CONFLICT", severity="HIGH",
+            affected_scope=("cache/item-7",), owner="Stage03", required_decision="resolve SPEC conflict",
+        )
+        result = safety_preflight(self.request(
+            authorization=self.authorization(), blockers=(blocker,), resume_blocked_scope=True,
+        ))
+        self.assertEqual(result.status, "BLOCKED")
+        self.assertEqual(result.route, "ROUTE_TO_AUTHORITATIVE_OWNER")
+        self.assertEqual(result.blocker_references, ("[REDACTED_REFERENCE]",))
+        self.assertNotIn("do-not-leak", repr(result))
+
+    def test_unaffected_scope_requires_explicit_nonoverlapping_dependency_finding(self):
+        denied = safety_preflight(self.request(
+            authorization=self.authorization(), independent_scope=("docs",),
+        ))
+        self.assertEqual(denied.status, "BLOCKED")
+        allowed = safety_preflight(self.request(
+            authorization=self.authorization(), independent_scope=("docs",),
+            dependency_finding_reference="DEP-011",
+        ))
+        self.assertEqual(allowed.status, "ELIGIBLE")
+        self.assertEqual(allowed.independent_scope, ("docs",))
 
 
 if __name__ == "__main__":
