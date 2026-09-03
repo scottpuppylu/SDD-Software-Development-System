@@ -87,6 +87,8 @@ When sandbox and host capabilities differ, the agent MUST report the limitation 
 
 Normal new implementation MUST NOT begin unless Stage07 has returned a valid `PASS` with implementation authorization.
 
+Only when a defect in the SDD governance/runtime infrastructure prevents normal Stage07 reevaluation, explicit Project Authority approval MAY authorize a specifically named and bounded bootstrap remediation limited to that infrastructure and directly necessary regression verification separately authorized by the approval. The approval MUST explicitly name every permitted file, and the remediation MUST be independently validated and checkpointed. This exception is not a Stage07 `PASS`, does not create Stage08 or implementation authorization, and does not authorize application, product, or feature implementation. It MUST NOT permit scope expansion, unrelated repair, destructive operations, or bypass of authoritative owners. After remediation, normal Stage07 MUST be rerun, and only a valid Stage07 `PASS` may authorize normal Stage08 implementation. Historical gate and evidence facts remain immutable and MUST NOT be rewritten to manufacture authority.
+
 Stage08 MUST receive a sealed authorization envelope that identifies:
 
 - approved current Product Requirement, Technical Contract, Implementation Decision, and Agent Repository Governance authority;
