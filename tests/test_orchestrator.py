@@ -5,6 +5,10 @@ import unittest
 import yaml
 
 from sdd_orchestrator.core import (
+    AUTHORITY_STATUSES,
+    PROTECTED_AUTHORITY_ARTIFACTS,
+    AuthorityEntry,
+    AuthorityRegistry,
     LifecycleAggregate,
     LifecycleGovernor,
     LifecycleInvariantError,
@@ -92,6 +96,85 @@ class OrchestratorTests(unittest.TestCase):
         )
         self.assertEqual(route["owner_stages"], ["02", "03"])
         self.assertTrue(route["human_decision_required"])
+
+
+class AuthorityRegistryTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Path(self.tmp.name) / "conflicts.yaml"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def entry(self, status="APPROVED_CURRENT_AUTHORITY", **changes):
+        values = dict(domain="PRODUCT_REQUIREMENT", scope=("T005",), source="docs/PRD.md", version="prd-v1", status=status, approved=status == "APPROVED_CURRENT_AUTHORITY")
+        values.update(changes)
+        return AuthorityEntry(**values)
+
+    def test_all_registry_statuses_are_explicit_and_existence_is_not_authority(self):
+        self.assertEqual(AUTHORITY_STATUSES, {"ABSENT", "DRAFT", "APPROVED_CURRENT_AUTHORITY", "STALE_AFFECTED", "CONFLICTING"})
+        for status in AUTHORITY_STATUSES - {"APPROVED_CURRENT_AUTHORITY"}:
+            with self.subTest(status=status):
+                result = AuthorityRegistry((self.entry(status, version=None if status == "ABSENT" else "v1"),)).resolve("PRODUCT_REQUIREMENT", ("T005",))
+                self.assertFalse(result.approved)
+                self.assertEqual(result.affected_scope, ("T005",))
+                self.assertTrue(result.permitted_route.startswith("ROUTE_TO_STAGE_02"))
+
+    def test_configured_mapping_and_domain_scoped_resolution(self):
+        registry = AuthorityRegistry((self.entry(),))
+        result = registry.resolve("PRODUCT_REQUIREMENT", ("T005", "T099"))
+        self.assertEqual(PROTECTED_AUTHORITY_ARTIFACTS["PRODUCT_REQUIREMENT"], ("02", "docs/PRD.md"))
+        self.assertEqual((result.owner_stage, result.source, result.version), ("02", "docs/PRD.md", "prd-v1"))
+        self.assertEqual(result.affected_scope, ("T005",))
+        self.assertEqual(result.unaffected_scope, ("T099",))
+
+    def test_stale_dependency_blocks_only_proven_affected_scope(self):
+        entry = self.entry("STALE_AFFECTED", scope=("T005",), dependencies=("T006",))
+        registry = AuthorityRegistry((entry,))
+        result = registry.resolve("PRODUCT_REQUIREMENT", ("T005", "T006", "T099"))
+        self.assertEqual(result.affected_scope, ("T005", "T006"))
+        self.assertEqual(result.unaffected_scope, ("T099",))
+
+    def test_wrong_source_cannot_override_configured_artifact_mapping(self):
+        entry = self.entry(source="docs/spec.md")
+        result = AuthorityRegistry((entry,)).resolve("PRODUCT_REQUIREMENT", ("T005",))
+        self.assertFalse(result.approved)
+        self.assertEqual(result.unresolved_condition, "out-of-scope-authority-source")
+
+    def test_missing_and_ambiguous_authority_block_and_persist(self):
+        registry = AuthorityRegistry(conflict_store=self.store)
+        missing = registry.resolve("TECHNICAL_CONTRACT", ("T005",))
+        self.assertEqual(missing.unresolved_condition, "missing-authority")
+        ambiguous = AuthorityRegistry((self.entry(), self.entry(version="prd-v2")), conflict_store=self.store).resolve("PRODUCT_REQUIREMENT", ("T005",))
+        self.assertEqual(ambiguous.unresolved_condition, "ambiguous-current-version")
+        self.assertEqual(len(AuthorityRegistry(conflict_store=self.store).conflicts()), 2)
+
+    def test_cross_domain_conflict_records_four_steps_and_minimum_disclosure(self):
+        registry = AuthorityRegistry(conflict_store=self.store)
+        record = registry.record_cross_domain_conflict("AUTH-1", ("PRODUCT_REQUIREMENT", "TECHNICAL_CONTRACT"), ("T005",), condition="contract-mismatch", safe_references=("docs/PRD.md#AC-04", "docs/spec.md#SPEC-004"))
+        self.assertEqual(record.protocol, ("DETECT", "REPORT", "BLOCK", "ROUTE_TO_AUTHORITATIVE_OWNER"))
+        self.assertEqual(record.owner_stages, ("02", "03"))
+        persisted = registry.conflicts()[0]
+        self.assertNotIn("secret", repr(persisted))
+        with self.assertRaisesRegex(LifecycleInvariantError, "cannot self-clear"):
+            registry.record_cross_domain_conflict("AUTH-1", ("PRODUCT_REQUIREMENT", "TECHNICAL_CONTRACT"), ("T005",), condition="resolved", safe_references=("safe",))
+
+    def test_global_precedence_and_gate_substitutions_are_rejected(self):
+        with self.assertRaisesRegex(LifecycleInvariantError, "precedence"):
+            AuthorityRegistry.reject_global_precedence()
+        for result, flag, expected in (("PASS", True, True), ("PASS", False, False), ("FAIL", True, False), (None, True, False)):
+            self.assertEqual(AuthorityRegistry.normal_implementation_authorized(stage07_result=result, implementation_authorization=flag), expected)
+
+    def test_invalid_approval_freshness_and_status_combinations_are_rejected(self):
+        invalid = (
+            dict(status="DRAFT", approved=True),
+            dict(status="APPROVED_CURRENT_AUTHORITY", approved=True, fresh=False),
+            dict(status="APPROVED_CURRENT_AUTHORITY", approved=True, version=None),
+            dict(status="WITHDRAWN", approved=False),
+        )
+        for changes in invalid:
+            with self.subTest(changes=changes), self.assertRaises(LifecycleInvariantError):
+                self.entry(**changes)
 
 
 class MemoryLifecycleState:

@@ -20,6 +20,162 @@ class LifecycleInvariantError(SDDOrchestratorError):
 
 
 LIFECYCLE_CONDITIONS = {"PAUSED", "BLOCKED", "INCOMPLETE"}
+AUTHORITY_STATUSES = {
+    "ABSENT",
+    "DRAFT",
+    "APPROVED_CURRENT_AUTHORITY",
+    "STALE_AFFECTED",
+    "CONFLICTING",
+}
+
+PROTECTED_AUTHORITY_ARTIFACTS = {
+    "PRODUCT_INTENT": ("01", "docs/proposal.md"),
+    "PRODUCT_REQUIREMENT": ("02", "docs/PRD.md"),
+    "TECHNICAL_CONTRACT": ("03", "docs/spec.md"),
+    "IMPLEMENTATION_DECISION": ("04", "docs/Design.md"),
+    "AGENT_REPOSITORY_GOVERNANCE": ("05", "AGENTS.md"),
+    "EXECUTION_DECOMPOSITION": ("06", "tasks.md"),
+    "PRE_IMPLEMENTATION_GATE_DECISION": ("07", "docs/handoff/pre-implementation-gate-report.md"),
+    "IMPLEMENTATION_EVIDENCE": ("08", ".sdd/state/implementation-state.yaml"),
+    "VERIFICATION_DECISION": ("09", "docs/handoff/verification-report.md"),
+    "RELEASE_DECISION": ("10", "docs/handoff/handoff-report.md"),
+}
+
+
+@dataclass(frozen=True)
+class AuthorityEntry:
+    domain: str
+    scope: tuple[str, ...]
+    source: str
+    version: str | None
+    status: str
+    approved: bool = False
+    fresh: bool = True
+    unresolved_condition: str | None = None
+    dependencies: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.status not in AUTHORITY_STATUSES:
+            raise LifecycleInvariantError(f"unsupported authority status: {self.status}")
+        if not self.domain or not self.scope or not self.source:
+            raise LifecycleInvariantError("authority entries require domain, scope, and source")
+        if self.approved != (self.status == "APPROVED_CURRENT_AUTHORITY"):
+            raise LifecycleInvariantError("approval and authority status must agree")
+        if self.approved and (not self.version or not self.fresh or self.unresolved_condition):
+            raise LifecycleInvariantError("current authority requires an unambiguous fresh version")
+
+
+@dataclass(frozen=True)
+class ConflictRecord:
+    identity: str
+    domains: tuple[str, ...]
+    affected_scope: tuple[str, ...]
+    condition: str
+    owner_stages: tuple[str, ...]
+    safe_references: tuple[str, ...]
+    protocol: tuple[str, ...] = (
+        "DETECT", "REPORT", "BLOCK", "ROUTE_TO_AUTHORITATIVE_OWNER"
+    )
+    status: str = "BLOCKED"
+
+
+@dataclass(frozen=True)
+class AuthorityResolution:
+    domain: str
+    owner_stage: str
+    source: str | None
+    version: str | None
+    status: str
+    approved: bool
+    unresolved_condition: str | None
+    affected_scope: tuple[str, ...]
+    unaffected_scope: tuple[str, ...]
+    permitted_route: str
+    conflict_identity: str | None = None
+
+
+class AuthorityRegistry:
+    """Domain-scoped authority resolution; it never edits authority artifacts."""
+
+    def __init__(self, entries: tuple[AuthorityEntry, ...] = (), *, conflict_store: Path | None = None):
+        self._entries = entries
+        self.conflict_store = conflict_store
+
+    def _mapping(self, domain: str) -> tuple[str, str]:
+        try:
+            return PROTECTED_AUTHORITY_ARTIFACTS[domain]
+        except KeyError as exc:
+            raise LifecycleInvariantError(f"unknown authority domain: {domain}") from exc
+
+    def resolve(self, domain: str, question_scope: tuple[str, ...]) -> AuthorityResolution:
+        owner, configured_source = self._mapping(domain)
+        candidates = [e for e in self._entries if e.domain == domain and set(e.scope) & set(question_scope)]
+        mismapped = [e for e in candidates if e.source != configured_source]
+        if mismapped:
+            return self._blocked_resolution(domain, question_scope, "out-of-scope-authority-source", mismapped)
+        applicable = [e for e in candidates if e.status == "APPROVED_CURRENT_AUTHORITY"]
+        if len(applicable) == 1:
+            entry = applicable[0]
+            affected = tuple(s for s in question_scope if s in entry.scope)
+            return AuthorityResolution(domain, owner, entry.source, entry.version, entry.status, True, None, affected, tuple(s for s in question_scope if s not in affected), f"OWNER_STAGE_{owner}")
+
+        if len(applicable) > 1:
+            return self._blocked_resolution(domain, question_scope, "ambiguous-current-version", candidates)
+        if not candidates:
+            absent = AuthorityEntry(domain, question_scope, configured_source, None, "ABSENT")
+            return self._blocked_resolution(domain, question_scope, "missing-authority", [absent])
+
+        strongest = next((e for e in candidates if e.status == "CONFLICTING"), candidates[0])
+        condition = strongest.unresolved_condition or {
+            "DRAFT": "authority-not-approved",
+            "STALE_AFFECTED": "stale-authority",
+            "CONFLICTING": "authority-conflict",
+            "ABSENT": "missing-authority",
+        }[strongest.status]
+        return self._blocked_resolution(domain, question_scope, condition, candidates)
+
+    def record_cross_domain_conflict(self, identity: str, domains: tuple[str, ...], affected_scope: tuple[str, ...], *, condition: str, safe_references: tuple[str, ...]) -> ConflictRecord:
+        if len(set(domains)) < 2:
+            raise LifecycleInvariantError("cross-domain conflict requires distinct domains")
+        return self._record(ConflictRecord(identity, domains, affected_scope, condition, tuple(sorted(self._mapping(d)[0] for d in set(domains))), safe_references))
+
+    def _blocked_resolution(self, domain: str, scope: tuple[str, ...], condition: str, entries: list[AuthorityEntry]) -> AuthorityResolution:
+        owner, _ = self._mapping(domain)
+        affected = tuple(
+            s for s in scope
+            if any(s in e.scope or s in e.dependencies for e in entries)
+        ) or scope
+        unaffected = tuple(s for s in scope if s not in affected)
+        identity = f"AUTH-{domain}-{'-'.join(affected)}-{len(self.conflicts()) + 1}"
+        record = self._record(ConflictRecord(identity, (domain,), affected, condition, (owner,), tuple(dict.fromkeys(e.source for e in entries))))
+        entry = entries[0]
+        return AuthorityResolution(domain, owner, entry.source, entry.version, entry.status, False, condition, affected, unaffected, f"ROUTE_TO_STAGE_{owner}", record.identity)
+
+    def _record(self, record: ConflictRecord) -> ConflictRecord:
+        prior = self.conflicts()
+        if any(item.identity == record.identity for item in prior):
+            raise LifecycleInvariantError("conflict identity already exists; blockers cannot self-clear or be rewritten")
+        if self.conflict_store:
+            self.conflict_store.parent.mkdir(parents=True, exist_ok=True)
+            data = {"conflicts": [item.__dict__ for item in prior + (record,)]}
+            temporary = self.conflict_store.with_suffix(self.conflict_store.suffix + ".tmp")
+            temporary.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+            temporary.replace(self.conflict_store)
+        return record
+
+    def conflicts(self) -> tuple[ConflictRecord, ...]:
+        if not self.conflict_store or not self.conflict_store.exists():
+            return ()
+        data = yaml.safe_load(self.conflict_store.read_text(encoding="utf-8")) or {}
+        return tuple(ConflictRecord(**{**item, "domains": tuple(item["domains"]), "affected_scope": tuple(item["affected_scope"]), "owner_stages": tuple(item["owner_stages"]), "safe_references": tuple(item["safe_references"]), "protocol": tuple(item["protocol"])}) for item in data.get("conflicts", []))
+
+    @staticmethod
+    def normal_implementation_authorized(*, stage07_result: str | None, implementation_authorization: bool) -> bool:
+        return stage07_result == "PASS" and implementation_authorization is True
+
+    @staticmethod
+    def reject_global_precedence() -> None:
+        raise LifecycleInvariantError("global authority precedence is forbidden; resolve by owning domain")
 
 
 @dataclass(frozen=True)
