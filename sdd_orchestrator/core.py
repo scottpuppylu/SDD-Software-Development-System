@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as dataclass_replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 import fnmatch
 import yaml
 
@@ -13,6 +13,160 @@ class SDDOrchestratorError(Exception):
 
 class StageNotFoundError(SDDOrchestratorError):
     pass
+
+
+class LifecycleInvariantError(SDDOrchestratorError):
+    """A proposed lifecycle state is missing or contradicts governed facts."""
+
+
+LIFECYCLE_CONDITIONS = {"PAUSED", "BLOCKED", "INCOMPLETE"}
+
+
+@dataclass(frozen=True)
+class ScopedCondition:
+    status: str
+    scope: str
+    reason: str
+    next_route: str
+    sources: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.status not in LIFECYCLE_CONDITIONS:
+            raise LifecycleInvariantError(f"unsupported scoped status: {self.status}")
+        if not all((self.scope, self.reason, self.next_route, self.sources)):
+            raise LifecycleInvariantError("scoped conditions require scope, reason, sources, and route")
+
+
+@dataclass(frozen=True)
+class QualificationState:
+    approved: bool = False
+    implementation_authorized: bool = False
+    stage07_result: str | None = None
+    complete: bool = False
+    verified: bool = False
+    stage09_result: str | None = None
+    stage10_eligible: bool = False
+    release_ready: bool = False
+    stage10_result: str | None = None
+    released: bool = False
+    recovery_gate_passed: bool = False
+
+
+@dataclass(frozen=True)
+class LifecycleTransition:
+    identity: str
+    prior_state_identity: str
+    new_state_identity: str
+    affected_scope: tuple[str, ...]
+    reason: str
+    sources: tuple[str, ...]
+    next_route: str
+
+
+@dataclass(frozen=True)
+class LifecycleAggregate:
+    identity: str
+    current_stage: str
+    completed_work: tuple[str, ...]
+    current_work: tuple[str, ...]
+    next_work: tuple[str, ...]
+    eligible_scope: tuple[str, ...]
+    conditions: tuple[ScopedCondition, ...]
+    pending_decisions: tuple[str, ...]
+    authority_summary: tuple[str, ...]
+    qualifications: QualificationState
+    rerun_required: tuple[str, ...] = ()
+    invalidated_scope: tuple[str, ...] = ()
+    independent_scope: tuple[str, ...] = ()
+    transitions: tuple[LifecycleTransition, ...] = ()
+
+    def validate(self) -> None:
+        if not self.identity or not self.current_stage or not self.authority_summary:
+            raise LifecycleInvariantError("identity, current stage, and authority summary are required")
+        q = self.qualifications
+        if q.implementation_authorized and (not q.approved or q.stage07_result != "PASS"):
+            raise LifecycleInvariantError("implementation authorization requires approval and Stage07 PASS")
+        if q.verified and (not q.complete or q.stage09_result != "PASS"):
+            raise LifecycleInvariantError("verification requires completion and Stage09 PASS")
+        if q.stage10_eligible and (not q.verified or q.stage09_result != "PASS"):
+            raise LifecycleInvariantError("Stage10 eligibility requires Stage09 verification")
+        if q.release_ready and (
+            not q.stage10_eligible
+            or q.stage10_result not in {"READY", "READY_WITH_KNOWN_ISSUES"}
+        ):
+            raise LifecycleInvariantError("release readiness requires a qualifying Stage10 result")
+        if q.released and not q.release_ready:
+            raise LifecycleInvariantError("release requires release readiness")
+        affected = {condition.scope for condition in self.conditions}
+        affected.update(self.invalidated_scope)
+        if affected.intersection(self.eligible_scope):
+            raise LifecycleInvariantError("blocked, incomplete, paused, or invalidated scope cannot be eligible")
+        if set(self.rerun_required) - set(self.invalidated_scope):
+            raise LifecycleInvariantError("rerun scope must be invalidated")
+        if set(self.independent_scope) & affected:
+            raise LifecycleInvariantError("independent scope contradicts affected scope")
+        if self.pending_decisions and not any(c.status == "PAUSED" for c in self.conditions):
+            raise LifecycleInvariantError("pending decisions require a scoped PAUSED condition")
+
+
+class LifecycleStateResponsibility(Protocol):
+    def load(self) -> LifecycleAggregate: ...
+    def publish(self, state: LifecycleAggregate, *, affected_scope: str) -> None: ...
+
+
+class LifecycleGovernor:
+    """Validates and atomically delegates lifecycle transitions to state storage."""
+
+    def __init__(self, state: LifecycleStateResponsibility):
+        self.state = state
+
+    def snapshot(self) -> LifecycleAggregate:
+        current = self.state.load()
+        current.validate()
+        return current
+
+    def transition(
+        self,
+        proposed: LifecycleAggregate,
+        *,
+        expected_prior_identity: str,
+        transition_identity: str,
+        affected_scope: tuple[str, ...],
+        reason: str,
+        sources: tuple[str, ...],
+        next_route: str,
+    ) -> LifecycleAggregate:
+        current = self.snapshot()  # Never validate against a cached snapshot.
+        if current.identity != expected_prior_identity:
+            raise LifecycleInvariantError(
+                f"stale prior-state identity: {expected_prior_identity} != {current.identity}"
+            )
+        if not all((transition_identity, affected_scope, reason, sources, next_route)):
+            raise LifecycleInvariantError(
+                "transition requires identity, affected scope, reason, sources, and route"
+            )
+        if proposed.identity == current.identity:
+            raise LifecycleInvariantError("accepted transition requires a new state identity")
+        if proposed.transitions != current.transitions:
+            raise LifecycleInvariantError("existing transition history cannot be rewritten")
+        if not set(current.completed_work) <= set(proposed.completed_work):
+            invalidated = set(proposed.invalidated_scope)
+            removed = set(current.completed_work) - set(proposed.completed_work)
+            if not removed <= invalidated:
+                raise LifecycleInvariantError("valid completed work must be preserved")
+        proposed.validate()
+        transition = LifecycleTransition(
+            identity=transition_identity,
+            prior_state_identity=current.identity,
+            new_state_identity=proposed.identity,
+            affected_scope=affected_scope,
+            reason=reason,
+            sources=sources,
+            next_route=next_route,
+        )
+        accepted = dataclass_replace(proposed, transitions=current.transitions + (transition,))
+        self.state.publish(accepted, affected_scope=",".join(affected_scope))
+        return accepted
 
 
 @dataclass
