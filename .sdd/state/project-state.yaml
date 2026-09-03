@@ -1,0 +1,79 @@
+schema_version: '1.0'
+project:
+  id: TBD
+  name: TBD
+  status: ACTIVE
+lifecycle:
+  current_stage: '07'
+  current_stage_name: PRE_IMPLEMENTATION_GATE
+  last_completed_stage: '06'
+  next_action: REMEDIATION_ROUTER
+stages:
+  '01':
+    status: DONE
+    result: null
+  '02':
+    status: DONE
+    result: null
+  '03':
+    status: DONE
+    result: null
+  '04':
+    status: DONE
+    result: null
+  '05':
+    status: DONE
+    result: null
+  '06':
+    status: DONE
+    result: success
+  '07':
+    status: DONE
+    result: FAIL
+  08:
+    status: TODO
+    result: null
+  09:
+    status: TODO
+    result: null
+  '10':
+    status: TODO
+    result: null
+authorizations:
+  implementation: false
+  release: false
+blocking:
+  is_blocked: false
+  reasons: []
+artifacts:
+  proposal: docs/proposal.md
+  prd: docs/PRD.md
+  spec: docs/spec.md
+  design: docs/Design.md
+  agents: AGENTS.md
+  tasks: tasks.md
+  pre_implementation_gate_report: docs/handoff/pre-implementation-gate-report.md
+  verification_report: null
+  handoff_report: null
+git:
+  branch: telemetry-measurement-v2
+  head_commit: b9a12971c2cac8177dea1de7a49d7dfdc57c874e
+  last_verified_commit: null
+provenance:
+  current_authority_package:
+    status: APPROVED_CURRENT_PROSPECTIVE_AUTHORITY
+    stages:
+    - '01'
+    - '02'
+    - '03'
+    - '04'
+    - '05'
+    - '06'
+  historical_phase01_06_reconstruction: NOT_AUTHORIZED
+  existing_implementation_adopted: false
+  retroactive_stage07_pass_created: false
+  stage08_authorization_created: true
+  implementation_conformance_claimed: false
+  test_pass_claimed: false
+  implementation_recovery_gate_result: NOT_EVALUATED
+  stage09_decision: NOT_EVALUATED

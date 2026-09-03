@@ -1,111 +1,109 @@
-# Current Stage07 Pre-Implementation Gate Report
+# Stage 07 Pre-Implementation Gate Report
 
-## 1. Authority and purpose
-
-This report is the authoritative current `PRE_IMPLEMENTATION_GATE_DECISION` owned by Stage07. It evaluates whether the approved current prospective authority package is complete, consistent, testable, traceable, and executable enough to authorize future normal Stage08 work. It does not evaluate implementation, implementation evidence, the Current Implementation Recovery Gate, Stage09, Stage10, release, or deployment.
-
-## 2. Repository identity
-
-- Repository branch: `telemetry-measurement-v2`
-- HEAD and governed baseline: `c7d641e`
-- Working tree at Stage07 entry: clean; `git status --short` produced no output
-
-The branch, HEAD, and clean working-tree precondition matched the repository state recorded in `.sdd/state/project-state.yaml` before this report was written.
-
-## 3. Current authority package
-
-| Authority domain | Canonical artifact | Current status |
-| --- | --- | --- |
-| `PRODUCT_INTENT` | `docs/proposal.md` | `APPROVED_CURRENT_AUTHORITY` |
-| `PRODUCT_REQUIREMENT` | `docs/PRD.md` | `APPROVED_CURRENT_AUTHORITY` |
-| `TECHNICAL_CONTRACT` | `docs/spec.md` | `APPROVED_CURRENT_AUTHORITY` |
-| `IMPLEMENTATION_DECISION` | `docs/Design.md` | `APPROVED_CURRENT_AUTHORITY` |
-| `AGENT_REPOSITORY_GOVERNANCE` | `AGENTS.md` | `APPROVED_CURRENT_AUTHORITY` |
-| `EXECUTION_DECOMPOSITION` | `tasks.md` | `APPROVED_CURRENT_AUTHORITY` |
-
-The runtime authority package identifies Stages01 through 06 as `APPROVED_CURRENT_PROSPECTIVE_AUTHORITY`. This Stage07 decision does not reconstruct historical authority.
-
-## 4. Stage07 required checks
-
-| Required check | Result | Current evidence |
-| --- | --- | --- |
-| `P0_COMPLETENESS` | `PASS` | The approved PRD defines 34 P0 requirements; the Spec, Design, and execution decomposition report complete corresponding P0 coverage. |
-| `P0_ACCEPTANCE_CRITERIA` | `PASS` | The current PRD reports all P0 acceptance criteria testable. |
-| `TECHNICAL_COVERAGE` | `PASS` | The current Spec reports `P0_TECHNICAL_COVERAGE_COMPLETE = YES` with no product-requirement conflict or blocking technical TBD. |
-| `DESIGN_COVERAGE` | `PASS` | The current Design reports `P0_DESIGN_COVERAGE_COMPLETE = YES` with no product/technical conflict or blocking design TBD. |
-| `TASK_COVERAGE` | `PASS` | The approved decomposition contains `TASK-001` through `TASK-018`, reports complete P0 task coverage, zero orphan tasks, and a valid dependency graph. |
-| `TESTABILITY` | `PASS` | The PRD supplies testable P0 acceptance criteria and every task supplies future verification requirements with `PASS`/`FAIL`/`NOT RUN` semantics and atomic checkpoint criteria. No implementation test was run or evaluated by Stage07. |
-| `TRACEABILITY` | `PASS` | Current artifacts establish the prospective chain `G -> FR/NFR/EC -> AC -> SPEC -> DES -> TASK`; Stage08 remains responsible for future `TASK -> CODE -> TEST_EVIDENCE` links. |
-| `SECURITY_BLOCKERS` | `PASS` | No current security blocker is recorded; task and governance authorities define security/safety interlocks and stopping behavior. |
-| `CRITICAL_TBD` | `PASS` | `.sdd/state/authority-state.yaml` records no blocking TBD, and the current authority status sections report no blocking technical, design, governance, or task-decomposition TBD. |
-| `AUTHORITY_CONFLICTS` | `PASS` | `.sdd/state/authority-state.yaml` records no unresolved conflict, and the current authority status sections report none. |
-| `AGENTS_READINESS` | `PASS` | `AGENTS.md` is approved current authority and defines repository preconditions, sealed Stage08 authorization, scope limits, checkpoints, evidence, stopping, and routing. |
-| `REPOSITORY_GIT_READINESS` | `PASS` | Branch `telemetry-measurement-v2`, HEAD `c7d641e`, and a clean working tree matched the required baseline at gate entry. |
-
-## 5. Gate blockers
-
-`STAGE07_BLOCKER_COUNT = 0`
-
-No current Stage07 blocker was found in the required evidence.
-
-## 6. Governance and execution separation
-
-Repository governance and each protected authority domain remain authoritative. The executor, including Codex or another repository-aware coding agent, is replaceable, least-privileged, and bounded by approved authority and a sealed execution envelope. An executor may implement only already-authorized scope; it cannot create, approve, enlarge, reinterpret, or substitute authority and cannot issue Stage07, Stage09, Stage10, release, or deployment qualification.
-
-## 7. Stage08 authorization conditions
-
-This `PASS` permits entry only for future normal Stage08 execution when a valid sealed envelope identifies all of the following:
-
-- one exact approved `TASK-*`;
-- approved current authority references for Product Requirement, Technical Contract, Implementation Decision, Agent Repository Governance, and Execution Decomposition;
-- this valid Stage07 `PASS` report and the current implementation-authorization state;
-- repository identity, branch, and current governed baseline;
-- exact allowed files and behavior scope;
-- required verification; and
-- atomic checkpoint conditions: implementation complete, required verification `PASS`, completion criteria satisfied, scope respected, unexpected diff reviewed, and no unresolved blocker.
-
-The Stage08 executor must not enlarge or infer additions to the envelope. A baseline mismatch, unexpected diff, missing requirement or file, authority overrun, additional behavior, or unmet checkpoint condition requires `STOP -> REPORT -> ROUTE` to the applicable task, authority, or gate owner while preserving independently valid in-scope progress.
-
-## 8. Pre-existing implementation boundary
-
-This decision authorizes future normal Stage08 work only. It does not inspect, adopt, approve, or authorize pre-existing implementation. Pre-existing implementation remains separately governed by the Current Implementation Recovery Gate if that path is later used; this report does not evaluate that gate or its eligibility.
-
-## 9. Final decision
+## 1. Decision
 
 ```text
-STAGE07_DECISION =
-PASS
-
-PRE_IMPLEMENTATION_GATE_DECISION =
-PASS
-
-IMPLEMENTATION_AUTHORIZED =
-YES
-
-IMPLEMENTATION_AUTHORIZATION =
-AUTHORIZED_FOR_FUTURE_NORMAL_STAGE08_ONLY
-
-STAGE08_ENTRY_ELIGIBLE =
-YES
-
-CURRENT_IMPLEMENTATION_RECOVERY_GATE_RESULT =
-NOT_EVALUATED
-
-STAGE09_DECISION =
-NOT_EVALUATED
-
-RELEASE_AUTHORIZED =
-NO
+STAGE_ID = 07
+STAGE_NAME = PRE_IMPLEMENTATION_GATE
+RESULT = FAIL
+IMPLEMENTATION_AUTHORIZED = NO
+NEXT_STEP = REMEDIATION_ROUTER
 ```
 
-## 10. Provenance and non-retroactivity
+The review is complete, but implementation cannot be authorized. The current Stage06 execution decomposition is not machine-execution ready, and the persisted SDD state contains a contradictory Stage08-authorization provenance claim.
 
-This is a current prospective Stage07 `PASS`. It does not prove or reconstruct a historical Stage07 decision, retroactively authorize pre-existing implementation, adopt existing code, mark any `TASK-*` `DONE`, establish implementation conformance, establish tests `PASS`, establish Stage09 `PASS`, or create Stage10, release, or deployment authority.
+## 2. Reviewed inputs
+
+The supplied context contains every required Stage07 artifact and semantic input:
+
+- `docs/PRD.md`
+- `docs/spec.md`
+- `docs/Design.md`
+- `AGENTS.md`
+- `tasks.md`
+- `.sdd/state/project-state.yaml`
+- `.sdd/state/authority-state.yaml`
+- `REPOSITORY_STRUCTURE`
+- `GIT_READINESS`
+
+No repository commands were run during this evaluation. Repository and Git findings below rely exclusively on the supplied runtime evidence.
+
+## 3. Check results
+
+| Check | Result | Finding |
+| --- | --- | --- |
+| P0 completeness | PASS | The PRD defines 34 applicable P0 requirements: `FR-01` through `FR-21`, `NFR-01` through `NFR-05`, and `EC-01` through `EC-08`. |
+| P0 acceptance criteria | PASS | Each applicable P0 requirement has an observable acceptance criterion: `AC-01` through `AC-21`, `AC-23` through `AC-27`, and `AC-29` through `AC-36`. |
+| Technical coverage | PASS | The supplied Technical Contract maps all 34 applicable P0 requirements to `SPEC-001` through `SPEC-016`. |
+| Design coverage | PASS | The supplied Design maps all 16 P0 technical contracts to `DES-001` through `DES-016`. |
+| Task coverage | FAIL | Human-readable P0 coverage is complete, but the Stage06-to-Stage08 machine contract is not ready. `TASK-002` through `TASK-018` declare only prose implementation scope and no accepted bounded write-scope field. All `TASK-001` through `TASK-018` lack an exact `Verification Commands` entry. |
+| Testability | FAIL | Task verification requirements describe future checks in prose but provide no exact machine-executable commands. Stage08 therefore cannot execute and qualify the required task checks from a sealed envelope. |
+| Traceability | PASS | The supplied artifacts establish `G -> FR/NFR/EC -> AC -> SPEC -> DES -> TASK`, with forward coverage tables and backward authority traces. `CODE` and `TEST_EVIDENCE` links are correctly deferred to later owning stages. |
+| Security blockers | PASS | No unresolved security blocker is declared in the supplied authority state. Tasks preserve explicit authorization, safety-interlock, least-capability, and minimum-disclosure obligations. |
+| Critical TBD | PASS | No blocking TBD is declared. Deferred technology choices do not presently change approved product behavior or technical guarantees. |
+| Authority conflicts | PASS | No substantive cross-domain authority conflict was detected in the reviewed PRD, Spec, Design, AGENTS, and Tasks content. `.sdd/state/authority-state.yaml` also reports no unresolved conflicts. |
+| AGENTS readiness | PASS | AGENTS defines protected artifacts, repository preconditions, Stage07/Stage08 separation, sealed-envelope requirements, bounded execution, checkpoint rules, failure handling, security controls, and truthful evidence semantics. |
+| Repository/Git readiness | PASS | Supplied Git evidence identifies repository initialization, branch `telemetry-measurement-v2`, live HEAD `b9a12971c2cac8177dea1de7a49d7dfdc57c874e`, a clean working tree, and no unrelated dirty paths. The persisted Git HEAD matches the authoritative live HEAD. `last_verified_commit: null` is valid before Stage08. |
+| SDD state reconciliation | FAIL | `.sdd/state/project-state.yaml` says Stage07 is `IN_PROGRESS`, `authorizations.implementation` is `false`, and `retroactive_stage07_pass_created` is `false`, but also says `provenance.stage08_authorization_created: true`. Stage08 authorization cannot exist before a valid Stage07 PASS. This contradictory persisted state must be reconciled by the state-owning workflow; Stage07 cannot silently reinterpret or modify it. |
+
+## 4. Blocking findings
+
+### B-01 — Stage06 bounded write scopes are incomplete
+
+The Stage07 machine-contract rules require every Stage08-executable task to declare explicit bounded path authority using an accepted field such as `Allowed files`, `Allowed production files`, `Allowed test files`, `Allowed evidence files`, `Allowed Paths`, or `Write Scope`.
+
+- `TASK-001` declares `Allowed files` and satisfies the path-field requirement.
+- `TASK-002` through `TASK-018` do not declare an accepted bounded path field.
+- Their `Allowed implementation scope` fields describe what may be implemented but are not path authority.
+- `TASK-018`, even if treated as verification-focused, does not explicitly enumerate any test or evidence files it may write.
+
+This is an `EXECUTION_DECOMPOSITION` readiness blocker owned by Stage06. Stage07 must not invent paths or mutate the task authority.
+
+### B-02 — Exact verification commands are absent
+
+Every Stage08-executable task must declare at least one exact machine-executable `Verification Commands` entry. All 18 tasks contain human-readable `Verification requirements`, but none supplies an exact command.
+
+Without commands, a sealed Stage08 envelope cannot identify the required executable verification for any task. This is a Stage06 testability and machine-execution-readiness blocker.
+
+### B-03 — Persisted Stage08 authorization provenance is contradictory
+
+The current state simultaneously records:
 
 ```text
-RETROACTIVE_STAGE07_PASS_CREATED =
-NO
-
-PRE_EXISTING_IMPLEMENTATION_ADOPTED =
-NO
+stages.'07'.status = IN_PROGRESS
+stages.'07'.result = null
+authorizations.implementation = false
+provenance.retroactive_stage07_pass_created = false
+provenance.stage08_authorization_created = true
 ```
+
+A Stage08 authorization cannot be validly created while Stage07 remains unresolved and implementation authorization is false. The affected state must be reconciled through the state-owning workflow, preserving audit history and without retroactively manufacturing a Stage07 PASS.
+
+## 5. Non-blocking observations
+
+- All required inputs are present, so `INCOMPLETE` is not appropriate.
+- The supplied Git evidence is clean and internally aligned; repository dirtiness is not a blocker.
+- The prior Stage07 report and earlier gate commit shown in history are historical evidence only. They do not decide this rerun.
+- Pre-existing source and tests do not make prospective tasks complete and do not substitute for Stage07 authorization.
+- No implementation, verification, release, deployment, destructive operation, dependency mutation, or commit is authorized by this result.
+
+## 6. Required remediation and routing
+
+1. Route `TASK-001` through `TASK-018` to the Stage06 owner to add at least one exact machine-executable `Verification Commands` entry to every executable task.
+2. Route `TASK-002` through `TASK-018` to the Stage06 owner to add explicit, bounded allowed paths using accepted machine-readable scope fields. Verification-only work must explicitly declare `Allowed production files: NONE` where applicable and enumerate every writable test/evidence path.
+3. Ensure no task receives generic catch-all repair authority. Any newly discovered out-of-scope work must be routed to a separately bounded task or authoritative owner.
+4. Route the contradictory `provenance.stage08_authorization_created: true` state to the state-owning reconciliation workflow. Align it with the unresolved Stage07 decision and `authorizations.implementation: false` while retaining truthful audit provenance.
+5. After the approved Stage06 artifact and persisted state are reconciled and Git readiness is re-established, rerun Stage07 against the new authoritative live HEAD.
+
+## 7. Authorization outcome
+
+```text
+PRE_IMPLEMENTATION_GATE_DECISION = FAIL
+IMPLEMENTATION_AUTHORIZATION = WITHHELD
+STAGE08_ENTRY = BLOCKED
+REMEDIATION_OWNER_TASK_CONTRACT = STAGE06
+REMEDIATION_OWNER_STATE_RECONCILIATION = SDD_STATE_OWNING_WORKFLOW
+RERUN_REQUIRED = YES
+```
+
+Stage07 owns only this gate decision. It does not modify Product Requirement, Technical Contract, Implementation Design, Agent Governance, Execution Decomposition, implementation evidence, verification qualification, or release qualification.
