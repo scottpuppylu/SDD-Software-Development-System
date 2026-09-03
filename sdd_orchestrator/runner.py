@@ -19,6 +19,7 @@ from .context_compiler import (
 from .context_dispatch import ContextDispatchCoordinator
 from .executor import StageExecutionRequest, StageExecutionResult, StageExecutor
 from .telemetry.measurement import measure_stage_request
+from .errors import FailureJournal, RecoveryRoute, new_failure
 
 
 class StageExecutionValidationError(SDDOrchestratorError):
@@ -32,6 +33,7 @@ class StageRunner:
         telemetry_recorder: Any = None,
         *,
         compilation_mode: CompilationMode = CompilationMode.BASELINE,
+        failure_journal: FailureJournal | None = None,
     ):
         if not isinstance(compilation_mode, CompilationMode):
             raise TypeError("compilation_mode must be a CompilationMode")
@@ -39,6 +41,7 @@ class StageRunner:
         self.repo_root = orchestrator.repo_root
         self.telemetry_recorder = telemetry_recorder
         self.compilation_mode = compilation_mode
+        self.failure_journal = failure_journal
 
     def build_request(
         self,
@@ -455,6 +458,41 @@ class StageRunner:
         self.orchestrator._save_yaml(self.orchestrator.project_state_path, state)
 
     def run(
+        self,
+        executor: StageExecutor,
+        stage_id: str | None = None,
+        *,
+        semantic_inputs: dict[str, Any] | None = None,
+        stage_instructions: str | None = None,
+    ) -> dict[str, Any]:
+        if self.failure_journal is None:
+            return self._run(executor, stage_id, semantic_inputs=semantic_inputs,
+                             stage_instructions=stage_instructions)
+        sid = (stage_id or self.orchestrator.current_stage_id).zfill(2)
+        try:
+            identity = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=self.repo_root, check=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            ).stdout.strip()
+        except Exception:
+            identity = "UNAVAILABLE"
+        try:
+            return self._run(executor, stage_id, semantic_inputs=semantic_inputs,
+                             stage_instructions=stage_instructions)
+        except Exception as exc:
+            # Persist only minimum-disclosure facts. The exception text may contain secrets.
+            envelope = new_failure(
+                operation="RUN_STAGE", step=f"stage-{sid}", cause_class="EXECUTION",
+                affected_scope=(f"stage:{sid}",), pre_operation_identity=identity,
+                owner="STAGE_EXECUTION", safe_reference=type(exc).__name__,
+                candidate_routes=(RecoveryRoute("RETRY", "STAGE_EXECUTION", ("failure_resolved",)),
+                                  RecoveryRoute("ESCALATION", "STAGE_EXECUTION")),
+            )
+            self.failure_journal.persist(envelope)
+            setattr(exc, "failure_id", envelope.failure_id)
+            raise
+
+    def _run(
         self,
         executor: StageExecutor,
         stage_id: str | None = None,

@@ -6,6 +6,9 @@ import unittest
 import yaml
 
 from sdd_orchestrator.git_runtime import GitRepository, RecoveryManager, GitRuntimeError
+from sdd_orchestrator.errors import (
+    FailureEnvelopeError, JsonFailureJournal, PartialOutput, RecoveryRoute, new_failure,
+)
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
@@ -155,6 +158,62 @@ class M5GitTests(unittest.TestCase):
         self.assertEqual(state["current_task"], "T011")
         self.assertEqual(state["last_verified_commit"], commit)
         self.assertEqual(state["test_status"]["overall"], "PASS")
+
+    def test_failure_journal_preserves_facts_and_filters_routes(self):
+        journal = JsonFailureJournal(self.repo / ".sdd" / "failures.json")
+        failure = new_failure(
+            operation="git checkpoint", step="commit", cause_class="GIT",
+            affected_scope=("TASK-010",), pre_operation_identity="abc123",
+            owner="Stage08", safe_reference="git-error-1",
+            valid_completed_work=("TASK-005",),
+            partial_outputs=(PartialOutput("worktree-diff", "UNVERIFIED"),),
+            candidate_routes=(
+                RecoveryRoute("RETRY", "Stage08", ("worktree_reviewed",)),
+                RecoveryRoute("ESCALATION", "ProjectAuthority"),
+            ),
+        )
+        journal.persist(failure)
+        restored = journal.get(failure.failure_id)
+        self.assertEqual(restored.pre_operation_identity, "abc123")
+        self.assertEqual(restored.valid_completed_work, ("TASK-005",))
+        self.assertEqual([r.kind for r in restored.eligible_routes(())], ["ESCALATION"])
+        self.assertEqual(
+            [r.kind for r in restored.eligible_routes({"worktree_reviewed"})],
+            ["RETRY", "ESCALATION"],
+        )
+
+    def test_linked_repeated_failure_does_not_rewrite_original(self):
+        journal = JsonFailureJournal(self.repo / ".sdd" / "failures.json")
+        original = new_failure(
+            operation="verify", step="pytest", cause_class="TEST_VERIFICATION",
+            affected_scope=("TASK-010",), pre_operation_identity="def456",
+            owner="Stage08", safe_reference="pytest-failure",
+            candidate_routes=(RecoveryRoute("RETRY", "Stage08"),),
+        )
+        journal.persist(original)
+        repeated = original.linked_attempt("RETRY", status="FAILED", safe_reference="pytest-failure-2")
+        journal.persist(repeated)
+        restored = journal.get(original.failure_id)
+        self.assertEqual(restored.failure_id, original.failure_id)
+        self.assertEqual(restored.attempts[0].failure_id, original.failure_id)
+        self.assertEqual(restored.attempts[0].status, "FAILED")
+
+        rewritten = new_failure(
+            operation="different", step="pytest", cause_class="TEST_VERIFICATION",
+            affected_scope=("TASK-010",), pre_operation_identity="def456",
+            owner="Stage08", safe_reference="pytest-failure",
+        )
+        object.__setattr__(rewritten, "failure_id", original.failure_id)
+        with self.assertRaises(FailureEnvelopeError):
+            journal.persist(rewritten)
+
+    def test_authority_failure_cannot_be_marked_safe_or_complete(self):
+        with self.assertRaises(FailureEnvelopeError):
+            new_failure(
+                operation="resolve", step="authority-check", cause_class="AUTHORITY",
+                affected_scope=("docs/spec.md",), pre_operation_identity="ghi789",
+                owner="Stage03", safe_reference="conflict-1", unsafe_to_continue=False,
+            )
 
 
 if __name__ == "__main__":
