@@ -72,7 +72,7 @@ provenance:
   historical_phase01_06_reconstruction: NOT_AUTHORIZED
   existing_implementation_adopted: false
   retroactive_stage07_pass_created: false
-  stage08_authorization_created: true
+  stage08_authorization_created: false
   implementation_conformance_claimed: false
   test_pass_claimed: false
   implementation_recovery_gate_result: NOT_EVALUATED
