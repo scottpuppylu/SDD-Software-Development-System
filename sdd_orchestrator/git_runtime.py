@@ -141,7 +141,7 @@ class GitRepository:
 
         root = self.repo_root
         normalized: list[str] = []
-        evidence_paths: list[str] = []
+        force_add_paths: list[str] = []
         for rel in paths:
             target = (root / rel).resolve()
             try:
@@ -159,7 +159,12 @@ class GitRepository:
                 and evidence_name
                 and target.is_file()
             ):
-                evidence_paths.append(normalized_rel)
+                force_add_paths.append(normalized_rel)
+            elif (
+                resolved_rel == Path(".sdd/state/project-state.yaml")
+                and target.is_file()
+            ):
+                force_add_paths.append(normalized_rel)
 
         before = self.snapshot()
         unrelated = [p for p in before.dirty_paths if not self._covered_by_paths(p, normalized)]
@@ -168,11 +173,11 @@ class GitRepository:
                 "Unrelated dirty paths exist; refusing checkpoint: " + ", ".join(unrelated)
             )
 
-        ordinary_paths = [path for path in normalized if path not in evidence_paths]
+        ordinary_paths = [path for path in normalized if path not in force_add_paths]
         if ordinary_paths:
             self._run(["add", "--", *ordinary_paths])
-        for evidence_path in evidence_paths:
-            self._run(["add", "-f", "--", evidence_path])
+        for force_add_path in force_add_paths:
+            self._run(["add", "-f", "--", force_add_path])
         staged = self._run(["diff", "--cached", "--name-only"]).stdout.splitlines()
         if not staged:
             raise GitRuntimeError("No staged changes for checkpoint")

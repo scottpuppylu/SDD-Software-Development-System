@@ -43,6 +43,11 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name) / "repo"
         shutil.copytree(SOURCE / ".sdd", self.repo / ".sdd")
+        (self.repo / ".sdd/evidence/.stage08-pending-evidence-write.yaml").unlink(
+            missing_ok=True
+        )
+        for evidence_file in (self.repo / ".sdd/evidence").glob("*.json"):
+            evidence_file.unlink()
         for rel, text in {
             "AGENTS.md": "# AGENTS\nDo not modify authoritative contracts.\n",
             "docs/PRD.md": "# PRD\nFR-001 Calculator addition\n",

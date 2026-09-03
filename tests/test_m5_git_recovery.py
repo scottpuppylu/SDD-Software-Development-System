@@ -67,6 +67,66 @@ class M5GitTests(unittest.TestCase):
         self.assertEqual(subject, "feat(core): [T001] add a")
         self.assertFalse(GitRepository(self.repo).snapshot().dirty_paths)
 
+    def test_checkpoint_force_add_is_bounded_to_exact_state_and_evidence_files(self):
+        (self.repo / ".gitignore").write_text(
+            ".sdd/state/\n.sdd/evidence/\nignored/\n", encoding="utf-8"
+        )
+        subprocess.run(["git", "add", ".gitignore"], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "test: ignore runtime files"],
+            cwd=self.repo,
+            check=True,
+            capture_output=True,
+        )
+        state_path = self.repo / ".sdd/state/project-state.yaml"
+        evidence_path = self.repo / ".sdd/evidence/20260903T032342.613245Z-T001.json"
+        state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        state["git"]["last_verified_commit"] = "1" * 40
+        state_path.write_text(yaml.safe_dump(state, sort_keys=False), encoding="utf-8")
+        evidence_path.write_text("{}\n", encoding="utf-8")
+
+        commit = GitRepository(self.repo).checkpoint(
+            task_id="T001",
+            summary="runtime checkpoint",
+            paths=[
+                ".sdd/state/project-state.yaml",
+                ".sdd/evidence/20260903T032342.613245Z-T001.json",
+            ],
+        )
+        committed = subprocess.run(
+            ["git", "show", "--pretty=", "--name-only", commit],
+            cwd=self.repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        self.assertEqual(
+            set(committed),
+            {".sdd/state/project-state.yaml", ".sdd/evidence/20260903T032342.613245Z-T001.json"},
+        )
+        self.assertTrue(state_path.is_file())
+
+        ignored_file = self.repo / "ignored/arbitrary.txt"
+        ignored_file.parent.mkdir(parents=True, exist_ok=True)
+        ignored_file.write_text("ignored\n", encoding="utf-8")
+        git_repo = GitRepository(self.repo)
+        with self.assertRaises(GitRuntimeError):
+            git_repo.checkpoint(
+                task_id="T002", summary="reject ignored file", paths=["ignored/arbitrary.txt"]
+            )
+        with self.assertRaises(GitRuntimeError):
+            git_repo.checkpoint(
+                task_id="T002", summary="reject ignored directory", paths=["ignored"]
+            )
+        tracked = subprocess.run(
+            ["git", "ls-files", "--", "ignored/arbitrary.txt"],
+            cwd=self.repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertEqual(tracked, "")
+
     def test_recovery_detects_dirty_tree_and_state(self):
         state_path = self.repo / ".sdd/state/implementation-state.yaml"
         state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
