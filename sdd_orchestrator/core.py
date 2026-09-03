@@ -174,6 +174,8 @@ class Orchestrator:
         if sid == "07":
             authorized = result == "PASS"
             self.project_state["authorizations"]["implementation"] = authorized
+            if result == "FAIL":
+                self.reconcile_current_stage08_authorization_provenance()
 
         if sid == "10":
             self.project_state["authorizations"]["release"] = result in {
@@ -198,6 +200,44 @@ class Orchestrator:
             "next": route,
             "implementation_authorization": self.project_state["authorizations"]["implementation"],
             "release_authorization": self.project_state["authorizations"]["release"],
+        }
+
+    def reconcile_current_stage08_authorization_provenance(
+        self,
+        *,
+        preparing_stage07_rerun: bool = False,
+    ) -> dict[str, Any]:
+        """Clear contradictory CURRENT Stage 08 provenance without rewriting history.
+
+        This state-owner operation is deliberately one-way: it can only change the
+        current ``stage08_authorization_created`` marker from true to false. It is
+        permitted after a recorded Stage 07 FAIL, or while explicitly preparing a
+        fresh Stage 07 rerun whose implementation authorization is already false.
+        Historical run records, reports, evidence, and recovery state are untouched.
+        """
+        stage07_result = self.project_state.get("stages", {}).get("07", {}).get("result")
+        implementation_authorized = bool(
+            self.project_state.get("authorizations", {}).get("implementation")
+        )
+        eligible = stage07_result == "FAIL" or (
+            preparing_stage07_rerun and not implementation_authorized
+        )
+        provenance = self.project_state.get("provenance", {})
+        before = provenance.get("stage08_authorization_created")
+        changed = bool(eligible and before is True)
+        if changed:
+            provenance["stage08_authorization_created"] = False
+            self.project_state["provenance"] = provenance
+            self._save_yaml(self.project_state_path, self.project_state)
+        return {
+            "changed": changed,
+            "stage08_authorization_created_before": before,
+            "stage08_authorization_created_after": (
+                False if changed else before
+            ),
+            "eligible": eligible,
+            "stage07_result": stage07_result,
+            "implementation_authorization": implementation_authorized,
         }
 
     def _resolve_route(

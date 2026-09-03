@@ -52,6 +52,7 @@ class V116Stage07PreflightRerunTests(unittest.TestCase):
         state["stages"]["07"]["status"] = "DONE"
         state["stages"]["07"]["result"] = "FAIL"
         state["authorizations"]["implementation"] = False
+        state.setdefault("provenance", {})["stage08_authorization_created"] = True
         state["blocking"]["is_blocked"] = False
         state["blocking"]["reasons"] = []
         self.orch._save_yaml(self.orch.project_state_path, state)
@@ -68,6 +69,8 @@ class V116Stage07PreflightRerunTests(unittest.TestCase):
         self.assertEqual(saved["stages"]["07"]["status"], "IN_PROGRESS")
         self.assertIsNone(saved["stages"]["07"]["result"])
         self.assertFalse(saved["authorizations"]["implementation"])
+        self.assertFalse(saved["provenance"]["stage08_authorization_created"])
+        self.assertTrue(evidence["stage08_provenance_reconciliation"]["changed"])
         self.assertEqual(saved["lifecycle"]["next_action"], "RERUN_STAGE")
         self.assertTrue(evidence["preflight_reconciliation_commit"])
         self.assertTrue(evidence["working_tree_clean"])

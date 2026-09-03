@@ -1,5 +1,9 @@
 from pathlib import Path
 from types import SimpleNamespace
+from contextlib import redirect_stdout
+from unittest.mock import patch
+import io
+import json
 import shutil
 import subprocess
 import tempfile
@@ -11,6 +15,7 @@ from sdd_orchestrator.codex_adapter import Stage08CodexRunner
 from sdd_orchestrator.executor import StageExecutionRequest
 from sdd_orchestrator.providers import _result_schema
 from sdd_orchestrator.system_controller import FullSystemController
+from sdd_orchestrator.cli import main as cli_main
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -75,6 +80,56 @@ class V115RuntimeReconciliationTests(unittest.TestCase):
         saved = yaml.safe_load(self.orch.project_state_path.read_text(encoding="utf-8"))
         self.assertTrue(saved["blocking"]["is_blocked"])
         self.assertIn("BLOCKING_TBD:BTBD-123", saved["blocking"]["reasons"])
+
+    def test_stage07_fail_reconciles_current_stage08_provenance_idempotently(self):
+        state = self.orch.project_state
+        state.setdefault("provenance", {})["stage08_authorization_created"] = True
+        state["authorizations"]["implementation"] = True
+        self.orch._save_yaml(self.orch.project_state_path, state)
+
+        result = self.orch.record_stage_result("07", "FAIL")
+        first = yaml.safe_load(self.orch.project_state_path.read_text(encoding="utf-8"))
+        second = self.orch.reconcile_current_stage08_authorization_provenance()
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertFalse(first["authorizations"]["implementation"])
+        self.assertFalse(first["provenance"]["stage08_authorization_created"])
+        self.assertFalse(second["changed"])
+        self.assertFalse(second["stage08_authorization_created_after"])
+
+    def test_reconciliation_cannot_clear_provenance_for_stage07_pass(self):
+        state = self.orch.project_state
+        state.setdefault("provenance", {})["stage08_authorization_created"] = True
+        state["stages"]["07"]["result"] = "PASS"
+        state["authorizations"]["implementation"] = True
+        self.orch._save_yaml(self.orch.project_state_path, state)
+
+        result = self.orch.reconcile_current_stage08_authorization_provenance()
+
+        self.assertFalse(result["eligible"])
+        self.assertFalse(result["changed"])
+        self.assertTrue(result["stage08_authorization_created_after"])
+
+    def test_cli_reconciliation_reports_changed_then_idempotent_no_change(self):
+        state = self.orch.project_state
+        state.setdefault("provenance", {})["stage08_authorization_created"] = True
+        state["stages"]["07"]["result"] = None
+        state["authorizations"]["implementation"] = False
+        self.orch._save_yaml(self.orch.project_state_path, state)
+
+        outputs = []
+        for _ in range(2):
+            stdout = io.StringIO()
+            with patch("sys.argv", [
+                "sdd", "--repo", str(self.repo),
+                "reconcile-stage07-provenance",
+            ]), redirect_stdout(stdout):
+                cli_main()
+            outputs.append(json.loads(stdout.getvalue()))
+
+        self.assertTrue(outputs[0]["changed"])
+        self.assertFalse(outputs[1]["changed"])
+        self.assertFalse(outputs[1]["stage08_authorization_created_after"])
 
     def test_non_stage09_schema_classification_is_null_only(self):
         req = StageExecutionRequest(

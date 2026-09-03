@@ -55,6 +55,7 @@ def main():
 
     sub.add_parser("status")
     sub.add_parser("current")
+    sub.add_parser("reconcile-stage07-provenance")
 
     p_check = sub.add_parser("check")
     p_check.add_argument("--stage")
@@ -255,6 +256,11 @@ def main():
         return
 
     orch = Orchestrator(repo)
+    if args.command == "reconcile-stage07-provenance":
+        _print(orch.reconcile_current_stage08_authorization_provenance(
+            preparing_stage07_rerun=True
+        ))
+        return
     telemetry_recorder = TelemetryRecorder.from_environment(repo)
     runner = StageRunner(
         orch,

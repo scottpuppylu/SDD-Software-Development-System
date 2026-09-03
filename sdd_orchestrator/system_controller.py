@@ -109,6 +109,11 @@ class FullSystemController:
         state["stages"]["07"]["status"] = "IN_PROGRESS"
         state["stages"]["07"]["result"] = None
         state.setdefault("authorizations", {})["implementation"] = False
+        provenance_reconciliation = (
+            self.orchestrator.reconcile_current_stage08_authorization_provenance(
+                preparing_stage07_rerun=True
+            )
+        )
         state.setdefault("lifecycle", {})["current_stage"] = "07"
         state["lifecycle"]["current_stage_name"] = "PRE_IMPLEMENTATION_GATE"
         state["lifecycle"]["next_action"] = "RERUN_STAGE"
@@ -168,6 +173,7 @@ class FullSystemController:
                 "Any previous Stage 07 FAIL is historical run evidence, not a blocker by itself; "
                 "this request represents a fresh rerun after runtime-state reconciliation"
             ),
+            "stage08_provenance_reconciliation": provenance_reconciliation,
         }
 
     def _semantics(self, sid: str, supplied: dict[str, dict[str, Any]]) -> dict[str, Any]:
