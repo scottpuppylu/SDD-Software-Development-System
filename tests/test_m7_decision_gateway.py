@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 import shutil
 import tempfile
 import unittest
@@ -20,61 +21,113 @@ class DecisionGatewayTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_authority_conflict_routes_to_domain_owners_and_blocks(self):
-        req = self.gateway.create_authority_conflict(
-            source_stage="07",
-            domains=["PRODUCT_REQUIREMENT", "TECHNICAL_CONTRACT"],
-            question="Can RETRY skip to the next segment?",
-            context="PRD denies progression; spec permits skip.",
-            affected_artifacts=["docs/PRD.md", "docs/spec.md"],
-        )
-        self.assertEqual(req.owner_stages, ["02", "03"])
-        self.assertEqual(req.status, "OPEN")
+    def create(self, **changes):
+        values = dict(decision_type="PRODUCT_DECISION", source_stage="03",
+                      authority_domains=["PRODUCT_REQUIREMENT"],
+                      question="Should the proposal adopt bounded behavior?",
+                      context="A material product choice requires explicit authority.",
+                      options=["APPROVE", "REJECT", "REQUEST_REVISION", "WITHDRAW"],
+                      affected_artifacts=["feature:bounded-behavior"], target_version="prd-v3")
+        values.update(changes)
+        return self.gateway.create(**values)
+
+    def decide(self, req, result, **changes):
+        values = dict(actor="02", reference="human-review:42",
+                      expected_version=req.record_version,
+                      expected_target_version=req.target_version)
+        values.update(changes)
+        return self.gateway.resolve(req.decision_id, resolution=result, **values)
+
+    def test_pending_record_has_stable_identity_and_understandable_scoped_effect(self):
+        req = self.create(independent_scope=["docs-only"])
+        self.assertTrue(req.decision_id.startswith("HD-"))
+        self.assertEqual(req.status, "PENDING")
         self.assertTrue(self.orch.project_state["blocking"]["is_blocked"])
-        self.assertEqual(self.orch.project_state["lifecycle"]["next_action"], "WAIT_FOR_HUMAN_DECISION")
+        self.assertEqual(req.presentation()["needed_from"], ["02"])
+        self.assertIn("paused", req.presentation()["effect"])
+        self.assertEqual(req.independent_scope, ["docs-only"])
+        self.assertEqual(len(req.events), 1)
 
-    def test_resolution_is_recorded_but_does_not_self_modify_contracts(self):
-        req = self.gateway.create(
-            decision_type="PRODUCT_DECISION",
-            source_stage="03",
-            authority_domains=["PRODUCT_REQUIREMENT"],
-            question="Should skip be allowed?",
-            context="Blocking product behavior decision.",
-            options=["ALLOW", "DISALLOW"],
-            affected_artifacts=["docs/PRD.md"],
-        )
-        resolved = self.gateway.resolve(req.decision_id, resolution="DISALLOW", note="Must pass before progression.")
-        self.assertEqual(resolved.status, "RESOLVED")
-        self.assertEqual(self.orch.project_state["lifecycle"]["next_action"], "RERUN_AUTHORITATIVE_OWNER")
-        self.assertFalse((self.repo / "docs/PRD.md").exists())
-        semantic = self.gateway.semantic_input_for_owner(req.decision_id)
-        self.assertEqual(semantic["HUMAN_RESOLUTION"], "DISALLOW")
-
-    def test_declared_options_are_enforced(self):
-        req = self.gateway.create(
-            decision_type="HIGH_RISK_OPERATION",
-            source_stage="10",
-            authority_domains=["RELEASE_DECISION"],
-            question="Approve destructive migration?",
-            context="Migration can drop data.",
-            options=["APPROVE", "REJECT"],
-            risk="CRITICAL",
-        )
+    def test_identity_collision_and_incomplete_scope_are_rejected(self):
+        req = self.create(decision_id="HD-FIXED")
         with self.assertRaises(DecisionGatewayError):
-            self.gateway.resolve(req.decision_id, resolution="MAYBE")
+            self.create(decision_id=req.decision_id)
+        with self.assertRaises(DecisionGatewayError):
+            self.create(affected_artifacts=[])
 
-    def test_list_open_and_resolved(self):
-        a = self.gateway.create(
-            decision_type="BLOCKING_TBD", source_stage="02",
-            authority_domains=["PRODUCT_REQUIREMENT"], question="A?", context=""
-        )
-        b = self.gateway.create(
-            decision_type="BLOCKING_TBD", source_stage="03",
-            authority_domains=["TECHNICAL_CONTRACT"], question="B?", context=""
-        )
-        self.gateway.resolve(a.decision_id, resolution="Resolved A")
-        self.assertEqual([d.decision_id for d in self.gateway.list(status="OPEN")], [b.decision_id])
-        self.assertEqual([d.decision_id for d in self.gateway.list(status="RESOLVED")], [a.decision_id])
+    def test_all_result_paths_retain_attribution_and_history(self):
+        for result, expected in (("APPROVE", "APPROVED"), ("REJECT", "REJECTED"),
+                                 ("REQUEST_REVISION", "REVISION_REQUESTED"),
+                                 ("WITHDRAW", "WITHDRAWN")):
+            req = self.create(dependencies=["TASK-9", "artifact:x"])
+            decided = self.decide(req, result)
+            self.assertEqual(decided.status, expected)
+            self.assertEqual([event.status for event in decided.events], ["PENDING", expected])
+            self.assertEqual(decided.events[-1].actor, "02")
+            if expected in {"REVISION_REQUESTED", "WITHDRAWN"}:
+                self.assertEqual(decided.invalidated_dependents, ["TASK-9", "artifact:x"])
+                self.assertEqual(self.orch.project_state["lifecycle"]["next_action"],
+                                 "RERUN_AUTHORITATIVE_OWNER")
+
+    def test_approval_satisfies_only_named_condition_not_stage07_authorization(self):
+        req = self.create()
+        decided = self.decide(req, "APPROVE")
+        semantic = self.gateway.semantic_input_for_owner(decided.decision_id)
+        self.assertFalse(semantic["IMPLEMENTATION_AUTHORIZATION"])
+        self.assertEqual(semantic["AFFECTED_ARTIFACTS"], ["feature:bounded-behavior"])
+
+    def test_approved_decision_can_be_withdrawn_without_erasing_prior_result(self):
+        req = self.create(dependencies=["TASK-9"])
+        approved = self.decide(req, "APPROVE")
+        withdrawn = self.gateway.resolve(
+            approved.decision_id, resolution="WITHDRAW", actor="02",
+            reference="human-review:withdrawal", expected_version=approved.record_version,
+            expected_target_version=approved.target_version)
+        self.assertEqual(withdrawn.status, "WITHDRAWN")
+        self.assertEqual([event.status for event in withdrawn.events],
+                         ["PENDING", "APPROVED", "WITHDRAWN"])
+        self.assertEqual(withdrawn.invalidated_dependents, ["TASK-9"])
+
+    def test_rejection_prevents_adoption_and_remains_blocked(self):
+        req = self.create()
+        self.decide(req, "REJECT")
+        self.assertTrue(self.orch.project_state["blocking"]["is_blocked"])
+        self.assertEqual(self.orch.project_state["lifecycle"]["next_action"], "STOP_REJECTED")
+
+    def test_unauthorized_actor_stale_target_and_ambiguous_result_preserve_pending(self):
+        req = self.create()
+        for changes in (
+            dict(resolution="APPROVE", actor="03", reference="x", expected_version=1,
+                 expected_target_version="prd-v3"),
+            dict(resolution="APPROVE", actor="02", reference="x", expected_version=1,
+                 expected_target_version="prd-v2"),
+            dict(resolution="MAYBE", actor="02", reference="x", expected_version=1,
+                 expected_target_version="prd-v3"),
+        ):
+            with self.assertRaises(DecisionGatewayError):
+                self.gateway.resolve(req.decision_id, **changes)
+            self.assertEqual(self.gateway.get(req.decision_id).status, "PENDING")
+
+    def test_persistence_failure_keeps_prior_record_and_records_safe_route(self):
+        req = self.create()
+        with patch("sdd_orchestrator.decisions.os.replace", side_effect=OSError("disk unavailable")):
+            with self.assertRaises(DecisionGatewayError):
+                self.decide(req, "APPROVE")
+        retained = self.gateway.get(req.decision_id)
+        self.assertEqual(retained.status, "PENDING")
+        self.assertEqual(retained.record_version, 1)
+        self.assertEqual(self.gateway.failures[-1]["status"], "BLOCKED")
+        self.assertNotIn("disk unavailable", str(self.gateway.failures[-1]))
+
+    def test_authority_conflict_routes_to_all_domain_owners(self):
+        req = self.gateway.create_authority_conflict(
+            source_stage="07", domains=["PRODUCT_REQUIREMENT", "TECHNICAL_CONTRACT"],
+            question="Which bounded contract governs?", context="The authorities conflict.",
+            affected_artifacts=["feature:retry"])
+        self.assertEqual(req.owner_stages, ["02", "03"])
+        with self.assertRaises(DecisionGatewayError):
+            self.gateway.resolve(req.decision_id, resolution="APPROVE", actor="04", reference="x",
+                                 expected_version=1, expected_target_version="UNSPECIFIED")
 
 
 if __name__ == "__main__":
