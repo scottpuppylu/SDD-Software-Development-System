@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 import json
 from typing import Any, Callable
 
-from .core import Orchestrator
+from .core import (
+    LifecycleAggregate,
+    LifecycleGovernor,
+    LifecycleInvariantError,
+    Orchestrator,
+    ScopedCondition,
+)
 from .executor import StageExecutor
 from .runner import StageRunner
 from .codex_adapter import Stage08CodexRunner
@@ -20,6 +26,225 @@ class SystemRunSummary:
     status: str
     events: list[dict[str, Any]] = field(default_factory=list)
     open_decisions: list[dict[str, Any]] = field(default_factory=list)
+
+
+LIFECYCLE_ACTIONS = {
+    "PAUSE",
+    "RESUME",
+    "REQUEST_REVISION",
+    "REJECT_PROPOSAL",
+    "APPROVE_DECISION",
+}
+
+
+@dataclass(frozen=True)
+class LifecycleOperationContext:
+    actor_identity: str
+    context_reference: str
+    allowed_actions: tuple[str, ...]
+    allowed_targets: tuple[str, ...]
+    allowed_scope: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LifecycleCommand:
+    identity: str
+    action: str
+    target: str
+    affected_scope: tuple[str, ...]
+    expected_state_identity: str
+    new_state_identity: str
+    reason: str
+    operation_context: LifecycleOperationContext
+    dependent_scope: tuple[str, ...] = ()
+    prerequisites_satisfied: bool = True
+
+
+@dataclass(frozen=True)
+class LifecycleCommandResult:
+    command_identity: str
+    action: str
+    state_identity: str
+    affected_scope: tuple[str, ...]
+    next_route: str
+    duplicate: bool = False
+
+
+class LifecycleCommandProcessor:
+    """Validate and apply explicit lifecycle commands against a fresh snapshot."""
+
+    def __init__(self, governor: LifecycleGovernor):
+        self.governor = governor
+
+    @staticmethod
+    def _metadata(command: LifecycleCommand) -> tuple[str, ...]:
+        context = command.operation_context
+        return (
+            f"ACTION:{command.action}",
+            f"TARGET:{command.target}",
+            f"ACTOR:{context.actor_identity}",
+            f"CONTEXT:{context.context_reference}",
+            f"DEPENDENTS:{','.join(command.dependent_scope)}",
+            f"PREREQUISITES:{command.prerequisites_satisfied}",
+            "TASK-003",
+            "SPEC-002",
+            "DES-002",
+        )
+
+    def _validate(self, command: LifecycleCommand) -> None:
+        context = command.operation_context
+        required = (
+            command.identity,
+            command.action,
+            command.target,
+            command.affected_scope,
+            command.expected_state_identity,
+            command.new_state_identity,
+            command.reason,
+            context.actor_identity,
+            context.context_reference,
+        )
+        if not all(required):
+            raise LifecycleInvariantError("malformed lifecycle command")
+        if command.action not in LIFECYCLE_ACTIONS:
+            raise LifecycleInvariantError(f"unsupported lifecycle action: {command.action}")
+        if command.action not in context.allowed_actions:
+            raise LifecycleInvariantError("actor is not authorized for this lifecycle action")
+        if command.target not in context.allowed_targets:
+            raise LifecycleInvariantError("target is outside the authorized operation context")
+        commanded_scope = set(command.affected_scope) | set(command.dependent_scope)
+        if not commanded_scope <= set(context.allowed_scope):
+            raise LifecycleInvariantError("affected scope is outside the authorized operation context")
+
+    def process(self, command: LifecycleCommand) -> LifecycleCommandResult:
+        self._validate(command)
+        current = self.governor.snapshot()
+        metadata = self._metadata(command)
+        prior = next((t for t in current.transitions if t.identity == command.identity), None)
+        if prior is not None:
+            if (
+                prior.affected_scope != command.affected_scope
+                or prior.reason != command.reason
+                or prior.sources != metadata
+                or prior.prior_state_identity != command.expected_state_identity
+                or prior.new_state_identity != command.new_state_identity
+            ):
+                raise LifecycleInvariantError("command identity was already used for different content")
+            return LifecycleCommandResult(
+                command.identity, command.action, current.identity,
+                command.affected_scope, prior.next_route, True,
+            )
+        if current.identity != command.expected_state_identity:
+            raise LifecycleInvariantError(
+                f"stale prior-state identity: {command.expected_state_identity} != {current.identity}"
+            )
+
+        proposed, route = self._project(current, command)
+        accepted = self.governor.transition(
+            proposed,
+            expected_prior_identity=command.expected_state_identity,
+            transition_identity=command.identity,
+            affected_scope=command.affected_scope,
+            reason=command.reason,
+            sources=metadata,
+            next_route=route,
+        )
+        return LifecycleCommandResult(
+            command.identity, command.action, accepted.identity,
+            command.affected_scope, route,
+        )
+
+    def _project(
+        self, current: LifecycleAggregate, command: LifecycleCommand
+    ) -> tuple[LifecycleAggregate, str]:
+        metadata = self._metadata(command)
+        affected = set(command.affected_scope)
+        conditions = list(current.conditions)
+        eligible = set(current.eligible_scope)
+        invalidated = set(current.invalidated_scope)
+        rerun = set(current.rerun_required)
+        completed = set(current.completed_work)
+        current_work = set(current.current_work)
+        pending = list(current.pending_decisions)
+
+        if command.action == "PAUSE":
+            if any(c.status == "PAUSED" and c.scope in affected for c in conditions):
+                raise LifecycleInvariantError("affected scope is already paused")
+            conditions.extend(
+                ScopedCondition("PAUSED", scope, command.reason, "RESUME", metadata)
+                for scope in command.affected_scope
+            )
+            eligible -= affected
+            route = "WAIT_FOR_RESUME"
+        elif command.action == "RESUME":
+            paused = {c.scope for c in conditions if c.status == "PAUSED"}
+            if not affected <= paused:
+                raise LifecycleInvariantError("resume target is not paused")
+            if not command.prerequisites_satisfied:
+                raise LifecycleInvariantError("resume prerequisites are not satisfied")
+            if any(
+                c.status == "PAUSED"
+                and c.scope in affected
+                and set(c.sources).intersection(pending)
+                for c in conditions
+            ):
+                raise LifecycleInvariantError("pending decision still blocks affected scope")
+            conditions = [
+                c for c in conditions
+                if not (c.status == "PAUSED" and c.scope in affected)
+            ]
+            still_affected = {c.scope for c in conditions} | invalidated
+            eligible |= affected - still_affected
+            route = "CONTINUE_ELIGIBLE_WORK"
+        elif command.action in {"REQUEST_REVISION", "REJECT_PROPOSAL"}:
+            all_affected = affected | set(command.dependent_scope)
+            invalidated |= all_affected
+            rerun |= all_affected
+            eligible -= all_affected
+            completed -= all_affected
+            current_work -= all_affected
+            conditions.extend(
+                ScopedCondition(
+                    "PAUSED", scope, command.reason,
+                    "REVISE_AND_REVIEW" if command.action == "REQUEST_REVISION" else "SUBMIT_NEW_PROPOSAL",
+                    metadata,
+                )
+                for scope in sorted(all_affected)
+                if not any(c.scope == scope and c.status == "PAUSED" for c in conditions)
+            )
+            route = "REVISE_AND_REVIEW" if command.action == "REQUEST_REVISION" else "SUBMIT_NEW_PROPOSAL"
+        else:  # APPROVE_DECISION
+            if command.target not in pending:
+                raise LifecycleInvariantError("approval target is not a pending decision")
+            if affected.intersection(completed):
+                raise LifecycleInvariantError("retrospective approval is prohibited")
+            if not command.prerequisites_satisfied:
+                raise LifecycleInvariantError("approval prerequisites are not satisfied")
+            pending.remove(command.target)
+            conditions = [
+                c for c in conditions
+                if not (
+                    c.status == "PAUSED"
+                    and c.scope in affected
+                    and command.target in c.sources
+                )
+            ]
+            still_affected = {c.scope for c in conditions} | invalidated
+            eligible |= affected - still_affected
+            route = "CONTINUE_ELIGIBLE_WORK" if affected <= eligible else "REVIEW_REMAINING_GATES"
+
+        proposed = replace(
+            current,
+            identity=command.new_state_identity,
+            eligible_scope=tuple(sorted(eligible)),
+            conditions=tuple(conditions),
+            pending_decisions=tuple(pending),
+            completed_work=tuple(item for item in current.completed_work if item in completed),
+            current_work=tuple(item for item in current.current_work if item in current_work),
+            invalidated_scope=tuple(sorted(invalidated)),
+            rerun_required=tuple(sorted(rerun)),
+        )
+        return proposed, route
 
 
 class FullSystemController:

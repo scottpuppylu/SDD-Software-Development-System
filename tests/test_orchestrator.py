@@ -12,6 +12,11 @@ from sdd_orchestrator.core import (
     QualificationState,
     ScopedCondition,
 )
+from sdd_orchestrator.system_controller import (
+    LifecycleCommand,
+    LifecycleCommandProcessor,
+    LifecycleOperationContext,
+)
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
@@ -217,6 +222,133 @@ class LifecycleGovernorTests(unittest.TestCase):
         completed.validate()
         self.assertFalse(completed.qualifications.verified)
         self.assertFalse(completed.qualifications.release_ready)
+
+
+class LifecycleCommandProcessorTests(unittest.TestCase):
+    def context(self, actions=("PAUSE", "RESUME", "REQUEST_REVISION", "REJECT_PROPOSAL", "APPROVE_DECISION")):
+        return LifecycleOperationContext(
+            "human-1", "session-1", actions,
+            ("proposal-1", "HD-1"), ("T002", "T003", "T004"),
+        )
+
+    def command(self, action, *, identity="cmd-1", expected="state-1", new="state-2", target="proposal-1", scope=("T002",), **changes):
+        values = dict(
+            identity=identity, action=action, target=target,
+            affected_scope=scope, expected_state_identity=expected,
+            new_state_identity=new, reason=f"reason for {action}",
+            operation_context=self.context(),
+        )
+        values.update(changes)
+        return LifecycleCommand(**values)
+
+    def process(self, state, command):
+        store = MemoryLifecycleState(state)
+        result = LifecycleCommandProcessor(LifecycleGovernor(store)).process(command)
+        return store, result
+
+    def test_pause_and_resume_only_affected_scope(self):
+        initial = lifecycle(eligible_scope=("T002", "T004"), independent_scope=("T004",))
+        store, paused = self.process(initial, self.command("PAUSE"))
+        self.assertEqual(paused.next_route, "WAIT_FOR_RESUME")
+        self.assertEqual(store.value.eligible_scope, ("T004",))
+        self.assertEqual(store.value.independent_scope, ("T004",))
+        resume = self.command("RESUME", identity="cmd-2", expected="state-2", new="state-3")
+        store2, resumed = self.process(store.value, resume)
+        self.assertEqual(resumed.next_route, "CONTINUE_ELIGIBLE_WORK")
+        self.assertEqual(store2.value.eligible_scope, ("T002", "T004"))
+
+    def test_revision_invalidates_dependents_without_erasing_history(self):
+        initial = lifecycle(completed_work=("T001", "T002", "T004"), eligible_scope=("T003", "T004"), independent_scope=("T004",))
+        command = self.command("REQUEST_REVISION", dependent_scope=("T003",))
+        store, _ = self.process(initial, command)
+        self.assertEqual(store.value.invalidated_scope, ("T002", "T003"))
+        self.assertEqual(store.value.rerun_required, ("T002", "T003"))
+        self.assertEqual(store.value.completed_work, ("T001", "T004"))
+        self.assertEqual(store.value.independent_scope, ("T004",))
+        self.assertEqual(store.value.transitions[0].identity, "cmd-1")
+
+    def test_rejection_prevents_adoption(self):
+        store, result = self.process(lifecycle(), self.command("REJECT_PROPOSAL"))
+        self.assertEqual(result.next_route, "SUBMIT_NEW_PROPOSAL")
+        self.assertNotIn("T002", store.value.eligible_scope)
+        self.assertIn("T002", store.value.invalidated_scope)
+
+    def test_approval_only_clears_named_condition(self):
+        state = lifecycle(
+            eligible_scope=(), pending_decisions=("HD-1",),
+            conditions=(
+                ScopedCondition("PAUSED", "T002", "decision", "HUMAN_DECISION", ("HD-1",)),
+                ScopedCondition("BLOCKED", "T003", "gate", "STAGE07", ("gate",)),
+            ),
+        )
+        command = self.command("APPROVE_DECISION", target="HD-1")
+        store, result = self.process(state, command)
+        self.assertEqual(result.next_route, "CONTINUE_ELIGIBLE_WORK")
+        self.assertEqual(store.value.eligible_scope, ("T002",))
+        self.assertEqual(store.value.conditions[0].scope, "T003")
+
+    def test_duplicate_is_idempotent_and_identity_reuse_is_rejected(self):
+        store, _ = self.process(lifecycle(), self.command("PAUSE"))
+        store.fail_publish = True
+        duplicate = LifecycleCommandProcessor(LifecycleGovernor(store)).process(self.command("PAUSE"))
+        self.assertTrue(duplicate.duplicate)
+        with self.assertRaisesRegex(LifecycleInvariantError, "different content"):
+            LifecycleCommandProcessor(LifecycleGovernor(store)).process(
+                self.command("PAUSE", reason="different")
+            )
+
+    def test_invalid_commands_leave_state_unchanged(self):
+        cases = (
+            self.command("PAUSE", expected="stale"),
+            self.command("PAUSE", operation_context=self.context(actions=("RESUME",))),
+            self.command("PAUSE", scope=("T999",)),
+            self.command("RESUME"),
+            self.command("APPROVE_DECISION", target="HD-1"),
+            self.command("PAUSE", identity=""),
+        )
+        for command in cases:
+            with self.subTest(command=command):
+                state = lifecycle()
+                store = MemoryLifecycleState(state)
+                with self.assertRaises(LifecycleInvariantError):
+                    LifecycleCommandProcessor(LifecycleGovernor(store)).process(command)
+                self.assertIs(store.value, state)
+
+    def test_approval_cannot_be_retrospective_or_bypass_prerequisites(self):
+        pending = lifecycle(
+            eligible_scope=(), pending_decisions=("HD-1",),
+            conditions=(ScopedCondition("PAUSED", "T002", "decision", "HUMAN_DECISION", ("HD-1",)),),
+        )
+        command = self.command(
+            "APPROVE_DECISION", target="HD-1", prerequisites_satisfied=False
+        )
+        store = MemoryLifecycleState(pending)
+        with self.assertRaisesRegex(LifecycleInvariantError, "prerequisites"):
+            LifecycleCommandProcessor(LifecycleGovernor(store)).process(command)
+        self.assertIs(store.value, pending)
+        retrospective = lifecycle(
+            completed_work=("T001", "T002"), eligible_scope=(),
+            pending_decisions=("HD-1",),
+            conditions=(ScopedCondition("PAUSED", "T002", "decision", "HUMAN_DECISION", ("HD-1",)),),
+        )
+        store = MemoryLifecycleState(retrospective)
+        with self.assertRaisesRegex(LifecycleInvariantError, "retrospective"):
+            LifecycleCommandProcessor(LifecycleGovernor(store)).process(
+                self.command("APPROVE_DECISION", target="HD-1")
+            )
+        self.assertIs(store.value, retrospective)
+
+    def test_persistence_failure_is_retryable_by_stable_identity(self):
+        state = lifecycle()
+        store = MemoryLifecycleState(state)
+        store.fail_publish = True
+        command = self.command("PAUSE")
+        with self.assertRaisesRegex(OSError, "publication failed"):
+            LifecycleCommandProcessor(LifecycleGovernor(store)).process(command)
+        self.assertIs(store.value, state)
+        store.fail_publish = False
+        result = LifecycleCommandProcessor(LifecycleGovernor(store)).process(command)
+        self.assertFalse(result.duplicate)
 
 
 if __name__ == "__main__":
