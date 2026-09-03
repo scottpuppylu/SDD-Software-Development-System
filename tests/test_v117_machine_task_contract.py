@@ -124,3 +124,11 @@ class V1110VerificationCommandParserTests(unittest.TestCase):
             VerificationCommandPolicy.argv('python -c "import os; os.remove(\\\"x\\\")"')
         with self.assertRaises(CodexAdapterError):
             VerificationCommandPolicy.argv('todo delete 1')
+
+    def test_parser_accepts_and_preserves_exact_repository_venv_pytest_launcher(self):
+        command = r".\.venv\Scripts\python.exe -m pytest -q tests/test_app.py"
+        text = f'''\n### T001 - exact venv verification\n- **Status:** TODO\n- **Allowed files:** `tests/test_app.py`\n- **Verification Commands:** `{command}`\n'''
+
+        task = TaskFileParser(text).parse()[0]
+
+        self.assertEqual(task.verification_commands, [command])

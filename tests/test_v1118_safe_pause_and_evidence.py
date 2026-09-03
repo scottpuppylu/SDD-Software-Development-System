@@ -40,6 +40,11 @@ class V1118Stage08Tests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name) / "repo"
         shutil.copytree(SOURCE / ".sdd", self.repo / ".sdd")
+        (self.repo / ".sdd/evidence/.stage08-pending-evidence-write.yaml").unlink(
+            missing_ok=True
+        )
+        for evidence_file in (self.repo / ".sdd/evidence").glob("*.json"):
+            evidence_file.unlink()
         for rel, text in {
             "AGENTS.md": "# AGENTS\n",
             "docs/PRD.md": "# PRD\nFR-001\n",
@@ -186,6 +191,32 @@ class V1118Stage08Tests(unittest.TestCase):
             self.assertTrue(VerificationCommandPolicy.argv(command))
         with self.assertRaises(CodexAdapterError):
             VerificationCommandPolicy.argv("git reset --hard")
+
+    def test_exact_repository_venv_launcher_is_narrowly_allowlisted(self):
+        command = r".\.venv\Scripts\python.exe -m pytest -q tests/test_app.py"
+        argv = VerificationCommandPolicy.argv(command)
+        self.assertEqual(argv[0], r".\.venv\Scripts\python.exe")
+        self.assertEqual(argv[1:], ["-m", "pytest", "-q", "tests/test_app.py"])
+
+        rejected = (
+            r".venv\Scripts\python.exe -m pytest -q tests",
+            r"..\.venv\Scripts\python.exe -m pytest -q tests",
+            r"C:\repo\.venv\Scripts\python.exe -m pytest -q tests",
+            r".\other-venv\Scripts\python.exe -m pytest -q tests",
+            r".\.venv\Scripts\other.exe -m pytest -q tests",
+            r".\.venv\Scripts\python.exe -c import_os",
+            r".\.venv\Scripts\python.exe -m pip install pytest",
+            r".\.venv\Scripts\python.exe -m unittest tests",
+            r".\.venv\Scripts\python.exe -m pytest",
+            r"powershell .\.venv\Scripts\python.exe -m pytest tests",
+            r"cmd /c .\.venv\Scripts\python.exe -m pytest tests",
+            r".\.venv\Scripts\python.exe -m pytest tests && echo bad",
+            r".\.venv\Scripts\python.exe -m pytest tests | more",
+            r".\.venv\Scripts\python.exe -m pytest tests > result.txt",
+        )
+        for candidate in rejected:
+            with self.subTest(candidate=candidate), self.assertRaises(CodexAdapterError):
+                VerificationCommandPolicy.argv(candidate)
 
     def test_heartbeat_reports_long_running_operation(self):
         runner = Stage08CodexRunner(Orchestrator(self.repo), heartbeat_seconds=1)

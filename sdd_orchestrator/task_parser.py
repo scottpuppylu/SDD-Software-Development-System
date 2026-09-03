@@ -189,6 +189,8 @@ class TaskFileParser:
     @staticmethod
     def _looks_like_command(value: str) -> bool:
         value = value.strip().strip("`")
+        if re.match(r"^\.\\\.venv\\Scripts\\python\.exe\s+-m\s+pytest\s+\S+", value):
+            return True
         if re.match(r"^(?:python(?:3)?\s+-m\s+pytest|pytest|npm\s+(?:test|run\s+\S+)|pnpm\s+(?:test|run\s+\S+)|yarn\s+(?:test|\S+)|ruff\s+check|mypy|go\s+test|cargo\s+test|dotnet\s+test)\b", value):
             return True
         if re.fullmatch(r"python(?:3)?\s+-m\s+pip\s+install\s+-e\s+\.", value):
