@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 import yaml
 
@@ -17,6 +18,13 @@ from sdd_orchestrator.codex_adapter import (
     Stage08CodexRunner, CodexAdapterError, TaskFileParser, VerificationCommandPolicy
 )
 from sdd_orchestrator.system_controller import FullSystemController
+from sdd_orchestrator.evidence_writer import (
+    EvidencePersistenceError,
+    EvidenceRecord,
+    EvidenceRegistry,
+    InvalidEvidence,
+    qualification_inputs,
+)
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -225,6 +233,74 @@ class V1118Stage08Tests(unittest.TestCase):
             value = runner._call_with_heartbeat("T999 still running", lambda: (time.sleep(1.1), 42)[1])
         self.assertEqual(value, 42)
         self.assertIn("T999 still running", buf.getvalue())
+
+
+class T008EvidenceRegistryTests(unittest.TestCase):
+    def record(self, **changes):
+        values = dict(
+            check_id="TEST-008", criterion="behavior is satisfied", scope="TASK-008",
+            executed=True, outcome="PASS", evidence_reference="pytest://TEST-008",
+            evidence_gap=None, coverage_links=("TASK-008", "SPEC-008"),
+            evidence_version="abc", current_version="abc", relevant=True,
+            regression_risk="No known regression risk", required=True,
+        )
+        values.update(changes)
+        return EvidenceRecord(**values)
+
+    def test_truthful_three_outcomes_and_metadata(self):
+        self.assertTrue(self.record().qualifies)
+        self.assertFalse(self.record(outcome="FAIL").qualifies)
+        not_run = self.record(executed=False, outcome="NOT RUN", evidence_reference=None, evidence_gap="tool unavailable")
+        self.assertFalse(not_run.qualifies)
+        for changes in (
+            {"outcome": "SKIP"},
+            {"outcome": "PASS", "executed": False},
+            {"outcome": "NOT RUN", "executed": False, "evidence_reference": None, "evidence_gap": None},
+            {"coverage_links": ()},
+        ):
+            with self.subTest(changes=changes), self.assertRaises(InvalidEvidence):
+                self.record(**changes)
+
+    def test_stale_irrelevant_partial_and_security_gaps_withhold_inputs(self):
+        records = (
+            self.record(check_id="pass"),
+            self.record(check_id="stale", evidence_version="old", regression_risk="version mismatch"),
+            self.record(check_id="irrelevant", relevant=False, regression_risk="scope uncovered"),
+            self.record(check_id="security", executed=False, outcome="NOT RUN", evidence_reference=None,
+                        evidence_gap="security suite absent", security_related=True, regression_risk="security unknown"),
+        )
+        result = qualification_inputs(records)
+        self.assertFalse(result.evidence_complete)
+        self.assertFalse(result.coverage_complete)
+        self.assertFalse(result.current_and_relevant)
+        self.assertFalse(result.security_evidence_complete)
+        self.assertIsNone(result.verification_decision)
+        self.assertIsNone(result.release_decision)
+        self.assertEqual(len(result.gaps), 3)
+        self.assertIn("security unknown", result.regression_risks)
+
+    def test_registry_appends_history_without_overwriting_outcomes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = EvidenceRegistry(Path(directory) / "registry.json")
+            registry.append(self.record(outcome="FAIL"))
+            registry.append(self.record(evidence_reference="pytest://TEST-008/retry"))
+            loaded = registry.load()
+            self.assertEqual([item.outcome for item in loaded], ["FAIL", "PASS"])
+            self.assertEqual(len(loaded), 2)
+
+    def test_registry_failure_is_explicit_and_preserves_prior_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = EvidenceRegistry(Path(directory) / "registry.json")
+            registry.append(self.record(outcome="FAIL"))
+            before = registry.path.read_bytes()
+            with patch("pathlib.Path.replace", side_effect=OSError("disk failure")):
+                with self.assertRaises(EvidencePersistenceError):
+                    registry.append(self.record(evidence_reference="pytest://retry"))
+            self.assertEqual(registry.path.read_bytes(), before)
+
+    def test_sensitive_evidence_reference_is_rejected(self):
+        with self.assertRaises(InvalidEvidence):
+            self.record(evidence_reference="api_key=do-not-store")
 
 
 if __name__ == "__main__":
