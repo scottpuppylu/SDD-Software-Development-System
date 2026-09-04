@@ -1,10 +1,21 @@
 from pathlib import Path
+from dataclasses import FrozenInstanceError
 import unittest
 
 from sdd_orchestrator.codex_adapter import TaskFileParser, VerificationCommandPolicy, CodexAdapterError
+from sdd_orchestrator.task_parser import SealedExecutionEnvelope
 
 
 class V117MachineTaskContractTests(unittest.TestCase):
+    def test_execution_envelope_is_immutable(self):
+        envelope = SealedExecutionEnvelope(
+            "seal", "T012", "task-hash", (("tasks.md", "authority-hash"),),
+            "gate-hash", "repo", "branch", "head", ("a.py",), "bounded",
+            ("pytest -q",), ("verification_pass",),
+        )
+        with self.assertRaises(FrozenInstanceError):
+            envelope.task_id = "T999"
+
     def test_parser_accepts_stage06_allowed_files_field(self):
         text = '''
 ### T001 — 建立 Python package 與測試骨架

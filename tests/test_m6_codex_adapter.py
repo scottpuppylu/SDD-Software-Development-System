@@ -53,6 +53,11 @@ class M6CodexAdapterTests(unittest.TestCase):
             "docs/PRD.md": "# PRD\nFR-001 Calculator addition\n",
             "docs/spec.md": "# Spec\nSPEC-001 add(a,b) returns sum\n",
             "docs/Design.md": "# Design\nDES-001 Python calculator module\n",
+            "docs/handoff/pre-implementation-gate-report.md": (
+                "# Stage 07 Pre-Implementation Gate Report\n\n"
+                "RESULT = PASS\n"
+                "IMPLEMENTATION_AUTHORIZATION = GRANTED\n"
+            ),
         }.items():
             p = self.repo / rel
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -76,6 +81,20 @@ class M6CodexAdapterTests(unittest.TestCase):
         state["lifecycle"]["current_stage"] = "08"
         state["lifecycle"]["current_stage_name"] = "IMPLEMENTATION_RUNNER"
         p.write_text(yaml.safe_dump(state, sort_keys=False), encoding="utf-8")
+        implementation_path = self.repo / ".sdd/state/implementation-state.yaml"
+        implementation = yaml.safe_load(
+            implementation_path.read_text(encoding="utf-8")
+        )
+        implementation["last_completed_task"] = None
+        implementation["current_task"] = None
+        implementation["next_task"] = None
+        implementation["last_verified_commit"] = None
+        implementation.setdefault("test_status", {})["overall"] = "NOT RUN"
+        implementation["test_status"]["required_checks"] = []
+        implementation["test_status"]["last_run_at"] = None
+        implementation_path.write_text(
+            yaml.safe_dump(implementation, sort_keys=False), encoding="utf-8"
+        )
 
     def _write_tasks(self, body: str):
         (self.repo / "tasks.md").write_text(body, encoding="utf-8")
@@ -99,6 +118,50 @@ class M6CodexAdapterTests(unittest.TestCase):
         runner = Stage08CodexRunner(orch, codex=FakeCodex(lambda *_: None))
         with self.assertRaises(CodexAdapterError):
             runner.preflight(runner.select_task())
+
+    def test_envelope_binds_task_authority_git_scope_and_verification(self):
+        self._write_tasks('''\n### T001 - sealed task\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`\n- **Implementation Scope:** Implement only calculator addition.\n- **Verification Commands:** `python -m pytest -q`\n''')
+        runner = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(lambda *_: None)
+        )
+        task = runner.select_task("T001")
+        envelope = runner.assemble_execution_envelope(task)
+
+        self.assertEqual(envelope.task_id, "T001")
+        self.assertEqual(envelope.allowed_paths, ("src/calculator.py",))
+        self.assertEqual(envelope.verification_commands, ("python -m pytest -q",))
+        self.assertEqual(envelope.baseline_commit, run_git(self.repo, "rev-parse", "HEAD"))
+        self.assertEqual(set(dict(envelope.authority_versions)), {
+            "docs/PRD.md", "docs/spec.md", "docs/Design.md", "AGENTS.md", "tasks.md"
+        })
+        runner.validate_execution_envelope(envelope, task)
+
+    def test_envelope_refuses_changed_authority(self):
+        self._write_tasks('''\n### T001 - sealed task\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`\n- **Implementation Scope:** Implement only calculator addition.\n- **Verification Commands:** `python -m pytest -q`\n''')
+        runner = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(lambda *_: None)
+        )
+        task = runner.select_task("T001")
+        envelope = runner.assemble_execution_envelope(task)
+        (self.repo / "docs/spec.md").write_text("changed authority\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(CodexAdapterError, "stale or mismatched"):
+            runner.validate_execution_envelope(envelope, task)
+
+    def test_codex_receives_sealed_envelope(self):
+        self._write_tasks('''\n### T001 - sealed task\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`\n- **Implementation Scope:** Implement only calculator addition.\n- **Verification Commands:** `python -c "import sys"`\n''')
+
+        def callback(repo, prompt):
+            self.assertIn("SEALED EXECUTION ENVELOPE", prompt)
+            self.assertIn('"task_id": "T001"', prompt)
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "src/calculator.py").write_text("value = 1\n", encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout="done", stderr="")
+
+        result = Stage08CodexRunner(
+            Orchestrator(self.repo), codex=FakeCodex(callback)
+        ).execute_one("T001")
+        self.assertEqual(result.status, "DONE")
 
     def test_codex_scope_violation_is_rejected(self):
         self._write_tasks('''\n### T001 — Add calculator\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n''')
@@ -1246,11 +1309,12 @@ class M6CodexAdapterTests(unittest.TestCase):
 
     def test_t014_failed_verification_removes_provisional_evidence_index(self):
         self._write_tasks('''
-### T014 — Build Stage 09 evidence index
+    ### T014 — Build Stage 09 evidence index
 - **Status:** TODO
 - **Allowed evidence files:** `.sdd/state/post-implementation-verification.md`
+- **Implementation Scope:** Build only the bounded evidence index.
 - **Verification Commands:** `python -m pytest -q`
-''')
+'''.replace("\n    ###", "\n###"))
         artifact = self.repo / ".sdd/state/post-implementation-verification.md"
         before = run_git(self.repo, "rev-parse", "HEAD")
 

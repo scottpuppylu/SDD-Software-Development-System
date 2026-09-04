@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from types import SimpleNamespace
+from dataclasses import asdict
+import hashlib
 import json
 import os
 import re
@@ -28,7 +30,7 @@ from .verification_runtime import (
     resolve_project_python,
     resolve_verification_argv,
 )
-from .task_parser import AtomicTask, TaskFileParser
+from .task_parser import AtomicTask, SealedExecutionEnvelope, TaskFileParser
 from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
 from .telemetry.measurement import (
     measure_stage08_task,
@@ -48,6 +50,15 @@ class Stage08CodexRunner:
         ".sdd/state/implementation-state.md",
         ".sdd/state/post-implementation-verification.md",
     }
+    ENVELOPE_AUTHORITY_PATHS = (
+        "docs/PRD.md", "docs/spec.md", "docs/Design.md", "AGENTS.md", "tasks.md",
+    )
+    STAGE07_REPORT = "docs/handoff/pre-implementation-gate-report.md"
+    CHECKPOINT_CONDITIONS = (
+        "implementation_complete", "verification_pass",
+        "completion_criteria_satisfied", "scope_respected",
+        "unexpected_diff_reviewed", "no_unresolved_blocker",
+    )
 
     def __init__(
         self,
@@ -90,6 +101,7 @@ class Stage08CodexRunner:
                     traceability=list(data.get("traceability", [])),
                     allowed_paths=list(data.get("allowed_paths", [])),
                     verification_commands=list(data.get("verification_commands", [])),
+                    behavior_scope=str(data.get("objective", "")).strip(),
                 ))
         if not tasks:
             raise CodexAdapterError("No Atomic Tasks were parsed from tasks.md")
@@ -141,17 +153,115 @@ class Stage08CodexRunner:
             VerificationCommandPolicy.argv(cmd)
 
     @staticmethod
+    def _sha256(data: str) -> str:
+        return hashlib.sha256(data.encode("utf-8")).hexdigest()
+
+    def _read_for_envelope(self, relative_path: str) -> str:
+        path = self.repo_root / relative_path
+        if not path.is_file():
+            raise CodexAdapterError(
+                f"Stage 08 envelope authority artifact is missing: {relative_path}"
+            )
+        return path.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _envelope_payload(envelope: SealedExecutionEnvelope) -> dict[str, Any]:
+        payload = asdict(envelope)
+        payload.pop("envelope_id", None)
+        return payload
+
+    def _seal_payload(self, payload: dict[str, Any]) -> str:
+        canonical = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        return self._sha256(canonical)
+
+    def assemble_execution_envelope(
+        self, task: AtomicTask, snapshot: Any | None = None
+    ) -> SealedExecutionEnvelope:
+        """Bind one task to current authority and Git identity without mutation."""
+        self.preflight(task)
+        snapshot = snapshot or self.git.snapshot(recent_limit=5)
+        if not snapshot.branch or not snapshot.head_commit:
+            raise CodexAdapterError(
+                "Stage 08 envelope requires branch and baseline commit identity"
+            )
+        project = self.orchestrator.project_state
+        if (
+            project.get("stages", {}).get("07", {}).get("result") != "PASS"
+            or project.get("authorizations", {}).get("implementation") is not True
+        ):
+            raise CodexAdapterError(
+                "Stage 08 envelope requires current Stage07 PASS authorization"
+            )
+        report = self._read_for_envelope(self.STAGE07_REPORT)
+        if (
+            "RESULT = PASS" not in report
+            or "IMPLEMENTATION_AUTHORIZATION = GRANTED" not in report
+        ):
+            raise CodexAdapterError(
+                "Stage 08 envelope requires a valid Stage07 PASS report"
+            )
+        authority_versions = tuple(
+            (path, self._sha256(self._read_for_envelope(path)))
+            for path in self.ENVELOPE_AUTHORITY_PATHS
+        )
+        behavior_scope = task.behavior_scope
+        if not behavior_scope:
+            raise CodexAdapterError(
+                f"{task.task_id} has no machine-bindable implementation behavior scope"
+            )
+        payload = {
+            "task_id": task.task_id,
+            "task_contract_sha256": self._sha256(task.raw_markdown),
+            "authority_versions": authority_versions,
+            "stage07_report_sha256": self._sha256(report),
+            "repository": str(self.repo_root.resolve()),
+            "branch": snapshot.branch,
+            "baseline_commit": snapshot.head_commit,
+            "allowed_paths": tuple(task.allowed_paths),
+            "behavior_scope": behavior_scope,
+            "verification_commands": tuple(task.verification_commands),
+            "checkpoint_conditions": self.CHECKPOINT_CONDITIONS,
+        }
+        return SealedExecutionEnvelope(
+            envelope_id=self._seal_payload(payload), **payload
+        )
+
+    def validate_execution_envelope(
+        self, envelope: SealedExecutionEnvelope, task: AtomicTask
+    ) -> None:
+        if self._seal_payload(self._envelope_payload(envelope)) != envelope.envelope_id:
+            raise CodexAdapterError(
+                "Stage 08 execution envelope seal is invalid or mutated"
+            )
+        if self.assemble_execution_envelope(task) != envelope:
+            raise CodexAdapterError(
+                "Stage 08 execution envelope is stale or mismatched; stop and route for reauthorization"
+            )
+
+    @staticmethod
     def safety_preflight(
         request: path_scope_policy.SafetyPreflightRequest,
     ) -> path_scope_policy.SafetyPreflightResult:
         """Central, non-bypassable safety decision for protected operations/resume."""
         return path_scope_policy.safety_preflight(request)
 
-    def build_prompt(self, task: AtomicTask) -> str:
+    def build_prompt(
+        self, task: AtomicTask, envelope: SealedExecutionEnvelope | None = None
+    ) -> str:
         trace = ", ".join(task.traceability) if task.traceability else "Use the task's explicit references in tasks.md."
         allowed = "\n".join(f"- {p}" for p in task.allowed_paths)
         verify = "\n".join(f"- {c}" for c in task.verification_commands)
+        envelope_text = (
+            json.dumps(asdict(envelope), ensure_ascii=False, sort_keys=True)
+            if envelope is not None
+            else "UNSEALED (prompt rendering only; execution is forbidden)"
+        )
         return f"""You are the Stage 08 coding execution engine inside an SDD governed repository.
+
+SEALED EXECUTION ENVELOPE (immutable; do not alter or enlarge):
+{envelope_text}
 
 Execute exactly one Atomic Task: {task.task_id} — {task.title}
 
@@ -236,6 +346,9 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 "refusing Codex execution"
             )
 
+        envelope = self.assemble_execution_envelope(task, before)
+        self.validate_execution_envelope(envelope, task)
+
         resume = self._evidence_write_resume
         durable_resume = self.recovery.load_pending_evidence_write()
         reusable_evidence: str | None = None
@@ -294,7 +407,9 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             self._telemetry_attempt_task = task
             proc = self._call_with_heartbeat(
                 f"{task.task_id} Codex still running",
-                lambda: self.codex.execute(self.repo_root, self.build_prompt(task)),
+                lambda: self.codex.execute(
+                    self.repo_root, self.build_prompt(task, envelope)
+                ),
             )
             self._progress(f"{task.task_id} Codex completed (exit={proc.returncode})")
         after = self.git.snapshot(recent_limit=5)
@@ -314,6 +429,10 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 "Changes are left uncommitted for inspection."
             )
         changed = sorted(post_nonruntime_dirty)
+
+        # Refuse authority, task, Git identity, scope, or verification changes
+        # made after sealing and before verification/checkpoint eligibility.
+        self.validate_execution_envelope(envelope, task)
 
         if proc.returncode != 0:
             return self._finish_without_checkpoint(task, proc, changed, "CODEX_FAILED")

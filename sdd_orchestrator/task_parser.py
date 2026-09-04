@@ -12,6 +12,25 @@ class AtomicTask:
     traceability: list[str]
     allowed_paths: list[str]
     verification_commands: list[str]
+    behavior_scope: str = ""
+
+
+@dataclass(frozen=True)
+class SealedExecutionEnvelope:
+    """Immutable, content-addressed authority passed to one Stage 08 attempt."""
+
+    envelope_id: str
+    task_id: str
+    task_contract_sha256: str
+    authority_versions: tuple[tuple[str, str], ...]
+    stage07_report_sha256: str
+    repository: str
+    branch: str
+    baseline_commit: str
+    allowed_paths: tuple[str, ...]
+    behavior_scope: str
+    verification_commands: tuple[str, ...]
+    checkpoint_conditions: tuple[str, ...]
 
 
 class TaskFileParser:
@@ -42,6 +61,11 @@ class TaskFileParser:
             trace = self._extract_traceability(block)
             paths = self._extract_allowed_paths(block)
             commands = self._extract_verification_commands(block)
+            behavior_scope = (
+                self._field(block, "Allowed implementation scope")
+                or self._field(block, "Implementation Scope")
+                or ""
+            )
             tasks.append(
                 AtomicTask(
                     task_id=task_id,
@@ -51,6 +75,7 @@ class TaskFileParser:
                     traceability=trace,
                     allowed_paths=paths,
                     verification_commands=commands,
+                    behavior_scope=behavior_scope,
                 )
             )
         return tasks
