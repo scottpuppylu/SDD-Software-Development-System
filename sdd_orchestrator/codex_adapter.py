@@ -230,8 +230,7 @@ class Stage08CodexRunner:
         if len(parents) != 1:
             return RecoveryQualification(False, "CHECKPOINT_CONTENT_MISMATCH")
         subject = self.git.commit_subject(checkpoint)
-        match = re.match(r"^(?:feat|fix)\(implementation\): \[([A-Z]+\d+)\] ", subject)
-        if match is None or match.group(1) != task.task_id:
+        if self._checkpoint_subject_task_id(subject) != task.task_id:
             return RecoveryQualification(False, "TASK_MISMATCH")
         changed_paths = sorted(self.git.commit_paths(checkpoint))
         if not changed_paths or any(
@@ -334,6 +333,23 @@ class Stage08CodexRunner:
         return RecoveryQualification(
             True, "QUALIFYING", evidence, evidence_commit, True
         )
+
+    @staticmethod
+    def _checkpoint_subject_task_id(subject: str) -> str | None:
+        """Extract a task only from a complete governed checkpoint subject."""
+        normal = re.fullmatch(
+            r"(?:feat|fix)\(implementation\): \[([A-Z]+\d+)\] .+", subject
+        )
+        if normal is not None:
+            return normal.group(1)
+        bootstrap = re.fullmatch(
+            r"(?:feat|fix): implement TASK-(\d{3}) .+ "
+            r"\[T(\d{3})-BOOTSTRAP-\d{3}\]",
+            subject,
+        )
+        if bootstrap is not None and bootstrap.group(1) == bootstrap.group(2):
+            return f"T{bootstrap.group(1)}"
+        return None
 
     @staticmethod
     def _recovery_reason(exc: Exception) -> str:

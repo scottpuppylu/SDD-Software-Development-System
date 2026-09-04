@@ -132,7 +132,10 @@ class M6CodexAdapterTests(unittest.TestCase):
             encoding="utf-8",
         )
         run_git(self.repo, "add", "src/value.py", "tests/test_recovery_target.py")
-        run_git(self.repo, "commit", "-m", "feat(implementation): [T001] recovery target")
+        run_git(
+            self.repo, "commit", "-m",
+            "feat: implement TASK-001 recovery target [T001-BOOTSTRAP-001]",
+        )
         checkpoint = run_git(self.repo, "rev-parse", "HEAD")
         run_git(self.repo, "commit", "--allow-empty", "-m", "docs: later baseline")
         baseline = run_git(self.repo, "rev-parse", "HEAD")
@@ -186,6 +189,29 @@ class M6CodexAdapterTests(unittest.TestCase):
     def test_verification_policy_rejects_shell_chaining(self):
         with self.assertRaises(CodexAdapterError):
             VerificationCommandPolicy.argv("pytest && rm -rf .")
+
+    def test_recovery_checkpoint_subject_identity_is_structured_and_fail_closed(self):
+        identify = Stage08CodexRunner._checkpoint_subject_task_id
+        self.assertEqual(
+            identify("feat: implement TASK-019 evidence recovery [T019-BOOTSTRAP-002]"),
+            "T019",
+        )
+        self.assertEqual(
+            identify("feat(implementation): [T019] evidence recovery"), "T019"
+        )
+        self.assertEqual(
+            identify("fix(implementation): [T019] evidence recovery"), "T019"
+        )
+        self.assertEqual(
+            identify("feat: implement TASK-018 evidence recovery [T018-BOOTSTRAP-002]"),
+            "T018",
+        )
+        self.assertIsNone(
+            identify("feat: unrelated change mentioning TASK-019 and T019-BOOTSTRAP-002")
+        )
+        self.assertIsNone(
+            identify("feat: implement TASK-019 evidence recovery [T018-BOOTSTRAP-002]")
+        )
 
     def test_preflight_requires_explicit_scope(self):
         self._write_tasks('''\n### T001 — vague\n- **Status:** TODO\n- **Verification Commands:** `python -m pytest -q`\n''')
