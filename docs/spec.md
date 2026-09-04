@@ -113,6 +113,17 @@ This approval owns only `TECHNICAL_CONTRACT`. It is not recovered or reconstruct
 - **Failure/blocking:** A recovery route cannot erase the failure, broaden authority, retroactively qualify work, or resume affected execution until its preconditions hold.
 - **Verification expectation:** Induce one representative failure per listed class and verify preservation, identity, blocking, truthful reporting, and at least one applicable route.
 
+### SPEC-017 - Append-only post-checkpoint implementation-evidence recovery
+
+- **Upstream:** G-01, G-03, G-04, G-05 -> FR-11, FR-12, FR-13, FR-14, FR-15, FR-16, NFR-01, NFR-03, NFR-04, EC-05, EC-06, EC-07 -> AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-23, AC-25, AC-26, AC-33, AC-34, AC-35.
+- **Applicable state/input:** An immutable implementation checkpoint whose required ordinary Stage08 `IMPLEMENTATION_EVIDENCE` is absent or non-qualifying because evidence persistence failed, was interrupted, or was discovered after the checkpoint to be incomplete, while the checkpoint itself remains identifiable and unchanged. Recovery is exceptional and may be attempted only under an explicit, current, task- and checkpoint-bounded recovery authorization issued by the applicable authority. It is ineligible when ordinary Stage08 execution is still in progress; the checkpoint is missing, unreachable, rewritten, content-mismatched, or not attributable to the task; implementation content would need modification; applicable task or authority identity is ambiguous, stale, withdrawn, or conflicting; required verification cannot be executed as authorized; or recovery would substitute for a lifecycle gate or qualification.
+- **Technical guarantee:** Post-checkpoint recovery may create new qualifying proof for an existing checkpoint, but cannot change or backdate the checkpoint, its contents, its original execution facts, or the evidence state that existed when it was created. A recovery record must be append-only and distinguish itself from ordinary atomic Stage08 evidence. It must bind deterministically to the exact task identity, exact immutable Git checkpoint identity, applicable authority baseline, exact authoritative verification command, recovery authorization identity, recovery execution time, verification outcome and exit status, execution environment/tool provenance sufficient to evaluate the result, and proof that implementation content was not modified during recovery. The referenced checkpoint must remain reachable through the governed repository history and its task-attributable content identity must match the recovered record.
+- **Required behavior/output:** Qualifying recovered evidence requires every required binding to validate, an authorized verification execution against the bound checkpoint, the exact authoritative command without implicit normalization or substitution, complete captured execution evidence, exit status zero, and a truthful `PASS`. Verification must be freshly executed during the authorized recovery unless the recovery authorization identifies a different repository-backed evidence instance and the governing contract explicitly permits its reuse. Chat claims, reconstructed memory, Stage07 prose, unbound logs, partial output, stale results, or an asserted prior success cannot establish recovered evidence. Timeout, missing execution, incomplete capture, unavailable or materially mismatched environment, or inability to prove the executed checkpoint produces `NOT RUN`, `FAIL`, or `BLOCKED` as applicable and cannot qualify.
+- **Admissibility and audit behavior:** A later evidence-only change does not qualify a historical checkpoint merely by existing. Admissibility requires validation of the explicit recovery authorization and every task, checkpoint, content, authority, command, execution, result, provenance, and no-implementation-mutation binding. Wrong-task, wrong-checkpoint, wrong-command, wrong-authority, stale-result, mismatched-content, unauthorized, incomplete, or unverifiable recovery fails closed. Identical duplicate records may be retained or deterministically recognized as duplicates but cannot multiply qualification. Conflicting records remain immutable, are reported together, block dependent reconciliation until authoritative resolution, and cannot be silently selected or overwritten. Every attempt, including failed attempts followed by a valid attempt, remains attributable in the append-only audit history; a later valid attempt does not erase or relabel an earlier failure.
+- **State and lifecycle boundary:** Implementation-state reconciliation remains blocked until recovered evidence qualifies under this contract. Qualifying recovery evidence permits only a separately authorized reconciliation of the checkpoint's implementation-evidence state; it does not itself perform or authorize that reconciliation, create Stage07 `PASS` or normal Stage08 authorization, qualify Stage09, permit Stage10/release, or authorize deployment. Ordinary Stage08 must continue to create its required evidence atomically under its sealed authorization and checkpoint conditions. This recovery path is not a fallback for normal execution and cannot weaken ordinary task, scope, verification, evidence, envelope, or checkpoint requirements.
+- **Failure/blocking:** If any required identity, reachability, integrity, authority, command, execution, provenance, result, immutability, or no-mutation fact cannot be proved, the recovery outcome is deterministically non-qualifying and affected reconciliation and progression remain `BLOCKED`. The system must report the failed binding and applicable authoritative route; it must not normalize, repair, infer, silently substitute, or broaden authority or fall back to another evidence path.
+- **Verification expectation:** Exercise qualifying recovery and rejection cases for absent authorization; ordinary-execution fallback; wrong or unreachable checkpoint; rewritten or mismatched content; wrong task, authority baseline, or command; non-zero exit, `FAIL`, `NOT RUN`, timeout, partial output, stale result, environment mismatch, and chat/Stage07-only claims; implementation mutation; arbitrary later evidence-only changes; matching duplicates; conflicting records; multiple failed and successful attempts; immutable audit retention; reconciliation before and after qualification; and attempts to derive Stage07, Stage09, Stage10/release, or deployment authority. Also prove that ordinary atomic Stage08 evidence behavior remains unchanged.
+
 ### SPEC-010 - Security, destructive action, and authority-conflict safety
 
 - **Upstream:** G-02, G-04, G-05 -> FR-08, FR-17, NFR-04, EC-07 -> AC-08, AC-17, AC-26, AC-35.
@@ -198,29 +209,29 @@ The canonical chain is `G-* -> FR/NFR/EC -> AC -> SPEC-*`. Goal and AC mappings 
 | FR-08 | AC-08 | SPEC-004, SPEC-005, SPEC-010, SPEC-016 |
 | FR-09 | AC-09 | SPEC-002, SPEC-005, SPEC-015 |
 | FR-10 | AC-10 | SPEC-002, SPEC-005 |
-| FR-11 | AC-11 | SPEC-001, SPEC-007, SPEC-014 |
-| FR-12 | AC-12 | SPEC-006, SPEC-007, SPEC-016 |
-| FR-13 | AC-13 | SPEC-006, SPEC-009 |
-| FR-14 | AC-14 | SPEC-008, SPEC-015, SPEC-016 |
-| FR-15 | AC-15 | SPEC-008, SPEC-016 |
-| FR-16 | AC-16 | SPEC-009, SPEC-015 |
+| FR-11 | AC-11 | SPEC-001, SPEC-007, SPEC-014, SPEC-017 |
+| FR-12 | AC-12 | SPEC-006, SPEC-007, SPEC-016, SPEC-017 |
+| FR-13 | AC-13 | SPEC-006, SPEC-009, SPEC-017 |
+| FR-14 | AC-14 | SPEC-008, SPEC-015, SPEC-016, SPEC-017 |
+| FR-15 | AC-15 | SPEC-008, SPEC-016, SPEC-017 |
+| FR-16 | AC-16 | SPEC-009, SPEC-015, SPEC-017 |
 | FR-17 | AC-17 | SPEC-004, SPEC-010 |
 | FR-18 | AC-18 | SPEC-011 |
 | FR-19 | AC-19 | SPEC-012 |
 | FR-20 | AC-20 | SPEC-013 |
 | FR-21 | AC-21 | SPEC-014 |
-| NFR-01 | AC-23 | SPEC-001, SPEC-008, SPEC-009, SPEC-016 |
+| NFR-01 | AC-23 | SPEC-001, SPEC-008, SPEC-009, SPEC-016, SPEC-017 |
 | NFR-02 | AC-24 | SPEC-009, SPEC-015 |
-| NFR-03 | AC-25 | SPEC-007 |
-| NFR-04 | AC-26 | SPEC-004, SPEC-010, SPEC-016 |
+| NFR-03 | AC-25 | SPEC-007, SPEC-017 |
+| NFR-04 | AC-26 | SPEC-004, SPEC-010, SPEC-016, SPEC-017 |
 | NFR-05 | AC-27 | SPEC-011, SPEC-012 |
 | EC-01 | AC-29 | SPEC-003 |
 | EC-02 | AC-30 | SPEC-002, SPEC-005 |
 | EC-03 | AC-31 | SPEC-002, SPEC-005 |
 | EC-04 | AC-32 | SPEC-006 |
-| EC-05 | AC-33 | SPEC-008 |
-| EC-06 | AC-34 | SPEC-009 |
-| EC-07 | AC-35 | SPEC-004, SPEC-010 |
+| EC-05 | AC-33 | SPEC-008, SPEC-017 |
+| EC-06 | AC-34 | SPEC-009, SPEC-017 |
+| EC-07 | AC-35 | SPEC-004, SPEC-010, SPEC-017 |
 | EC-08 | AC-36 | SPEC-012 |
 
 Coverage total: **34 of 34 applicable P0 requirements**.
