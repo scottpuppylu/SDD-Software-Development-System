@@ -4,14 +4,14 @@
 
 This artifact is the approved CURRENT prospective Stage06 `EXECUTION_DECOMPOSITION` authority. Stage06 owns task decomposition only: atomic work boundaries, dependency order, implementation scope, required outcomes, preservation and failure obligations, future verification, and checkpoint eligibility. It does not create or revise `PRODUCT_INTENT`, `PRODUCT_REQUIREMENT`, `TECHNICAL_CONTRACT`, `IMPLEMENTATION_DECISION`, or `AGENT_REPOSITORY_GOVERNANCE` authority.
 
-This approved whole artifact contains prospective `TASK-001` through `TASK-018`. Its approval does not create Stage07 `PASS`, authorize Stage08 implementation, establish implementation conformance, evaluate the Current Implementation Recovery Gate, create Stage09 `PASS`, or create Stage10, release, or deployment authority. Existing source, tests, implementation evidence, and historical completion claims were not used to derive these tasks and cannot make any task `DONE`.
+This approved whole artifact contains prospective `TASK-001` through `TASK-019`. Its approval does not create Stage07 `PASS`, authorize Stage08 implementation, establish implementation conformance, evaluate the Current Implementation Recovery Gate, create Stage09 `PASS`, or create Stage10, release, or deployment authority. Existing source, tests, implementation evidence, and historical completion claims were not used to derive these tasks and cannot make any task `DONE`.
 
 ## 2. Approved upstream baseline references
 
 - `docs/proposal.md`: CURRENT `PRODUCT_INTENT` authority, `APPROVED_CURRENT_AUTHORITY`; goals `G-01` through `G-05`.
 - `docs/PRD.md`: CURRENT `PRODUCT_REQUIREMENT` authority, `APPROVED_CURRENT_AUTHORITY`; applicable P0 requirements and acceptance criteria.
-- `docs/spec.md`: CURRENT `TECHNICAL_CONTRACT` authority, `APPROVED_CURRENT_AUTHORITY`; `SPEC-001` through `SPEC-016`.
-- `docs/Design.md`: CURRENT `IMPLEMENTATION_DECISION` authority, `APPROVED_CURRENT_AUTHORITY`; `DES-001` through `DES-016`.
+- `docs/spec.md`: CURRENT `TECHNICAL_CONTRACT` authority, `APPROVED_CURRENT_AUTHORITY`; `SPEC-001` through `SPEC-017`.
+- `docs/Design.md`: CURRENT `IMPLEMENTATION_DECISION` authority, `APPROVED_CURRENT_AUTHORITY`; `DES-001` through `DES-017`.
 - `AGENTS.md`: CURRENT Stage05 `AGENT_REPOSITORY_GOVERNANCE` authority, `APPROVED_CURRENT_AUTHORITY`.
 - `.sdd/system.yaml` and `.sdd/stages.yaml`: configured authority graph, Stage06 contract, lifecycle gates, traceability chain, and checkpoint rules.
 
@@ -346,12 +346,12 @@ Authority is domain-specific and non-linear. A discovered cross-domain conflict 
 
 - **Status:** `TODO`
 - **Purpose:** Define repeatable verification scenarios and evidence requirements covering every applicable P0 contract, rejection/failure path, traceability link, lifecycle integration, and preservation/regression obligation without issuing the Stage09 decision.
-- **Authority trace:** Every approved P0 chain (`G-01` through `G-05` to `FR-01` through `FR-21`, `NFR-01` through `NFR-05`, and `EC-01` through `EC-08`, each paired with `AC-01` through `AC-21`, `AC-23` through `AC-27`, and `AC-29` through `AC-36`) reaches `SPEC-001` through `SPEC-016` and `DES-001` through `DES-016` according to the approved upstream trace tables and section 6 below, then extends to `TASK-018`.
-- **Dependencies:** `TASK-016`, `TASK-017`.
+- **Authority trace:** Every approved P0 chain (`G-01` through `G-05` to `FR-01` through `FR-21`, `NFR-01` through `NFR-05`, and `EC-01` through `EC-08`, each paired with `AC-01` through `AC-21`, `AC-23` through `AC-27`, and `AC-29` through `AC-36`) reaches `SPEC-001` through `SPEC-017` and `DES-001` through `DES-017` according to the approved upstream trace tables and section 6 below, then extends to `TASK-018`.
+- **Dependencies:** `TASK-016`, `TASK-017`, `TASK-019`.
 - **Allowed files:** `tests/test_orchestrator.py`, `tests/test_runner.py`, `tests/test_m7_decision_gateway.py`, `tests/test_m4_reasoning_pipeline.py`, `tests/test_m5_git_recovery.py`, `tests/test_v1118_safe_pause_and_evidence.py`.
 - **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_orchestrator.py tests/test_runner.py tests/test_m7_decision_gateway.py tests/test_m4_reasoning_pipeline.py tests/test_m5_git_recovery.py tests/test_v1118_safe_pause_and_evidence.py`.
 - **Allowed implementation scope:** Scenario definitions, fixtures/inputs conceptually required by approved contracts, expected governed outcomes, requirement/SPEC/DES/TASK coverage links, rejection and failure variants, preservation and regression obligations, evidence metadata expectations, repeatability requirements, and explicit gaps. Concrete test framework and file layout remain deferred.
-- **Required behavior/outcome:** Define repeatable scenarios for all 34 applicable P0 requirements and acceptance criteria, all 16 SPEC and DES identifiers, every task's required behaviors and error paths, the end-to-end journey, gate/qualification non-substitution, session recovery, authority conflict, safety blocking, partial-progress preservation, modification impact, and regression coverage. Each scenario must state scope, criterion, expected `PASS`/`FAIL`/`NOT RUN` evidence semantics, and trace targets.
+- **Required behavior/outcome:** Define repeatable scenarios for all 34 applicable P0 requirements and acceptance criteria, all 17 SPEC and DES identifiers, every task's required behaviors and error paths, the end-to-end journey, gate/qualification non-substitution, session recovery, post-checkpoint evidence recovery, authority conflict, safety blocking, partial-progress preservation, modification impact, and regression coverage. Each scenario must state scope, criterion, expected `PASS`/`FAIL`/`NOT RUN` evidence semantics, and trace targets.
 - **Preservation obligations:** Preserve approved acceptance criteria and contract meaning, negative/rejection paths, evidence gaps, current-version identity, existing valid scenario results, and separation between test evidence and authority/Stage09 qualification. Do not weaken coverage to obtain a passing summary.
 - **Error/failure expectations:** Missing scenario coverage, ambiguous criterion, unrepeatable setup, broken trace, stale/irrelevant evidence, or unavailable execution remains an explicit gap/`NOT RUN` and withholds dependent completion. Partial scenario success cannot qualify the whole P0 scope.
 - **Security/safety expectations:** Include safe negative scenarios for unauthorized, destructive/high-risk, security, authority-conflict, scope-overrun, secret/minimum-disclosure, and bypass behavior without performing an unapproved destructive or sensitive operation. Test data must minimize sensitive content.
@@ -359,29 +359,47 @@ Authority is domain-specific and non-linear. A discovered cross-domain conflict 
 - **Checkpoint eligibility:** Atomic-checkpoint eligible only when the common conditions hold and all scenario completeness, repeatability, negative-path, preservation/regression, traceability, omission-detection, and evidence-semantics checks `PASS`. Eligibility or a checkpoint cannot create Stage09 qualification. No checkpoint is currently achieved.
 - **Out-of-scope:** Running Stage09, issuing `VERIFICATION_DECISION`, selecting a test framework, claiming implementation conformance, authorizing implementation, destructive testing, release, or deployment.
 
+## TASK-019 - Post-checkpoint implementation-evidence recovery
+
+- **Status:** `TODO`
+- **Purpose:** Implement the explicitly authorized, append-only post-checkpoint `IMPLEMENTATION_EVIDENCE` recovery capability for an unchanged immutable historical implementation checkpoint without weakening ordinary Stage08 evidence or lifecycle authority boundaries.
+- **Authority trace:** `G-01, G-03, G-04, G-05 -> FR-11, FR-12, FR-13, FR-14, FR-15, FR-16, NFR-01, NFR-03, NFR-04, EC-05, EC-06, EC-07 -> AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-23, AC-25, AC-26, AC-33, AC-34, AC-35 -> SPEC-017 -> DES-017 -> TASK-019`; applicable approved Stage05 recovery governance in `AGENTS.md` is an enforcement dependency, not a substituted trace authority.
+- **Dependencies:** `TASK-001`, `TASK-005`, `TASK-008`, `TASK-010`, `TASK-011`, `TASK-012`.
+- **Allowed files:** `sdd_orchestrator/evidence_writer.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/git_runtime.py`, `sdd_orchestrator/verification_execution.py`, `sdd_orchestrator/verification_runtime.py`, `tests/test_v1118_safe_pause_and_evidence.py`, `tests/test_m5_git_recovery.py`, `tests/test_m6_codex_adapter.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_v1118_safe_pause_and_evidence.py tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py`.
+- **Allowed implementation scope:** The `SPEC-017`/`DES-017` recovery capability only: accept and seal an explicit current Project Authority recovery authorization; create stable attempt identity; bind exact task, applicable authority baseline and task-contract digest, repository/branch/baseline, full immutable historical checkpoint and tree/diff/content identity, exact task-authoritative verification command, execution/environment provenance, and pre/post no-implementation-mutation observations; validate checkpoint existence, governed-history reachability, parent/diff identity, changed-path task scope, and later-history compatibility; execute the exact command against an isolated exact checkpoint view; record truthful `PASS`, `FAIL`, or `NOT RUN`, exit/timeout/completeness facts, and bounded output references; atomically append a versioned recovery attestation; determine `QUALIFYING` versus stable non-qualifying reasons; detect identical duplicates, conflicts, replay, and split-brain state; retain linked failed attempts; and expose only a repository-backed eligibility reference for a later separately governed implementation-state reconciliation.
+- **Required behavior/outcome:** A valid, unexpired, unconsumed, task/checkpoint/command/scope-bound recovery authorization can produce qualifying append-only evidence only after the historical checkpoint remains reachable and unchanged, its task-attributable content and paths match authority, fresh verification completes with exit zero and `PASS`, provenance is complete, no implementation mutation occurred, persistence succeeds, and no unresolved evidence conflict exists. Missing or mismatched bindings fail closed with a deterministic reason. An identical record/attempt retry is idempotently recognized without multiplying qualification. A persistence interruption preserves a safe linked attempt and permits only the authorization-compatible resume defined by Stage05/DES-017. A prior failed attempt remains immutable; a separately authorized later valid attempt may qualify without relabeling it. Qualification exposes reconciliation eligibility but performs no reconciliation.
+- **Preservation obligations:** Preserve the exact historical checkpoint and governed Git history; ordinary Stage08 atomic evidence/checkpoint behavior; sealed execution-envelope enforcement; existing evidence-registry semantics outside the explicit recovery discriminator; existing checkpoint/failure/recovery behavior; exact task and command authority; every attempt and failure; append-only audit history; minimum privilege and bounded disclosure; fail-closed defaults; and separation among implementation evidence, state reconciliation, Stage07 authorization, Stage09 verification qualification, Stage10/release, and deployment.
+- **Error/failure expectations:** Refuse missing, ambiguous, expired, consumed, withdrawn, overbroad, stale, or mismatched recovery authority; wrong task, repository, branch, baseline, authority, checkpoint, parent, tree/diff/content, path scope, or command; missing/unreachable/rewritten checkpoint; stale/unbound verification; nonzero/`FAIL`; unavailable execution/`NOT RUN`; timeout or incomplete capture; implementation mutation; arbitrary later evidence-only commit; unsupported schema; replay with changed content; conflicting evidence or overlapping incompatible authorizations; persistence/checkpoint failure; changed HEAD during the attempt; and split-brain evidence/state. Preserve facts, emit the stable non-qualifying reason, leave implementation state unchanged, and route to the applicable owner without normalization, substitution, fallback, cleanup, or history rewrite.
+- **Security/safety expectations:** Require the Stage05 protected-operation authorization and safety interlock; use minimum privilege; permit host/elevated verification only when explicitly authorized and separately approved where runtime policy requires; reject secret/unnecessary-output capture and authorization enlargement; restrict writes to the sealed TASK-019 file envelope during implementation and to explicitly authorized recovery/audit artifacts during a future recovery operation; and prohibit amend, rebase, destructive reset, force/history rewrite, fabricated-equivalent checkpoint, arbitrary evidence injection, or self-authorization.
+- **Verification requirements:** Positive checks must cover one valid authorized recovery against an exact reachable immutable checkpoint, fresh execution of the exact authoritative command, qualifying append-only evidence with complete provenance and deterministic task/checkpoint/content binding, identical duplicate/idempotent handling, persistence-interruption recovery, retained prior failure followed by a separately authorized valid attempt, and reconciliation eligibility after qualification without automatic state mutation. Negative checks must cover missing authority; wrong task; wrong, unreachable, rewritten, or content-mismatched checkpoint; out-of-scope checkpoint content; wrong authority baseline or command; stale/chat/Stage07-only result; nonzero/`FAIL`; timeout, incomplete capture, and `NOT RUN`; expired, consumed, withdrawn, overbroad, or mismatched authority; unauthorized implementation mutation; arbitrary evidence-only commit; replay with changed payload; conflicting evidence; overlapping incompatible authorization; persistence and evidence-checkpoint failure; changed HEAD/split-brain state; reconciliation blocked before qualification; ordinary Stage08 evidence and checkpoint-recovery regression; sealed-envelope non-weakening; and refusal to create Stage07, Stage09, Stage10/release, or deployment authority. Use only `PASS`, `FAIL`, or `NOT RUN` for executed checks.
+- **Checkpoint eligibility:** Atomic-checkpoint eligible only when the common conditions in section 3 hold; the declared TASK-019 command executes and all required positive, negative, persistence, retry, integrity, authorization, provenance, compatibility, and authority-separation checks `PASS`; `git diff --check` passes; the diff contains only TASK-019 allowed files; no authority artifact or implementation-state artifact changed; no historical checkpoint or governed history was rewritten; no T012 evidence recovery or state reconciliation occurred; and the checkpoint records only implementation and evidence for the recovery capability. Eligibility or checkpoint completion cannot imply T012 evidence recovery, implementation-state reconciliation, Stage07 `PASS`, Stage09 qualification, Stage10/release, or deployment. No checkpoint is currently achieved.
+- **Out-of-scope:** Performing T012 or any other evidence recovery; modifying T012 implementation to reconstruct evidence; changing tests outside TASK-019 verification scope; reconciling `.sdd/state/implementation-state.yaml`; amending, rebasing, resetting, replacing, or rewriting a historical checkpoint; fabricating or backdating original evidence; automatically qualifying an arbitrary evidence-only commit; changing any authority artifact or task contract during Stage08; creating or rerunning Stage07; implementing T013 or another unrelated task; Stage09 qualification; Stage10/release; deployment; or issuing recovery, implementation, gate, verification, or release authority.
+
 ## 4. Whole-artifact dependency graph
 
 The declared dependency graph is:
 
 ```text
-TASK-001 -> TASK-002, TASK-005, TASK-008, TASK-010, TASK-012, TASK-013, TASK-016
+TASK-001 -> TASK-002, TASK-005, TASK-008, TASK-010, TASK-012, TASK-013, TASK-016, TASK-019
 TASK-002 -> TASK-003, TASK-004, TASK-005, TASK-006, TASK-009, TASK-010, TASK-011, TASK-012
 TASK-003 -> TASK-015, TASK-017
 TASK-004 -> TASK-015, TASK-017
-TASK-005 -> TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013
+TASK-005 -> TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-019
 TASK-006 -> TASK-009, TASK-011, TASK-013, TASK-015, TASK-017
 TASK-007 -> TASK-015, TASK-017
-TASK-008 -> TASK-009, TASK-012, TASK-014, TASK-016, TASK-017
+TASK-008 -> TASK-009, TASK-012, TASK-014, TASK-016, TASK-017, TASK-019
 TASK-009 -> TASK-015, TASK-017
-TASK-010 -> TASK-007, TASK-011, TASK-012, TASK-015, TASK-017
-TASK-011 -> TASK-012, TASK-015, TASK-017
-TASK-012 -> TASK-015, TASK-017
+TASK-010 -> TASK-007, TASK-011, TASK-012, TASK-015, TASK-017, TASK-019
+TASK-011 -> TASK-012, TASK-015, TASK-017, TASK-019
+TASK-012 -> TASK-015, TASK-017, TASK-019
 TASK-013 -> TASK-014, TASK-016, TASK-017
 TASK-014 -> TASK-015, TASK-016, TASK-017
 TASK-015 -> TASK-016, TASK-017
 TASK-016 -> TASK-017, TASK-018
 TASK-017 -> TASK-018
 TASK-018 -> none
+TASK-019 -> TASK-018
 ```
 
 Analysis of the actual dependency declarations found no cycle, self-dependency, nonexistent task reference, or missing dependency required by the stated task scopes. The former TASK-007 forward reference to TASK-010 is now decomposition-resolved; it remains a real prerequisite and is not implementation-satisfied. The graph preserves parallel work where dependencies permit it.
@@ -408,14 +426,15 @@ Stage06 extends the canonical chain only through `TASK`: `G -> FR/NFR/EC -> AC -
 | `SPEC-014` | `DES-010` | `TASK-016`, `TASK-017`, `TASK-018` |
 | `SPEC-015` | `DES-011`, `DES-016` | `TASK-009`, `TASK-015`, `TASK-017`, `TASK-018` |
 | `SPEC-016` | `DES-001`, `DES-004`, `DES-007`, `DES-009` | `TASK-002`, `TASK-005`, `TASK-008`, `TASK-012`, `TASK-017`, `TASK-018` |
+| `SPEC-017` | `DES-017` | `TASK-019` |
 
 Coverage analysis confirms:
 
 - All 34 applicable P0 requirements are covered: `FR-01` through `FR-21`, `NFR-01` through `NFR-05`, and `EC-01` through `EC-08`.
 - All applicable P0 acceptance criteria are covered: `AC-01` through `AC-21`, `AC-23` through `AC-27`, and `AC-29` through `AC-36`.
-- `SPEC-001` through `SPEC-016` and `DES-001` through `DES-016` are covered.
-- `TASK-001` through `TASK-018` each have upstream authority; orphan task count is zero.
-- All 18 tasks contain the full task contract, remain `TODO`, and collectively cover the approved P0 implementation scope.
+- `SPEC-001` through `SPEC-017` and `DES-001` through `DES-017` are covered.
+- `TASK-001` through `TASK-019` each have upstream authority; orphan task count is zero.
+- All 19 tasks contain the full task contract, remain `TODO`, and collectively cover the approved P0 implementation scope.
 - The dependency graph closes with zero unresolved forward references and is a DAG.
 - Approved Design reports no blocking Design TBD; this decomposition introduces no blocking task TBD and detects no cross-domain conflict.
 
@@ -472,7 +491,7 @@ AGENT_REPOSITORY_GOVERNANCE_AUTHORITY =
 APPROVED_CURRENT_AUTHORITY
 
 TASK_COUNT =
-18
+19
 
 P0_TASK_COVERAGE_COMPLETE =
 YES
