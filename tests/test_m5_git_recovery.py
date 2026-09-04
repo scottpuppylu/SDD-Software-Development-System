@@ -68,6 +68,24 @@ class M5GitTests(unittest.TestCase):
             text=True,
         ).stdout.strip()
         self.assertEqual(subject, "feat(core): [T001] add a")
+
+    def test_historical_checkpoint_integrity_and_isolated_worktree(self):
+        (self.repo / "README.md").write_text("implementation\n", encoding="utf-8")
+        run = lambda *args: subprocess.run(
+            ["git", *args], cwd=self.repo, check=True, capture_output=True, text=True
+        ).stdout.strip()
+        run("add", "README.md")
+        run("commit", "-m", "feat(implementation): [T001] implementation")
+        checkpoint = run("rev-parse", "HEAD")
+        git = GitRepository(self.repo)
+        self.assertEqual(git.resolve_commit(checkpoint), checkpoint)
+        self.assertTrue(git.is_ancestor(checkpoint))
+        self.assertRegex(git.tree_identity(checkpoint), r"^[0-9a-f]{40}$")
+        self.assertRegex(git.commit_diff_digest(checkpoint), r"^[0-9a-f]{64}$")
+        with git.isolated_worktree(checkpoint) as isolated:
+            self.assertEqual((isolated / "README.md").read_text(), "implementation\n")
+            (isolated / "README.md").write_text("temporary\n", encoding="utf-8")
+        self.assertEqual((self.repo / "README.md").read_text(), "implementation\n")
         self.assertFalse(GitRepository(self.repo).snapshot().dirty_paths)
 
     def test_checkpoint_force_add_is_bounded_to_exact_state_and_evidence_files(self):

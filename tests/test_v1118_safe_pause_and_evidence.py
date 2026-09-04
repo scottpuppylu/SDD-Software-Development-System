@@ -20,17 +20,108 @@ from sdd_orchestrator.codex_adapter import (
 )
 from sdd_orchestrator.system_controller import FullSystemController
 from sdd_orchestrator.evidence_writer import (
+    RECOVERY_CAPABILITY,
+    RECOVERY_RECORD_KIND,
+    RECOVERY_SCHEMA_VERSION,
     EvidencePersistenceError,
     EvidenceRecord,
     EvidenceRegistry,
     InvalidEvidence,
+    RecoveryAuthorization,
+    canonical_sha256,
+    qualify_recovery_attestation,
     qualification_inputs,
+    task_contract_sha256,
+    write_recovery_attestation,
 )
+from sdd_orchestrator.task_parser import AtomicTask
 from sdd_orchestrator.path_scope_policy import (
     SafetyAuthorization, SafetyBlocker, SafetyPreflightRequest, safety_preflight,
 )
 
 SOURCE = Path(__file__).resolve().parents[1]
+
+
+class PostCheckpointEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self.tmp.name)
+        self.task = AtomicTask(
+            "T012", "sealed", "TODO", "TASK-012 contract", ["SPEC-017"],
+            ["src/a.py"], ["python -m pytest -q tests/test_a.py"], "recover",
+        )
+        now = datetime.now(timezone.utc)
+        self.authorization = RecoveryAuthorization(
+            authorization_id="REC-1", issuer="PROJECT_AUTHORITY",
+            capability=RECOVERY_CAPABILITY, task_id="T012",
+            checkpoint_commit="a" * 40, repository=str(self.repo), branch="main",
+            baseline_commit="b" * 40,
+            authority_versions=(("docs/spec.md", "c" * 64),),
+            task_contract_sha256=task_contract_sha256(self.task),
+            verification_command=self.task.verification_commands[0],
+            allowed_evidence_prefix=".sdd/evidence/", attempt_id="attempt-1",
+            issued_at=now.isoformat(), expires_at=(now + timedelta(hours=1)).isoformat(),
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def payload(self):
+        value = {
+            "schema_version": RECOVERY_SCHEMA_VERSION,
+            "record_kind": RECOVERY_RECORD_KIND,
+            "attempt_id": "attempt-1", "authorization_id": "REC-1",
+            "task_id": "T012", "checkpoint_commit": "a" * 40,
+            "task_contract_sha256": task_contract_sha256(self.task),
+            "verification_command": self.task.verification_commands[0],
+            "verification_outcome": "PASS", "exit_status": 0,
+            "complete": True, "timed_out": False,
+            "implementation_mutated": False,
+            "pre_head": "b" * 40, "post_head": "b" * 40,
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        value["record_sha256"] = canonical_sha256(value)
+        return value
+
+    def test_recovery_qualification_requires_exact_bindings(self):
+        result = qualify_recovery_attestation(
+            self.payload(), self.authorization, self.task
+        )
+        self.assertTrue(result.qualifies)
+        self.assertTrue(result.reconciliation_eligible)
+        wrong = self.payload()
+        wrong["verification_command"] = "pytest -q"
+        wrong["record_sha256"] = canonical_sha256(
+            {key: value for key, value in wrong.items() if key != "record_sha256"}
+        )
+        self.assertEqual(
+            qualify_recovery_attestation(wrong, self.authorization, self.task).reason,
+            "COMMAND_MISMATCH",
+        )
+
+    def test_recovery_authorization_is_project_authority_only_and_expires(self):
+        values = dict(self.authorization.__dict__)
+        values["issuer"] = "AGENT"
+        with self.assertRaisesRegex(InvalidEvidence, "AUTHORITY_INVALID"):
+            RecoveryAuthorization(**values).validate()
+        values = dict(self.authorization.__dict__)
+        values["expires_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        with self.assertRaisesRegex(InvalidEvidence, "AUTHORITY_INVALID"):
+            RecoveryAuthorization(**values).validate()
+
+    def test_recovery_persistence_is_append_only_and_idempotent(self):
+        payload = self.payload()
+        rel, created = write_recovery_attestation(self.repo, payload)
+        self.assertTrue(created)
+        self.assertIn("-T012-recovery-attempt-1.json", rel)
+        self.assertEqual(write_recovery_attestation(self.repo, payload), (rel, False))
+        conflicting = dict(payload)
+        conflicting["exit_status"] = 1
+        conflicting["record_sha256"] = canonical_sha256(
+            {key: value for key, value in conflicting.items() if key != "record_sha256"}
+        )
+        with self.assertRaisesRegex(InvalidEvidence, "EVIDENCE_CONFLICT"):
+            write_recovery_attestation(self.repo, conflicting)
 
 
 def run_git(repo: Path, *args: str) -> str:
@@ -62,6 +153,9 @@ class V1118Stage08Tests(unittest.TestCase):
             "docs/PRD.md": "# PRD\nFR-001\n",
             "docs/spec.md": "# Spec\nSPEC-001\n",
             "docs/Design.md": "# Design\nDES-001\n",
+            "docs/handoff/pre-implementation-gate-report.md": (
+                "# Stage 07\nRESULT = PASS\nIMPLEMENTATION_AUTHORIZATION = GRANTED\n"
+            ),
         }.items():
             path = self.repo / rel
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -93,6 +187,7 @@ class V1118Stage08Tests(unittest.TestCase):
 ### T014 — Build Stage 09 evidence index
 - **Status:** TODO
 - **Allowed evidence files:** `.sdd/state/implementation-state.md`, `.sdd/state/post-implementation-verification.md`
+- **Implementation Scope:** Build only the Stage 09 evidence index files.
 - **Verification Commands:** `python -c "import sys"`
 ''')
 
@@ -128,11 +223,13 @@ class V1118Stage08Tests(unittest.TestCase):
 ### T001 — First task
 - **Status:** TODO
 - **Allowed files:** `src/one.py`
+- **Implementation Scope:** Implement only the first fixture task.
 - **Verification Commands:** `python -c "import sys"`
 
 ### T002 — Second task
 - **Status:** TODO
 - **Allowed files:** `src/two.py`
+- **Implementation Scope:** Implement only the second fixture task.
 - **Verification Commands:** `python -c "import sys"`
 ''')
 
@@ -162,6 +259,7 @@ class V1118Stage08Tests(unittest.TestCase):
 ### T001 ??Only task
 - **Status:** TODO
 - **Allowed files:** `src/only.py`
+- **Implementation Scope:** Implement only the final fixture task.
 - **Verification Commands:** `python -c "import sys"`
 ''')
 

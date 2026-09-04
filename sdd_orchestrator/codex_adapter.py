@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 from types import SimpleNamespace
 from dataclasses import asdict
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -20,7 +21,19 @@ from .core import Orchestrator
 from .codex_cli import CodexCLI
 from .codex_results import VerificationResult, CodexTaskRunResult
 from .result_serialization import serialize_task_run_result
-from .evidence_writer import write_stage08_evidence
+from .evidence_writer import (
+    RECOVERY_RECORD_KIND,
+    RECOVERY_SCHEMA_VERSION,
+    RecoveryAuthorization,
+    RecoveryQualification,
+    canonical_sha256,
+    find_recovery_attempts,
+    qualify_recovery_attestation,
+    redact_evidence_output,
+    task_contract_sha256,
+    write_recovery_attestation,
+    write_stage08_evidence,
+)
 from .errors import CodexAdapterError, NoExecutableTaskError
 from .verification_policy import VerificationCommandPolicy
 from .verification_execution import execute_verification_command
@@ -151,6 +164,190 @@ class Stage08CodexRunner:
             )
         for cmd in task.verification_commands:
             VerificationCommandPolicy.argv(cmd)
+
+    def recover_post_checkpoint_evidence(
+        self,
+        authorization: RecoveryAuthorization,
+        *,
+        checkpoint_evidence: bool = False,
+    ) -> RecoveryQualification:
+        """Create new proof for an unchanged checkpoint; never update task state."""
+        try:
+            authorization.validate()
+        except Exception:
+            return RecoveryQualification(False, "AUTHORITY_INVALID")
+        task = next(
+            (item for item in self.tasks() if item.task_id == authorization.task_id),
+            None,
+        )
+        if task is None:
+            return RecoveryQualification(False, "TASK_MISMATCH")
+        if self.repo_root.as_posix() != Path(authorization.repository).resolve().as_posix():
+            return RecoveryQualification(False, "AUTHORITY_INVALID")
+        if task_contract_sha256(task) != authorization.task_contract_sha256:
+            return RecoveryQualification(False, "TASK_MISMATCH")
+        if task.verification_commands != [authorization.verification_command]:
+            return RecoveryQualification(False, "COMMAND_MISMATCH")
+        prior_attempts = find_recovery_attempts(self.repo_root, authorization)
+        before = self.git.snapshot(recent_limit=5)
+        prior_paths = {path for path, _ in prior_attempts}
+        unexplained_dirty = [path for path in before.dirty_paths if path not in prior_paths]
+        if (
+            not before.is_repository
+            or before.branch != authorization.branch
+            or before.head_commit != authorization.baseline_commit
+            or unexplained_dirty
+        ):
+            return RecoveryQualification(False, "AUTHORITY_INVALID")
+        expected_authorities = tuple(
+            (path, self._sha256(self._read_for_envelope(path)))
+            for path in self.ENVELOPE_AUTHORITY_PATHS
+        )
+        if authorization.authority_versions != expected_authorities:
+            return RecoveryQualification(False, "AUTHORITY_INVALID")
+        if prior_attempts:
+            if len(prior_attempts) != 1:
+                return RecoveryQualification(False, "EVIDENCE_CONFLICT")
+            prior_path, prior_payload = prior_attempts[0]
+            if (
+                prior_payload.get("authorization_id") != authorization.authorization_id
+                or prior_payload.get("attempt_id") != authorization.attempt_id
+            ):
+                return RecoveryQualification(False, "EVIDENCE_CONFLICT")
+            prior = qualify_recovery_attestation(prior_payload, authorization, task)
+            if prior.qualifies and authorization.allow_persistence_resume:
+                return RecoveryQualification(
+                    True, "QUALIFYING", prior_path, None, True
+                )
+            return RecoveryQualification(False, "AUTHORITY_INVALID", prior_path)
+
+        checkpoint = self.git.resolve_commit(authorization.checkpoint_commit)
+        if checkpoint != authorization.checkpoint_commit:
+            return RecoveryQualification(False, "CHECKPOINT_MISMATCH")
+        if not self.git.is_ancestor(checkpoint, before.head_commit or "HEAD"):
+            return RecoveryQualification(False, "CHECKPOINT_UNREACHABLE")
+        parents = self.git.commit_parents(checkpoint)
+        if len(parents) != 1:
+            return RecoveryQualification(False, "CHECKPOINT_CONTENT_MISMATCH")
+        subject = self.git.commit_subject(checkpoint)
+        match = re.match(r"^(?:feat|fix)\(implementation\): \[([A-Z]+\d+)\] ", subject)
+        if match is None or match.group(1) != task.task_id:
+            return RecoveryQualification(False, "TASK_MISMATCH")
+        changed_paths = sorted(self.git.commit_paths(checkpoint))
+        if not changed_paths or any(
+            not self._covered(path, task.allowed_paths) for path in changed_paths
+        ):
+            return RecoveryQualification(False, "SCOPE_MISMATCH")
+
+        started = datetime.now(timezone.utc)
+        verification: VerificationResult
+        isolated_dirty: list[str] = []
+        try:
+            project_python = self._resolve_project_python()
+            verify_env = self._verification_env(project_python)
+            argv = VerificationCommandPolicy.argv(authorization.verification_command)
+            argv = resolve_verification_argv(
+                argv, project_python, verify_env, resolver=shutil.which
+            )
+            with self.git.isolated_worktree(checkpoint) as worktree:
+                verification = execute_verification_command(
+                    authorization.verification_command,
+                    argv,
+                    worktree,
+                    verify_env,
+                    run_command=subprocess.run,
+                    call_with_heartbeat=self._call_with_heartbeat,
+                    heartbeat_label=f"{task.task_id} recovery verification still running",
+                )
+                isolated = GitRepository(worktree).snapshot(recent_limit=1)
+                isolated_dirty = list(isolated.dirty_paths)
+        except Exception as exc:
+            return RecoveryQualification(False, self._recovery_reason(exc))
+        ended = datetime.now(timezone.utc)
+        after = self.git.snapshot(recent_limit=5)
+        implementation_mutated = bool(
+            after.head_commit != before.head_commit
+            or after.branch != before.branch
+            or after.dirty_paths
+            or any(self._covered(path, task.allowed_paths) for path in isolated_dirty)
+        )
+        timed_out = verification.returncode == 124
+        outcome = "PASS" if verification.passed else "NOT RUN" if timed_out else "FAIL"
+        payload: dict[str, Any] = {
+            "schema_version": RECOVERY_SCHEMA_VERSION,
+            "record_kind": RECOVERY_RECORD_KIND,
+            "attempt_id": authorization.attempt_id,
+            "authorization_id": authorization.authorization_id,
+            "authorization_issuer": authorization.issuer,
+            "task_id": task.task_id,
+            "checkpoint_commit": checkpoint,
+            "checkpoint_parent": parents[0],
+            "checkpoint_tree": self.git.tree_identity(checkpoint),
+            "checkpoint_changed_paths": changed_paths,
+            "checkpoint_diff_sha256": self.git.commit_diff_digest(checkpoint),
+            "authority_versions": [list(item) for item in authorization.authority_versions],
+            "task_contract_sha256": authorization.task_contract_sha256,
+            "verification_command": authorization.verification_command,
+            "verification_command_sha256": self._sha256(authorization.verification_command),
+            "verification_outcome": outcome,
+            "exit_status": verification.returncode,
+            "complete": not timed_out,
+            "timed_out": timed_out,
+            "stdout": redact_evidence_output(verification.stdout),
+            "stderr": redact_evidence_output(verification.stderr),
+            "started_at": started.isoformat().replace("+00:00", "Z"),
+            "ended_at": ended.isoformat().replace("+00:00", "Z"),
+            "environment": {
+                "python": project_python,
+                "execution_mode": "HOST_OR_CONFIGURED_RUNTIME",
+                "working_tree": "ISOLATED_CHECKPOINT",
+            },
+            "pre_head": before.head_commit,
+            "post_head": after.head_commit,
+            "implementation_mutated": implementation_mutated,
+            "isolated_dirty_paths": isolated_dirty,
+            "recorded_at": ended.isoformat().replace("+00:00", "Z"),
+        }
+        payload["record_sha256"] = canonical_sha256(payload)
+        qualification = qualify_recovery_attestation(payload, authorization, task)
+        try:
+            evidence, _ = write_recovery_attestation(self.repo_root, payload)
+        except Exception as exc:
+            return RecoveryQualification(False, self._recovery_reason(exc))
+        if not qualification.qualifies:
+            return RecoveryQualification(False, qualification.reason, evidence)
+        evidence_commit = None
+        if checkpoint_evidence:
+            try:
+                evidence_commit = self.git.checkpoint(
+                    task_id=task.task_id,
+                    summary=(
+                        "post-checkpoint evidence recovery "
+                        f"[{authorization.authorization_id}]"
+                    ),
+                    paths=[evidence],
+                    commit_type="chore",
+                    scope="implementation-evidence",
+                )
+            except Exception as exc:
+                return RecoveryQualification(False, self._recovery_reason(exc), evidence)
+        return RecoveryQualification(
+            True, "QUALIFYING", evidence, evidence_commit, True
+        )
+
+    @staticmethod
+    def _recovery_reason(exc: Exception) -> str:
+        message = str(exc)
+        for reason in (
+            "AUTHORITY_INVALID", "TASK_MISMATCH", "CHECKPOINT_UNREACHABLE",
+            "CHECKPOINT_MISMATCH", "CHECKPOINT_CONTENT_MISMATCH", "SCOPE_MISMATCH",
+            "COMMAND_MISMATCH", "VERIFICATION_FAILED", "VERIFICATION_NOT_RUN",
+            "VERIFICATION_INCOMPLETE", "IMPLEMENTATION_MUTATED", "EVIDENCE_CONFLICT",
+            "PERSISTENCE_FAILED", "SCHEMA_INVALID",
+        ):
+            if reason in message:
+                return reason
+        return "VERIFICATION_NOT_RUN"
 
     @staticmethod
     def _sha256(data: str) -> str:

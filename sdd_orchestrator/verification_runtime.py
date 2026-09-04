@@ -60,7 +60,7 @@ def resolve_verification_argv(
     verify_env: dict[str, str],
     resolver: Callable[..., str | None] | None = None,
 ) -> list[str]:
-    if argv[0] in {"python", "python3"}:
+    if argv[0] in {"python", "python3", r".\.venv\Scripts\python.exe"}:
         argv[0] = project_python
     elif argv[0] == "pytest":
         return [project_python, "-m", "pytest", *argv[1:]]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 from typing import Any, Callable
 
 from .codex_results import VerificationResult
@@ -35,5 +36,12 @@ def execute_verification_command(
             127,
             "",
             f"verification executable not found: {argv[0]} ({exc})",
+        )
+    except subprocess.TimeoutExpired as exc:
+        return VerificationResult(
+            command,
+            124,
+            str(exc.stdout or ""),
+            f"verification timed out: {exc}",
         )
     return VerificationResult(command, proc.returncode, proc.stdout, proc.stderr)

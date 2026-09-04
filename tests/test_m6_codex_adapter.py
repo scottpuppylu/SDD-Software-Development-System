@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -20,6 +22,11 @@ from sdd_orchestrator.codex_adapter import (
     VerificationCommandPolicy,
 )
 from sdd_orchestrator.git_runtime import GitRuntimeError
+from sdd_orchestrator.evidence_writer import (
+    RECOVERY_CAPABILITY,
+    RecoveryAuthorization,
+    task_contract_sha256,
+)
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -101,6 +108,74 @@ class M6CodexAdapterTests(unittest.TestCase):
         run_git(self.repo, "add", "tasks.md", ".sdd/state/project-state.yaml")
         run_git(self.repo, "commit", "-m", "authorize stage08")
 
+    def test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation(self):
+        command = "python -m pytest -q tests/test_recovery_target.py"
+        self._write_tasks(f'''\n## TASK-001 - Recovery target
+- **Status:** TODO
+- **Traceability:** SPEC-017 -> DES-017 -> TASK-001
+- **Allowed files:** `src/value.py`, `tests/test_recovery_target.py`.
+- **Allowed implementation scope:** recover exact checkpoint evidence.
+- **Verification Commands:** `{command}`.
+''')
+        (self.repo / "src").mkdir(exist_ok=True)
+        (self.repo / "tests").mkdir(exist_ok=True)
+        (self.repo / "src/value.py").write_text("VALUE = 1\n", encoding="utf-8")
+        (self.repo / "tests/test_recovery_target.py").write_text(
+            "from src.value import VALUE\n\ndef test_value():\n    assert VALUE == 1\n",
+            encoding="utf-8",
+        )
+        run_git(self.repo, "add", ".")
+        run_git(self.repo, "commit", "-m", "chore: recovery setup")
+        (self.repo / "src/value.py").write_text("VALUE = 2\n", encoding="utf-8")
+        (self.repo / "tests/test_recovery_target.py").write_text(
+            "from src.value import VALUE\n\ndef test_value():\n    assert VALUE == 2\n",
+            encoding="utf-8",
+        )
+        run_git(self.repo, "add", "src/value.py", "tests/test_recovery_target.py")
+        run_git(self.repo, "commit", "-m", "feat(implementation): [T001] recovery target")
+        checkpoint = run_git(self.repo, "rev-parse", "HEAD")
+        run_git(self.repo, "commit", "--allow-empty", "-m", "docs: later baseline")
+        baseline = run_git(self.repo, "rev-parse", "HEAD")
+        runner = Stage08CodexRunner(
+            Orchestrator(self.repo), project_python=sys.executable, heartbeat_seconds=0
+        )
+        task = runner.select_task("T001")
+        authority_versions = tuple(
+            (path, runner._sha256((self.repo / path).read_text(encoding="utf-8")))
+            for path in runner.ENVELOPE_AUTHORITY_PATHS
+        )
+        now = datetime.now(timezone.utc)
+        authorization = RecoveryAuthorization(
+            authorization_id="RECOVERY-1", issuer="PROJECT_AUTHORITY",
+            capability=RECOVERY_CAPABILITY, task_id="T001",
+            checkpoint_commit=checkpoint, repository=str(self.repo.resolve()),
+            branch=run_git(self.repo, "branch", "--show-current"),
+            baseline_commit=baseline, authority_versions=authority_versions,
+            task_contract_sha256=task_contract_sha256(task),
+            verification_command=command, allowed_evidence_prefix=".sdd/evidence/",
+            attempt_id="attempt-1", issued_at=now.isoformat(),
+            expires_at=(now + timedelta(hours=1)).isoformat(),
+        )
+        state_before = (self.repo / ".sdd/state/implementation-state.yaml").read_text()
+        result = runner.recover_post_checkpoint_evidence(authorization)
+        self.assertTrue(result.qualifies, result.reason)
+        self.assertTrue(result.reconciliation_eligible)
+        self.assertIsNone(result.evidence_checkpoint)
+        self.assertTrue((self.repo / result.evidence_file).is_file())
+        self.assertEqual(
+            (self.repo / ".sdd/state/implementation-state.yaml").read_text(),
+            state_before,
+        )
+        consumed = runner.recover_post_checkpoint_evidence(authorization)
+        self.assertFalse(consumed.qualifies)
+        self.assertEqual(consumed.reason, "AUTHORITY_INVALID")
+        resumable_values = dict(authorization.__dict__)
+        resumable_values["allow_persistence_resume"] = True
+        resumed = runner.recover_post_checkpoint_evidence(
+            RecoveryAuthorization(**resumable_values)
+        )
+        self.assertTrue(resumed.qualifies, resumed.reason)
+        self.assertEqual(resumed.evidence_file, result.evidence_file)
     def test_task_parser_extracts_scope_and_verification(self):
         text = '''\n### T001 — Add calculator\n- **Status:** TODO\n- **Traceability:** FR-001 → SPEC-001 → DES-001\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n'''
         task = TaskFileParser(text).parse()[0]

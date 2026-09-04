@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from contextlib import contextmanager
+import hashlib
 from pathlib import Path
 from typing import Any
 import re
+import shutil
 import subprocess
+import tempfile
 
 import yaml
 
@@ -65,6 +69,41 @@ class GitRepository:
         return self._run(
             ["diff-tree", "--no-commit-id", "--name-only", "-r", commit]
         ).stdout.splitlines()
+
+    def resolve_commit(self, commit: str) -> str | None:
+        proc = self._run(["rev-parse", "--verify", f"{commit}^{{commit}}"], check=False)
+        return proc.stdout.strip() if proc.returncode == 0 else None
+
+    def is_ancestor(self, commit: str, descendant: str = "HEAD") -> bool:
+        return self._run(
+            ["merge-base", "--is-ancestor", commit, descendant], check=False
+        ).returncode == 0
+
+    def tree_identity(self, commit: str) -> str:
+        return self._run(["show", "-s", "--format=%T", commit]).stdout.strip()
+
+    def commit_diff_digest(self, commit: str) -> str:
+        parent = self.first_parent(commit)
+        if parent is None:
+            raise GitRuntimeError("Recovery checkpoint must have exactly one parent")
+        patch = self._run(["diff", "--binary", parent, commit, "--"]).stdout
+        return hashlib.sha256(patch.encode("utf-8")).hexdigest()
+
+    @contextmanager
+    def isolated_worktree(self, commit: str):
+        resolved = self.resolve_commit(commit)
+        if resolved is None:
+            raise GitRuntimeError(f"Checkpoint is unreachable: {commit}")
+        temporary = Path(tempfile.mkdtemp(prefix="sdd-recovery-"))
+        added = False
+        try:
+            self._run(["worktree", "add", "--detach", str(temporary), resolved])
+            added = True
+            yield temporary
+        finally:
+            if added:
+                self._run(["worktree", "remove", "--force", str(temporary)], check=False)
+            shutil.rmtree(temporary, ignore_errors=True)
 
     def commit_added_paths(self, commit: str = "HEAD") -> list[str]:
         return self._run(
@@ -151,7 +190,7 @@ class GitRepository:
             normalized_rel = Path(rel).as_posix()
             normalized.append(normalized_rel)
             evidence_name = re.fullmatch(
-                rf"\d{{8}}T\d{{6}}\.\d{{6}}Z-{re.escape(task_id)}\.json",
+                rf"\d{{8}}T\d{{6}}\.\d{{6}}Z-{re.escape(task_id)}(?:-recovery-[A-Za-z0-9_.-]+)?\.json",
                 resolved_rel.name,
             )
             if (
