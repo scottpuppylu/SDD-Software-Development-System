@@ -1,0 +1,22 @@
+schema_version: '1.0'
+current_stage: 08
+current_branch: null
+last_completed_task: T019
+current_task: null
+next_task: null
+last_verified_commit: 07f18d293df68ff36b9c3006414d15cc02c888b3
+test_status:
+  overall: PASS
+  required_checks: []
+  last_run_at: null
+blocked_status:
+  blocked: false
+  reasons: []
+known_issues: []
+resume:
+  instruction: 'Read AGENTS.md, current task, referenced PRD/SPEC/DES items, this
+    implementation state, git status, current branch, and recent commits. Determine
+    last completed/current/next task from repository and Git evidence.
+
+    '
+  chat_memory_authoritative: false
