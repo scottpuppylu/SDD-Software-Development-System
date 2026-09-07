@@ -128,7 +128,14 @@ class M6CodexAdapterTests(unittest.TestCase):
         run_git(self.repo, "commit", "-m", "chore: recovery setup")
         (self.repo / "src/value.py").write_text("VALUE = 2\n", encoding="utf-8")
         (self.repo / "tests/test_recovery_target.py").write_text(
-            "from src.value import VALUE\n\ndef test_value():\n    assert VALUE == 2\n",
+            "from pathlib import Path\n"
+            "from src.value import VALUE\n\n"
+            "def test_value():\n"
+            "    assert VALUE == 2\n"
+            "    assert Path('.sdd/state/authority-state.yaml').is_file()\n"
+            "    assert Path('.sdd/state/implementation-state.yaml').is_file()\n"
+            "    assert Path('.sdd/state/project-state.yaml').is_file()\n"
+            "    assert not Path('.sdd/arbitrary-secret.txt').exists()\n",
             encoding="utf-8",
         )
         run_git(self.repo, "add", "src/value.py", "tests/test_recovery_target.py")
@@ -137,7 +144,9 @@ class M6CodexAdapterTests(unittest.TestCase):
             "feat: implement TASK-001 recovery target [T001-BOOTSTRAP-001]",
         )
         checkpoint = run_git(self.repo, "rev-parse", "HEAD")
-        run_git(self.repo, "commit", "--allow-empty", "-m", "docs: later baseline")
+        (self.repo / "src/value.py").write_text("VALUE = 999\n", encoding="utf-8")
+        run_git(self.repo, "add", "src/value.py")
+        run_git(self.repo, "commit", "-m", "docs: later baseline")
         baseline = run_git(self.repo, "rev-parse", "HEAD")
         runner = Stage08CodexRunner(
             Orchestrator(self.repo), project_python=sys.executable, heartbeat_seconds=0
@@ -165,6 +174,19 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertTrue(result.reconciliation_eligible)
         self.assertIsNone(result.evidence_checkpoint)
         self.assertTrue((self.repo / result.evidence_file).is_file())
+        recovered = json.loads(
+            (self.repo / result.evidence_file).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            [item["path"] for item in recovered["runtime_context"]],
+            list(runner.RECOVERY_RUNTIME_CONTEXT_PATHS),
+        )
+        self.assertTrue(all(
+            item["origin"] in {
+                "CURRENT_GOVERNED_RUNTIME_STATE", "HISTORICAL_CHECKPOINT"
+            } and len(item["sha256"]) == 64
+            for item in recovered["runtime_context"]
+        ))
         self.assertEqual(
             (self.repo / ".sdd/state/implementation-state.yaml").read_text(),
             state_before,
@@ -212,6 +234,53 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertIsNone(
             identify("feat: implement TASK-019 evidence recovery [T018-BOOTSTRAP-002]")
         )
+
+    def test_recovery_runtime_context_is_closed_and_missing_context_is_not_run(self):
+        self._write_tasks('''
+## TASK-001 - Runtime context target
+- **Status:** TODO
+- **Allowed files:** `src/value.py`.
+- **Allowed implementation scope:** Test recovery runtime context.
+- **Verification Commands:** `python -m pytest -q`.
+''')
+        runner = Stage08CodexRunner(Orchestrator(self.repo), heartbeat_seconds=0)
+        task = runner.select_task("T001")
+        arbitrary = self.repo / ".sdd/arbitrary-secret.txt"
+        arbitrary.write_text("must not be copied\n", encoding="utf-8")
+        with tempfile.TemporaryDirectory() as temporary:
+            worktree = Path(temporary)
+            supplied = runner._supply_recovery_runtime_context(worktree, task)
+            self.assertEqual(
+                [item["path"] for item in supplied],
+                list(runner.RECOVERY_RUNTIME_CONTEXT_PATHS),
+            )
+            self.assertTrue(all(
+                item["origin"] == "CURRENT_GOVERNED_RUNTIME_STATE"
+                for item in supplied
+            ))
+            self.assertFalse((worktree / ".sdd/arbitrary-secret.txt").exists())
+            self.assertTrue(runner._runtime_context_unchanged(worktree, supplied))
+            (worktree / supplied[0]["path"]).write_text("mutated", encoding="utf-8")
+            self.assertFalse(runner._runtime_context_unchanged(worktree, supplied))
+
+        original = runner.RECOVERY_RUNTIME_CONTEXT_PATHS
+        runner.RECOVERY_RUNTIME_CONTEXT_PATHS = original + ("../src/injected.py",)
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
+                    runner._supply_recovery_runtime_context(Path(temporary), task)
+        finally:
+            runner.RECOVERY_RUNTIME_CONTEXT_PATHS = original
+
+        missing = self.repo / original[0]
+        saved = missing.read_bytes()
+        missing.unlink()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                with self.assertRaisesRegex(CodexAdapterError, "VERIFICATION_NOT_RUN"):
+                    runner._supply_recovery_runtime_context(Path(temporary), task)
+        finally:
+            missing.write_bytes(saved)
 
     def test_preflight_requires_explicit_scope(self):
         self._write_tasks('''\n### T001 — vague\n- **Status:** TODO\n- **Verification Commands:** `python -m pytest -q`\n''')

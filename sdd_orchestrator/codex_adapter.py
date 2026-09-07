@@ -66,6 +66,11 @@ class Stage08CodexRunner:
     ENVELOPE_AUTHORITY_PATHS = (
         "docs/PRD.md", "docs/spec.md", "docs/Design.md", "AGENTS.md", "tasks.md",
     )
+    RECOVERY_RUNTIME_CONTEXT_PATHS = (
+        ".sdd/state/authority-state.yaml",
+        ".sdd/state/implementation-state.yaml",
+        ".sdd/state/project-state.yaml",
+    )
     STAGE07_REPORT = "docs/handoff/pre-implementation-gate-report.md"
     CHECKPOINT_CONDITIONS = (
         "implementation_complete", "verification_pass",
@@ -241,6 +246,8 @@ class Stage08CodexRunner:
         started = datetime.now(timezone.utc)
         verification: VerificationResult
         isolated_dirty: list[str] = []
+        runtime_context: list[dict[str, str]] = []
+        runtime_context_mutated = False
         try:
             project_python = self._resolve_project_python()
             verify_env = self._verification_env(project_python)
@@ -249,6 +256,7 @@ class Stage08CodexRunner:
                 argv, project_python, verify_env, resolver=shutil.which
             )
             with self.git.isolated_worktree(checkpoint) as worktree:
+                runtime_context = self._supply_recovery_runtime_context(worktree, task)
                 verification = execute_verification_command(
                     authorization.verification_command,
                     argv,
@@ -260,6 +268,9 @@ class Stage08CodexRunner:
                 )
                 isolated = GitRepository(worktree).snapshot(recent_limit=1)
                 isolated_dirty = list(isolated.dirty_paths)
+                runtime_context_mutated = not self._runtime_context_unchanged(
+                    worktree, runtime_context
+                )
         except Exception as exc:
             return RecoveryQualification(False, self._recovery_reason(exc))
         ended = datetime.now(timezone.utc)
@@ -269,6 +280,7 @@ class Stage08CodexRunner:
             or after.branch != before.branch
             or after.dirty_paths
             or any(self._covered(path, task.allowed_paths) for path in isolated_dirty)
+            or runtime_context_mutated
         )
         timed_out = verification.returncode == 124
         outcome = "PASS" if verification.passed else "NOT RUN" if timed_out else "FAIL"
@@ -301,6 +313,7 @@ class Stage08CodexRunner:
                 "execution_mode": "HOST_OR_CONFIGURED_RUNTIME",
                 "working_tree": "ISOLATED_CHECKPOINT",
             },
+            "runtime_context": runtime_context,
             "pre_head": before.head_commit,
             "post_head": after.head_commit,
             "implementation_mutated": implementation_mutated,
@@ -333,6 +346,63 @@ class Stage08CodexRunner:
         return RecoveryQualification(
             True, "QUALIFYING", evidence, evidence_commit, True
         )
+
+    def _supply_recovery_runtime_context(
+        self, worktree: Path, task: AtomicTask
+    ) -> list[dict[str, str]]:
+        provenance: list[dict[str, str]] = []
+        for relative in self.RECOVERY_RUNTIME_CONTEXT_PATHS:
+            normalized = Path(relative).as_posix()
+            if (
+                normalized != relative
+                or not normalized.startswith(".sdd/state/")
+                or ".." in Path(normalized).parts
+                or self._covered(normalized, task.allowed_paths)
+            ):
+                raise CodexAdapterError(
+                    "AUTHORITY_INVALID: unsafe recovery runtime context path"
+                )
+            source = self.repo_root / normalized
+            target = worktree / normalized
+            if target.exists():
+                if not target.is_file() or target.is_symlink():
+                    raise CodexAdapterError(
+                        "VERIFICATION_NOT_RUN: invalid historical runtime context"
+                    )
+                provenance.append({
+                    "path": normalized,
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                    "origin": "HISTORICAL_CHECKPOINT",
+                })
+                continue
+            if not source.is_file() or source.is_symlink():
+                raise CodexAdapterError(
+                    f"VERIFICATION_NOT_RUN: required recovery runtime context missing: {normalized}"
+                )
+            data = source.read_bytes()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("xb") as handle:
+                handle.write(data)
+            provenance.append({
+                "path": normalized,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "origin": "CURRENT_GOVERNED_RUNTIME_STATE",
+            })
+        return provenance
+
+    @staticmethod
+    def _runtime_context_unchanged(
+        worktree: Path, provenance: list[dict[str, str]]
+    ) -> bool:
+        for item in provenance:
+            path = worktree / item["path"]
+            if (
+                not path.is_file()
+                or path.is_symlink()
+                or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]
+            ):
+                return False
+        return True
 
     @staticmethod
     def _checkpoint_subject_task_id(subject: str) -> str | None:
