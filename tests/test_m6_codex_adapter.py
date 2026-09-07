@@ -225,6 +225,13 @@ class M6CodexAdapterTests(unittest.TestCase):
             identify("fix(implementation): [T019] evidence recovery"), "T019"
         )
         self.assertEqual(
+            identify(
+                "feat(implementation): [TASK-020] schema 2.0 qualification state "
+                "[T020-BOOTSTRAP-001]"
+            ),
+            "T020",
+        )
+        self.assertEqual(
             identify("feat: implement TASK-018 evidence recovery [T018-BOOTSTRAP-002]"),
             "T018",
         )
@@ -234,6 +241,16 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.assertIsNone(
             identify("feat: implement TASK-019 evidence recovery [T018-BOOTSTRAP-002]")
         )
+        for invalid in (
+            "feat(implementation): [TASK-002] schema state [T020-BOOTSTRAP-001]",
+            "feat(implementation): [TASK-200] schema state [T020-BOOTSTRAP-001]",
+            "feat(implementation): [TASK-020] schema state [T019-BOOTSTRAP-001]",
+            "feat(implementation): [TASK-020] schema state [T020-BOOTSTRAP-X]",
+            "feat: unrelated TASK-020 text [T020-BOOTSTRAP-001]",
+            "docs: mention feat(implementation): [TASK-020] schema state "
+            "[T020-BOOTSTRAP-001]",
+        ):
+            self.assertIsNone(identify(invalid), invalid)
 
     def test_recovery_runtime_context_is_closed_and_missing_context_is_not_run(self):
         self._write_tasks('''

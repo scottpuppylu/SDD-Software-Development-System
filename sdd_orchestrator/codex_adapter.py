@@ -412,6 +412,16 @@ class Stage08CodexRunner:
         )
         if normal is not None:
             return normal.group(1)
+        scoped_bootstrap = re.fullmatch(
+            r"(?:feat|fix)\(implementation\): \[TASK-(\d{3})\] .+ "
+            r"\[T(\d{3})-BOOTSTRAP-\d{3}\]",
+            subject,
+        )
+        if (
+            scoped_bootstrap is not None
+            and scoped_bootstrap.group(1) == scoped_bootstrap.group(2)
+        ):
+            return f"T{scoped_bootstrap.group(1)}"
         bootstrap = re.fullmatch(
             r"(?:feat|fix): implement TASK-(\d{3}) .+ "
             r"\[T(\d{3})-BOOTSTRAP-\d{3}\]",
