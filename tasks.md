@@ -4,14 +4,14 @@
 
 This artifact is the approved CURRENT prospective Stage06 `EXECUTION_DECOMPOSITION` authority. Stage06 owns task decomposition only: atomic work boundaries, dependency order, implementation scope, required outcomes, preservation and failure obligations, future verification, and checkpoint eligibility. It does not create or revise `PRODUCT_INTENT`, `PRODUCT_REQUIREMENT`, `TECHNICAL_CONTRACT`, `IMPLEMENTATION_DECISION`, or `AGENT_REPOSITORY_GOVERNANCE` authority.
 
-This approved whole artifact contains prospective `TASK-001` through `TASK-019`. Its approval does not create Stage07 `PASS`, authorize Stage08 implementation, establish implementation conformance, evaluate the Current Implementation Recovery Gate, create Stage09 `PASS`, or create Stage10, release, or deployment authority. Existing source, tests, implementation evidence, and historical completion claims were not used to derive these tasks and cannot make any task `DONE`.
+This approved whole artifact contains prospective `TASK-001` through `TASK-020`. Its approval does not create Stage07 `PASS`, authorize Stage08 implementation, establish implementation conformance, evaluate the Current Implementation Recovery Gate, create Stage09 `PASS`, or create Stage10, release, or deployment authority. Existing source, tests, implementation evidence, and historical completion claims were not used to derive these tasks and cannot make any task `DONE`.
 
 ## 2. Approved upstream baseline references
 
 - `docs/proposal.md`: CURRENT `PRODUCT_INTENT` authority, `APPROVED_CURRENT_AUTHORITY`; goals `G-01` through `G-05`.
 - `docs/PRD.md`: CURRENT `PRODUCT_REQUIREMENT` authority, `APPROVED_CURRENT_AUTHORITY`; applicable P0 requirements and acceptance criteria.
-- `docs/spec.md`: CURRENT `TECHNICAL_CONTRACT` authority, `APPROVED_CURRENT_AUTHORITY`; `SPEC-001` through `SPEC-017`.
-- `docs/Design.md`: CURRENT `IMPLEMENTATION_DECISION` authority, `APPROVED_CURRENT_AUTHORITY`; `DES-001` through `DES-017`.
+- `docs/spec.md`: CURRENT `TECHNICAL_CONTRACT` authority, `APPROVED_CURRENT_AUTHORITY`; `SPEC-001` through `SPEC-018`.
+- `docs/Design.md`: CURRENT `IMPLEMENTATION_DECISION` authority, `APPROVED_CURRENT_AUTHORITY`; `DES-001` through `DES-018`.
 - `AGENTS.md`: CURRENT Stage05 `AGENT_REPOSITORY_GOVERNANCE` authority, `APPROVED_CURRENT_AUTHORITY`.
 - `.sdd/system.yaml` and `.sdd/stages.yaml`: configured authority graph, Stage06 contract, lifecycle gates, traceability chain, and checkpoint rules.
 
@@ -376,30 +376,48 @@ Authority is domain-specific and non-linear. A discovered cross-domain conflict 
 - **Checkpoint eligibility:** Atomic-checkpoint eligible only when the common conditions in section 3 hold; the declared TASK-019 command executes and all required positive, negative, persistence, retry, integrity, authorization, provenance, compatibility, and authority-separation checks `PASS`; `git diff --check` passes; the diff contains only TASK-019 allowed files; no authority artifact or implementation-state artifact changed; no historical checkpoint or governed history was rewritten; no T012 evidence recovery or state reconciliation occurred; and the checkpoint records only implementation and evidence for the recovery capability. Eligibility or checkpoint completion cannot imply T012 evidence recovery, implementation-state reconciliation, Stage07 `PASS`, Stage09 qualification, Stage10/release, or deployment. No checkpoint is currently achieved.
 - **Out-of-scope:** Performing T012 or any other evidence recovery; modifying T012 implementation to reconstruct evidence; changing tests outside TASK-019 verification scope; reconciling `.sdd/state/implementation-state.yaml`; amending, rebasing, resetting, replacing, or rewriting a historical checkpoint; fabricating or backdating original evidence; automatically qualifying an arbitrary evidence-only commit; changing any authority artifact or task contract during Stage08; creating or rerunning Stage07; implementing T013 or another unrelated task; Stage09 qualification; Stage10/release; deployment; or issuing recovery, implementation, gate, verification, or release authority.
 
+## TASK-020 - Multi-task implementation qualification state
+
+- **Status:** `TODO`
+- **Purpose:** Implement the `SPEC-018`/`DES-018` task-indexed implementation qualification state so ordinary and recovered task qualifications coexist truthfully without using singleton workflow summaries as qualification history.
+- **Authority trace:** `G-01, G-02, G-03, G-04, G-05 -> FR-06, FR-11, FR-12, FR-13, FR-14, FR-15, FR-16, NFR-01, NFR-03, NFR-04, EC-05, EC-06, EC-07 -> AC-06, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-23, AC-25, AC-26, AC-33, AC-34, AC-35 -> SPEC-018 -> DES-018 -> TASK-020`.
+- **Dependencies:** `TASK-001`, `TASK-008`, `TASK-012`, `TASK-019`.
+- **Allowed files:** `sdd_orchestrator/git_runtime.py`, `sdd_orchestrator/evidence_writer.py`, `sdd_orchestrator/codex_adapter.py`, `tests/test_m5_git_recovery.py`, `tests/test_m6_codex_adapter.py`, `tests/test_v1118_safe_pause_and_evidence.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py`.
+- **Allowed implementation scope:** Implement implementation-state schema `2.0` with a deterministic `task_qualifications` mapping supporting zero, one, or many canonical task records; exact task/status, immutable implementation-checkpoint, repository-backed qualifying-evidence path/kind/digest/commit, truthful `PASS`, and reconciliation identity/sequence/time/source metadata; strict key/value and schema validation; separation of qualification history from workflow cursors; deterministic ancestry-latest compatibility projections; one-way schema `1.0` migration; task-specific qualification lookup; ordinary Stage08 checkpoint integration; `DES-017` recovered-evidence reconciliation input; deterministic YAML serialization; atomic persistence, reload validation, and interruption recovery. Preserve evidence qualification as an input boundary rather than allowing the state writer to invent qualification.
+- **Required behavior/outcome:** Load schema `2.0` directly and migrate schema `1.0` only during an authorized state mutation. Migration preserves valid non-qualification state and `current_task`/`next_task`, creates only repository-proven qualification records, and fails atomically on ambiguous or conflicting legacy facts. Migrate the current proven T019 singleton state in fixtures by validating its immutable implementation checkpoint and qualifying T019 recovery evidence, then support a later fixture reconciliation of the qualifying T012 recovery record as an additional sequence without replacing T019. Recompute `last_completed_task`/`last_verified_commit` only as DES-018 ancestry-latest projections, leaving them T019 in the T019-then-older-T012 case. Provide exact task lookup where a valid qualified record satisfies a dependency, an absent record is unsatisfied, and malformed, non-PASS, conflicting, or unverifiable state blocks rather than falling back to task numbering or singleton ordering. Reconciliation must be idempotent across repeats, caller timeout, and fresh-runner reload, must not select a next task, and must preserve every prior valid record.
+- **Preservation obligations:** Preserve the current T019 qualification and all independently valid task records; `current_task`, `next_task`, and equivalent workflow cursors unless separately authorized; ordinary Stage08 sealed-envelope, evidence, checkpoint, and sequential qualification behavior; SPEC-017/DES-017 recovery admissibility; evidence registry semantics; historical Git identities; deterministic repository reconstruction; monotonic qualification facts; and Stage07/08/09/10 separation. Do not add deletion, revocation, downgrade, checkpoint replacement, primary-evidence replacement, or silent migration fallback.
+- **Error/failure expectations:** Reject unsupported schema; duplicate YAML task keys; task key/value mismatch; missing or malformed required record fields; non-PASS qualification; absent/stale/changed evidence blob or digest; unreachable or mismatched evidence/checkpoint commit; fabricated qualification lacking admissible evidence; same task with a different checkpoint; incompatible or ordinary-versus-recovery evidence conflict; corrupt/reused reconciliation sequence or identity; ambiguous/incomplete legacy pair; stale compatibility projection that cannot be deterministically repaired; lost prior record; partial/temp/replace/reload persistence failure; and dependency lookup from singleton fields alone. Preserve the last valid state, identify the conflicting bindings, leave cursors and authority unchanged, and return a blocking diagnostic without silent overwrite or partial publication.
+- **Security/safety expectations:** Use repository-relative bounded evidence paths, strict task/Git/digest formats, duplicate-key rejection, atomic same-directory persistence, and minimum required writes. Never accept path traversal, chat/filename/Stage07 prose as qualification, arbitrary evidence injection, implementation mutation during reconciliation, historical checkpoint rewrite, authority inference, or state changes outside the sealed TASK-020 scope.
+- **Verification requirements:** Positive checks must cover empty/one/many schema `2.0` state; schema `1.0` to `2.0` migration with empty and cursor-bearing state; current T019 proof-backed migration; T019 plus later-added T012 with both records preserved and T019 compatibility projections unchanged; ordinary sequential qualification; recovered-evidence reconciliation through the existing qualifier; exact task-specific dependency lookup for T012 and T019; idempotent repeated reconciliation; retry after write interruption and caller timeout; fresh-runner reconstruction; null cursor preservation and no automatic next-task selection; stable task/key ordering; and byte-stable serialization. Negative checks must cover absent task record; malformed/non-PASS record; singleton-only false qualification; fabricated or missing evidence; conflicting checkpoint; conflicting or changed-digest evidence; duplicate/conflicting task entry; ambiguous/incomplete migration; stale unrepairable projection; partial/atomic-write and reload failure; loss of another task's qualification; unsupported deletion/revocation; and any attempted Stage07, Stage09, Stage10/release, or deployment upgrade. Regression checks must keep ordinary Stage08 checkpoint/evidence recovery and SPEC-017/DES-017 recovery qualification behavior green, using only `PASS`, `FAIL`, or `NOT RUN` outcomes.
+- **Checkpoint eligibility:** Atomic-checkpoint eligible only when the common conditions in section 3 hold; the exact TASK-020 verification command fully `PASS`es; schema migration, T019 preservation, T019/T012 coexistence, task-specific dependency lookup, idempotency, conflict, atomic persistence/retry, fresh-runner, deterministic serialization, ordinary Stage08, and recovery-regression checks all pass; `git diff --check` passes; and the diff contains only TASK-020 allowed files. No live T012 reconciliation or evidence recovery may occur; no live implementation-state artifact, qualifying evidence, authority artifact, historical checkpoint, Stage07/09/10 artifact, or unrelated task may change. Completion means only that the schema `2.0` capability is implemented and verified; it does not qualify or reconcile T012, select a next task, create Stage07 `PASS`, or create Stage09/Stage10/release authority.
+- **Out-of-scope:** Modifying live `.sdd/state/implementation-state.yaml`; performing T012 reconciliation; performing T012/T019 evidence recovery; modifying or fabricating qualifying evidence; implementing T013 or another task; changing SPEC-018, DES-018, AGENTS.md, or any authority artifact; changing Stage07 authority semantics; selecting or executing a next task; qualification deletion/revocation; historical Git rewrite; Stage09 qualification; Stage10/release; or deployment.
+
 ## 4. Whole-artifact dependency graph
 
 The declared dependency graph is:
 
 ```text
-TASK-001 -> TASK-002, TASK-005, TASK-008, TASK-010, TASK-012, TASK-013, TASK-016, TASK-019
+TASK-001 -> TASK-002, TASK-005, TASK-008, TASK-010, TASK-012, TASK-013, TASK-016, TASK-019, TASK-020
 TASK-002 -> TASK-003, TASK-004, TASK-005, TASK-006, TASK-009, TASK-010, TASK-011, TASK-012
 TASK-003 -> TASK-015, TASK-017
 TASK-004 -> TASK-015, TASK-017
 TASK-005 -> TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-019
 TASK-006 -> TASK-009, TASK-011, TASK-013, TASK-015, TASK-017
 TASK-007 -> TASK-015, TASK-017
-TASK-008 -> TASK-009, TASK-012, TASK-014, TASK-016, TASK-017, TASK-019
+TASK-008 -> TASK-009, TASK-012, TASK-014, TASK-016, TASK-017, TASK-019, TASK-020
 TASK-009 -> TASK-015, TASK-017
 TASK-010 -> TASK-007, TASK-011, TASK-012, TASK-015, TASK-017, TASK-019
 TASK-011 -> TASK-012, TASK-015, TASK-017, TASK-019
-TASK-012 -> TASK-015, TASK-017, TASK-019
+TASK-012 -> TASK-015, TASK-017, TASK-019, TASK-020
 TASK-013 -> TASK-014, TASK-016, TASK-017
 TASK-014 -> TASK-015, TASK-016, TASK-017
 TASK-015 -> TASK-016, TASK-017
 TASK-016 -> TASK-017, TASK-018
 TASK-017 -> TASK-018
 TASK-018 -> none
-TASK-019 -> TASK-018
+TASK-019 -> TASK-018, TASK-020
+TASK-020 -> none
 ```
 
 Analysis of the actual dependency declarations found no cycle, self-dependency, nonexistent task reference, or missing dependency required by the stated task scopes. The former TASK-007 forward reference to TASK-010 is now decomposition-resolved; it remains a real prerequisite and is not implementation-satisfied. The graph preserves parallel work where dependencies permit it.
@@ -427,14 +445,15 @@ Stage06 extends the canonical chain only through `TASK`: `G -> FR/NFR/EC -> AC -
 | `SPEC-015` | `DES-011`, `DES-016` | `TASK-009`, `TASK-015`, `TASK-017`, `TASK-018` |
 | `SPEC-016` | `DES-001`, `DES-004`, `DES-007`, `DES-009` | `TASK-002`, `TASK-005`, `TASK-008`, `TASK-012`, `TASK-017`, `TASK-018` |
 | `SPEC-017` | `DES-017` | `TASK-019` |
+| `SPEC-018` | `DES-018` | `TASK-020` |
 
 Coverage analysis confirms:
 
 - All 34 applicable P0 requirements are covered: `FR-01` through `FR-21`, `NFR-01` through `NFR-05`, and `EC-01` through `EC-08`.
 - All applicable P0 acceptance criteria are covered: `AC-01` through `AC-21`, `AC-23` through `AC-27`, and `AC-29` through `AC-36`.
-- `SPEC-001` through `SPEC-017` and `DES-001` through `DES-017` are covered.
-- `TASK-001` through `TASK-019` each have upstream authority; orphan task count is zero.
-- All 19 tasks contain the full task contract, remain `TODO`, and collectively cover the approved P0 implementation scope.
+- `SPEC-001` through `SPEC-018` and `DES-001` through `DES-018` are covered.
+- `TASK-001` through `TASK-020` each have upstream authority; orphan task count is zero.
+- All 20 tasks contain the full task contract, remain `TODO`, and collectively cover the approved P0 implementation scope.
 - The dependency graph closes with zero unresolved forward references and is a DAG.
 - Approved Design reports no blocking Design TBD; this decomposition introduces no blocking task TBD and detects no cross-domain conflict.
 
