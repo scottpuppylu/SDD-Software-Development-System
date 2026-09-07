@@ -1,0 +1,80 @@
+{
+  "schema_version": "2.0",
+  "record_kind": "POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY",
+  "attempt_id": "T020-EVIDENCE-RECOVERY-001",
+  "authorization_id": "T020-EVIDENCE-RECOVERY-001",
+  "authorization_issuer": "PROJECT_AUTHORITY",
+  "task_id": "T020",
+  "checkpoint_commit": "3b490e48a05f8fc4a2469f219386a6176d6ad9e6",
+  "checkpoint_parent": "b22a819a7f8b7985735911642fcdfc43249497b1",
+  "checkpoint_tree": "7cbd1c5f410df1372bbe2ab215140abc1c84db89",
+  "checkpoint_changed_paths": [
+    "sdd_orchestrator/codex_adapter.py",
+    "sdd_orchestrator/evidence_writer.py",
+    "sdd_orchestrator/git_runtime.py",
+    "tests/test_m5_git_recovery.py",
+    "tests/test_v1118_safe_pause_and_evidence.py"
+  ],
+  "checkpoint_diff_sha256": "62e28d5c82bbffd2162e2870279cce9bd7420424763fabba6b7e1892deb01215",
+  "authority_versions": [
+    [
+      "docs/PRD.md",
+      "3ce7acae7acfa966990eebc89fe1a18ac8426c67f6db618f0b7e27f560fd89cb"
+    ],
+    [
+      "docs/spec.md",
+      "3009f5ef98cba3b1c9f93c826985b28ebebc66442c8b41f33f857ce075f03c0e"
+    ],
+    [
+      "docs/Design.md",
+      "25da6b1172ce890f01e1d0ad6faaaf798a6a3d3dd0c554621f00b02a567ed629"
+    ],
+    [
+      "AGENTS.md",
+      "028a00274a1306e1788b72a7e14fcc194f4593a3492c74e2bd0ad3a96e6437c0"
+    ],
+    [
+      "tasks.md",
+      "1d7f1401a2b1254775b6ff3a37809246bf18d9a73d3dc8bb3da65b0c5b0b81f3"
+    ]
+  ],
+  "task_contract_sha256": "5e771c101c6dd24238e0fae62729bbf3f1778817f040adf686df8094d7eaac1e",
+  "verification_command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py",
+  "verification_command_sha256": "74722ad58f03c94220df38f7bd04012930b79c3c7896c6e6044e27437aa521ed",
+  "verification_outcome": "PASS",
+  "exit_status": 0,
+  "complete": true,
+  "timed_out": false,
+  "stdout": "................................................................. [ 59%]\n........................................... [ 99%]\n.                                                                        [100%]\n109 passed, 36 subtests passed in 830.89s (0:13:50)\n",
+  "stderr": "",
+  "started_at": "2026-09-07T07:57:31.018923Z",
+  "ended_at": "2026-09-07T08:11:25.376514Z",
+  "environment": {
+    "python": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.venv\\Scripts\\python.exe",
+    "execution_mode": "HOST_OR_CONFIGURED_RUNTIME",
+    "working_tree": "ISOLATED_CHECKPOINT"
+  },
+  "runtime_context": [
+    {
+      "path": ".sdd/state/authority-state.yaml",
+      "sha256": "3e8d90bf207eb50b0f149b2432830624e5317bfa3a6f77c2d98a4965c343303c",
+      "origin": "CURRENT_GOVERNED_RUNTIME_STATE"
+    },
+    {
+      "path": ".sdd/state/implementation-state.yaml",
+      "sha256": "5fc53ff9afd1553a0f4a90a6f91e1ba27a8191bb14382f188af19c4c248117d4",
+      "origin": "HISTORICAL_CHECKPOINT"
+    },
+    {
+      "path": ".sdd/state/project-state.yaml",
+      "sha256": "f509ec449499ea9e774b575aa9586b10e569b43999c0089c8bd7764d0ec04d7d",
+      "origin": "HISTORICAL_CHECKPOINT"
+    }
+  ],
+  "pre_head": "563967ec07f7c47fb70d0e75832af9808cd5d513",
+  "post_head": "563967ec07f7c47fb70d0e75832af9808cd5d513",
+  "implementation_mutated": false,
+  "isolated_dirty_paths": [],
+  "recorded_at": "2026-09-07T08:11:25.376514Z",
+  "record_sha256": "364051ef1511767863e328960568f65a9d01281f70ecced4bf76b55f878076e1"
+}
