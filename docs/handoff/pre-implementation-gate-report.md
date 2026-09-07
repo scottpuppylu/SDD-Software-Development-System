@@ -6,97 +6,61 @@
 STAGE_ID = 07
 STAGE_NAME = PRE_IMPLEMENTATION_GATE
 RESULT = FAIL
-CLASSIFICATION = GOVERNANCE_RUNTIME_BOOTSTRAP_SELF_DEPENDENCY
+CLASSIFICATION = UNQUALIFIED_BOOTSTRAP_RUNTIME_AND_CHECKPOINT_IDENTITY_BLOCKER
 IMPLEMENTATION_AUTHORIZATION = DENIED
 AUTHORIZED_NEXT_TASK = NONE
-NEXT_STAGE = PROJECT_AUTHORITY_BOOTSTRAP_DECISION
+NEXT_STAGE = PROJECT_AUTHORITY_RUNTIME_REMEDIATION_DECISION
 ```
 
-This fresh decision is bound to evaluated baseline `ecc88f89f7ed282814e417d94a4dee1caa58cecc` on branch `telemetry-measurement-v2`. Current authority is mutually consistent and TASK-020 is implementation-ready, but normal Stage08 authorization fails closed because schema `1.0` cannot provide the task-indexed dependency qualification records mandated by SPEC-018 and DES-018. TASK-020 implements that missing representation and lookup capability.
+This fresh decision is bound to baseline `3b490e48a05f8fc4a2469f219386a6176d6ad9e6` on branch `telemetry-measurement-v2`. The entry worktree was clean. SPEC-018, DES-018, Stage05 governance, and TASK-020 remain mutually consistent, and the TASK-020 implementation checkpoint contains only its authorized files. Normal live state mutation nevertheless remains blocked because TASK-020 has no repository-backed qualifying IMPLEMENTATION_EVIDENCE and is not represented by a task-specific qualification record.
 
-No normal Stage08 authorization or sealed execution envelope is created. This report does not implement TASK-020, migrate or reconcile implementation state, modify evidence, select TASK-013, or create Stage09 or Stage10 authority.
+No migration, reconciliation, recovery, Stage08 implementation, task selection, Stage09 decision, or Stage10/release decision was executed by this evaluation.
 
-## 2. Reconstructed repository state
+## 2. Reconstructed repository facts
 
-- Repository: `C:/Users/user/Documents/ChatGPT/SDD-Software-Development-System-v1.1.7`.
-- Branch: `telemetry-measurement-v2`.
-- Evaluated HEAD: `ecc88f89f7ed282814e417d94a4dee1caa58cecc`.
-- Entry worktree: clean.
-- SPEC-018 is repository-backed at `29a00343888883b541d417e629fe2d66b233600a`.
-- DES-018 is repository-backed at `10b2483c42ae4575caaaf04f65ec4c421e190c5e`.
-- TASK-020 is repository-backed at the evaluated baseline and traces through `SPEC-018 -> DES-018 -> TASK-020`.
-- Current Stage05 governance requires normal Stage07 PASS for normal implementation. Its governance-runtime bootstrap exception requires explicit Project Authority approval.
-- Implementation state remains schema `1.0`, with `last_completed_task: T019`, `last_verified_commit: 07f18d293df68ff36b9c3006414d15cc02c888b3`, and null current and next task. It has no `task_qualifications` mapping.
-- TASK-012 qualifying recovery evidence is `.sdd/evidence/20260907T023726.044768Z-T012-recovery-T012-EVIDENCE-RECOVERY-001.json`, repository-backed at `533b333ccc7d530372cd25d35952b427292fcfc6` and bound to implementation checkpoint `ccffccef435481d82d748e2235df1c53d20f7127`.
-- TASK-019 qualifying recovery evidence and prior schema-1.0 reconciliation remain repository-backed. These facts are preserved but are not schema-2.0 task-indexed records.
-- Historical T001 and T008 checkpoints and evidence remain reachable. Their existence cannot substitute for records required by current SPEC-018.
+- TASK-020 checkpoint `3b490e48a05f8fc4a2469f219386a6176d6ad9e6` is reachable and changes only `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/evidence_writer.py`, `sdd_orchestrator/git_runtime.py`, `tests/test_m5_git_recovery.py`, and `tests/test_v1118_safe_pause_and_evidence.py`, all within TASK-020 authority.
+- No `.sdd/evidence/*T020*.json` artifact exists. The checkpoint therefore establishes implementation history, not implementation qualification. The prior console result cannot substitute for repository-backed evidence.
+- Live implementation state remains schema `1.0`, with T019 as its truthful legacy singleton and null current/next task.
+- A read-only runtime probe migrated that state in memory to schema `2.0`, produced exactly one proof-bound T019 record, preserved the T019 compatibility projection, and retained null workflow cursors. No live state was written.
+- TASK-012 qualifying recovery evidence remains repository-backed at `533b333ccc7d530372cd25d35952b427292fcfc6` and can be supplied later as an additive reconciliation input.
+- The implemented task-specific lookup correctly reports T020 unqualified while live state remains schema `1.0`.
 
-## 3. Authority and task findings
+## 3. Operational and atomicity determination
 
-| Check | Outcome | Finding |
-| --- | --- | --- |
-| Authority consistency | PASS | SPEC-018, DES-018, Stage05 governance, and TASK-020 agree on proof-bound task records, migration, fail-closed dependency lookup, and lifecycle separation. |
-| SPEC-018 | PASS | Approved current technical contract; no contradiction detected. |
-| DES-018 | PASS | Schema 2.0, migration, reconciliation, projection, dependency query, atomicity, and compatibility design are complete. |
-| TASK-020 contract | PASS | Atomic scope, dependencies, six allowed paths, verification, preservation duties, non-goals, and checkpoint conditions are complete. |
-| Verification command policy | PASS | Exact repository command is accepted without substitution: `.\.venv\Scripts\python.exe -m pytest -q tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py`. |
-| Verification executability | PASS | The host virtual-environment executable exists and the parser and policy probe completed. There is no host or sandbox blocker for this decision. |
-| Sealed Stage08 runtime | PASS | TASK-012 envelope assembly, validation, and enforcement remain present. Availability cannot cure an unsatisfied dependency. |
-| TASK-020 boundedness | PASS | Scope is limited to schema-2.0 capability and authorized tests. Live T012 reconciliation, evidence mutation, authority mutation, Stage09/10, and unrelated tasks are excluded. |
+DES-018 defines reconciliation as one atomic transaction: validate qualifying evidence, load and migrate legacy state, detect conflicts, add the requested task record, recompute projections, atomically persist, and reload-validate. Accordingly, once the runtime is itself operationally qualified, the schema-1.0-to-2.0 migration that preserves T019 and the additive T012 reconciliation may occur as one protected atomic reconciliation transaction. A separately published migration followed by reconciliation is not required and would introduce an unnecessary intermediate governed state.
 
-## 4. Dependency evaluation
+That transaction cannot run yet. SPEC-018 requires repository-backed task/checkpoint/evidence linkage and separates implementation history from qualification. TASK-020 must first acquire qualifying evidence and be reconciled before its newly implemented state-mutation capability is used against live governed state.
 
-SPEC-018 makes task-specific qualification history authoritative. It forbids dependency satisfaction by a cursor, task number, another task's state, or singleton `last_completed_task`. DES-018 requires the task-specific query to read schema `2.0`; schema `1.0` is migration input during an authorized state mutation. Stage07 cannot create new semantics that use evidence or singleton projections as missing records.
+## 4. Recovery-route blocker
 
-| Dependency | Repository-backed fact | Current result |
-| --- | --- | --- |
-| TASK-001 | Historical checkpoint and evidence exist; schema `1.0` has no T001 task record. | UNSATISFIED under SPEC-018. |
-| TASK-008 | Historical checkpoint and evidence exist; schema `1.0` has no T008 task record. | UNSATISFIED under SPEC-018. |
-| TASK-012 | Qualifying recovery evidence and immutable checkpoint are confirmed; no reconciled T012 task record exists. | UNSATISFIED. Evidence permits reconciliation but is not reconciliation. |
-| TASK-019 | Implementation, qualifying evidence, and prior reconciliation are repository-backed; current state exposes only the legacy T019 singleton projection. | UNSATISFIED for the new query until proof-bound migration creates the schema-2.0 record. |
+The qualified TASK-019 recovery capability is the correct mechanism for obtaining post-checkpoint TASK-020 evidence, but the current checkpoint identity validator does not recognize the actual immutable subject:
 
-TASK-012 evidence remains qualifying input to a later reconciliation, but it cannot alone satisfy the dependency interface. The same prospective rule prevents treating legacy T019, T001, or T008 facts as task-indexed records before migration.
+`feat(implementation): [TASK-020] schema 2.0 qualification state [T020-BOOTSTRAP-001]`
 
-## 5. Bootstrap classification and route
+The read-only validator probe returned no task identity for that subject. A recovery attempt would therefore fail closed before verification. The historical checkpoint must not be amended or rewritten.
 
-```text
-TASK-020 requires task-specific dependency qualification
--> schema 1.0 cannot represent or query those records
--> TASK-020 implements schema 2.0 migration and lookup
--> normal Stage08 cannot authorize TASK-020 until TASK-020 exists
-```
+This is a narrow governance-runtime identity-validation defect, not authority to weaken binding. Because live schema `1.0` still cannot satisfy normal task-specific dependency checks for a remediation task, the defect also blocks the normal Stage07-to-Stage08 remediation route. Current Stage05 bootstrap governance permits Project Authority to issue a new, exact-file, exact-baseline, one-time remediation authorization limited to recognizing this governed TASK-020 checkpoint form while preserving wrong-task, misleading-text, reachability, integrity, scope, and authorization rejection. After a successful remediation checkpoint, Stage07 must be rerun before Project Authority may authorize TASK-020 evidence recovery.
 
-This is a governance-runtime bootstrap self-dependency. Current Stage05 section 7 permits Project Authority, not Stage07 or the agent, to issue a specifically named and narrowly bounded bootstrap remediation when the infrastructure defect prevents the normal authorization path. Approval must bind TASK-020, repository, branch, this baseline, every allowed file, exact behavior, exact TASK-020 verification command, checkpoint conditions, prohibited operations, and provenance. It must prohibit live TASK-012 reconciliation, operational live-state migration, evidence recovery or modification, unrelated work, authority changes, and history rewrite. It expires on its governed attempt and requires fresh normal Stage07 evaluation after a successful remediation checkpoint.
-
-This report identifies that route only. It does not issue bootstrap authority, create a sealed envelope, or authorize implementation.
-
-## 6. Final state
+## 5. Final state
 
 ```text
 PRE_IMPLEMENTATION_GATE_DECISION = FAIL
-BASELINE_BOUND_TO_DECISION = ecc88f89f7ed282814e417d94a4dee1caa58cecc
+BASELINE_BOUND_TO_DECISION = 3b490e48a05f8fc4a2469f219386a6176d6ad9e6
 AUTHORITY_CONSISTENT = YES
-SPEC018_STATUS = PASS
-DES018_STATUS = PASS
-TASK020_CONTRACT_STATUS = PASS
-TASK020_VERIFICATION_POLICY_VALID = YES
-SEALED_STAGE08_RUNTIME_AVAILABLE = YES
-TASK020_DEPENDENCY_TASK001 = UNSATISFIED_NO_TASK_SPECIFIC_QUALIFICATION_RECORD
-TASK020_DEPENDENCY_TASK008 = UNSATISFIED_NO_TASK_SPECIFIC_QUALIFICATION_RECORD
-TASK020_DEPENDENCY_TASK012 = UNSATISFIED_QUALIFYING_EVIDENCE_NOT_RECONCILED
-TASK020_DEPENDENCY_TASK019 = UNSATISFIED_LEGACY_SINGLETON_NOT_TASK_SPECIFIC_RECORD
-TASK012_QUALIFYING_EVIDENCE_CONFIRMED = YES
-TASK012_STATE_REPRESENTATION_STATUS = BLOCKED_BY_SCHEMA_1_0
-TASK012_DEPENDENCY_SATISFACTION_BASIS = NONE_UNDER_CURRENT_SPEC018_DES018
-TASK020_DEPENDENCIES_SATISFIED = NO
-BOOTSTRAP_SELF_DEPENDENCY = YES
-PROJECT_AUTHORITY_BOOTSTRAP_PERMITTED = YES_EXPLICIT_BOUNDED_AUTHORIZATION_REQUIRED
-AUTHORIZED_NEXT_TASK = NONE
+TASK020_INTEGRATION_STATUS = IMPLEMENTATION_PRESENT_EVIDENCE_NOT_QUALIFYING
+STATE_SCHEMA20_RUNTIME_AVAILABLE = YES_CODE_PRESENT
+LEGACY_MIGRATION_OPERATIONALLY_VALID = YES_READ_ONLY_PROBE
+TASK019_MIGRATION_PRESERVABLE = YES
+TASK012_ADDITIVE_RECONCILIATION_OPERATIONALLY_VALID = YES_AFTER_TASK020_QUALIFICATION
+TASK020_REPOSITORY_QUALIFICATION_STATUS = NOT_QUALIFIED_NO_IMPLEMENTATION_EVIDENCE
+TASK020_QUALIFICATION_REQUIRED_BEFORE_STATE_MIGRATION = YES
+BOOTSTRAP_SELF_DEPENDENCY = YES_RUNTIME_IDENTITY_REMEDIATION_CANNOT_USE_SCHEMA20_DEPENDENCY_STATE
+PROJECT_AUTHORITY_AUTHORIZATION_REQUIRED = YES_BOUNDED_RUNTIME_REMEDIATION
+MIGRATION_AND_T012_RECONCILIATION_ATOMICITY = ONE_ATOMIC_RECONCILIATION_TRANSACTION_AFTER_TASK020_QUALIFICATION
+AUTHORIZED_NEXT_OPERATION = NONE
 NORMAL_STAGE08_AUTHORIZED = NO
-STAGE08_AUTHORIZATION_BOUND_TASK = NONE
-STAGE08_AUTHORIZATION_BOUND_BASELINE = NONE
 STAGE09_DECISION = NOT_EVALUATED
 RELEASE_AUTHORIZED = NO
-NEXT_STEP = PROJECT_AUTHORITY_TASK020_BOOTSTRAP_REMEDIATION_DECISION
-BLOCKER = TASK020_DEPENDENCIES_REQUIRE_SCHEMA20_RECORDS_THAT_TASK020_MUST_IMPLEMENT
+NEXT_STEP = PROJECT_AUTHORITY_TASK020_CHECKPOINT_IDENTITY_RUNTIME_REMEDIATION_DECISION
+BLOCKER = TASK020_LACKS_QUALIFYING_EVIDENCE_AND_CURRENT_RECOVERY_VALIDATOR_REJECTS_ITS_IMMUTABLE_CHECKPOINT_SUBJECT
 ```
