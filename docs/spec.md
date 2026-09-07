@@ -124,6 +124,23 @@ This approval owns only `TECHNICAL_CONTRACT`. It is not recovered or reconstruct
 - **Failure/blocking:** If any required identity, reachability, integrity, authority, command, execution, provenance, result, immutability, or no-mutation fact cannot be proved, the recovery outcome is deterministically non-qualifying and affected reconciliation and progression remain `BLOCKED`. The system must report the failed binding and applicable authoritative route; it must not normalize, repair, infer, silently substitute, or broaden authority or fall back to another evidence path.
 - **Verification expectation:** Exercise qualifying recovery and rejection cases for absent authorization; ordinary-execution fallback; wrong or unreachable checkpoint; rewritten or mismatched content; wrong task, authority baseline, or command; non-zero exit, `FAIL`, `NOT RUN`, timeout, partial output, stale result, environment mismatch, and chat/Stage07-only claims; implementation mutation; arbitrary later evidence-only changes; matching duplicates; conflicting records; multiple failed and successful attempts; immutable audit retention; reconciliation before and after qualification; and attempts to derive Stage07, Stage09, Stage10/release, or deployment authority. Also prove that ordinary atomic Stage08 evidence behavior remains unchanged.
 
+### SPEC-018 - Task-indexed implementation qualification state
+
+- **Upstream:** G-01, G-02, G-03, G-04, G-05 -> FR-06, FR-11, FR-12, FR-13, FR-14, FR-15, FR-16, NFR-01, NFR-03, NFR-04, EC-05, EC-06, EC-07 -> AC-06, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-23, AC-25, AC-26, AC-33, AC-34, AC-35. This contract extends the persistent-state guarantees of `SPEC-001`, the traceability and evidence guarantees of `SPEC-007` and `SPEC-008`, the failure guarantees of `SPEC-009`, the recovery boundary of `SPEC-017`, and the qualification separation of `SPEC-016`; it does not redefine recovery admissibility.
+- **Applicable state/input:** Zero, one, or many tasks whose implementation qualification has been established through ordinary Stage08 evidence or a qualifying `SPEC-017` recovery record, including a task reconciled after chronologically later or higher-numbered tasks have already qualified, plus any legacy implementation state that exposes only singleton completed-task or verified-checkpoint summaries.
+- **Per-task qualification guarantee:** Implementation state must represent qualification independently for every qualified task. Each task-specific qualification fact must bind a unique task identity to its qualification status, immutable implementation checkpoint, repository-backed qualifying `IMPLEMENTATION_EVIDENCE` reference, evidence kind sufficient to distinguish ordinary evidence from post-checkpoint recovery, truthful verification outcome, and an attributable reconciliation identity or repository-backed ordering fact sufficient to reconstruct when the qualification entered implementation state. A bare boolean, cursor position, task number, chat claim, or unbound checkpoint cannot establish task qualification.
+- **Qualification history and execution cursor:** Task-specific qualification history is authoritative for which tasks are implementation-qualified. Workflow cursors and summaries—including current task, next task, most recently executed task, most recently reconciled or qualified task, legacy last-completed task, and last-verified commit—are distinct concepts and cannot substitute for the history. A singleton summary never represents the complete set of qualified tasks. Current or next task selection remains governed by applicable task dependencies, project state, and Stage07; qualification history alone neither selects work nor authorizes execution.
+- **Ordering and ordinary execution:** Qualification records must support ordinary sequential Stage08 execution without requiring recovery semantics and must also support out-of-order qualification. When an older, lower-numbered, or earlier-implemented task later qualifies through legitimate recovery, reconciliation adds its task-specific fact without deleting, replacing, reordering, or misrepresenting newer qualification facts. Task identifiers, implementation chronology, evidence chronology, and reconciliation chronology must remain distinguishable; none may be inferred solely from another.
+- **Checkpoint and evidence linkage:** Every affirmative task qualification must deterministically resolve to the exact repository-backed implementation checkpoint and exact qualifying evidence that justify it. Those references must remain mutually consistent with task authority and applicable ordinary or recovery admissibility rules. Dependency evaluation for a required task must query that task's own qualifying record and bindings, not infer satisfaction from a cursor, numeric ordering, another task's qualification, or a singleton last-completed value.
+- **Reconciliation semantics:** Implementation-state reconciliation records facts already proven by qualifying evidence; it performs no implementation or verification, creates no evidence, and grants no Stage07, Stage08, Stage09, Stage10, release, or deployment authority. Reconciliation of the same task, checkpoint, and qualifying evidence is idempotent and cannot multiply or reorder qualification. It must preserve every independently valid prior task record and advance no cursor unless a separate governing rule establishes the cursor transition.
+- **Conflict semantics:** An existing record with the same task, checkpoint, and evidence is an idempotent match. The same task and checkpoint with a different independently qualifying evidence record may be retained as additional audit provenance only when the governing evidence contract declares the records compatible; it cannot silently replace the established binding. The same task with a different implementation checkpoint, multiple incompatible purported qualifying checkpoints, conflicting evidence, or a legacy summary that contradicts repository-backed task evidence is a conflict. Conflicts must preserve available facts, block affected reconciliation and dependency satisfaction, expose the competing identities, and route to the authoritative owner; no record or summary may be silently selected, normalized, or overwritten.
+- **Legacy compatibility and migration:** Valid singleton schema state may be treated only as a compatibility projection and migration input, never as complete qualification history. Migration may create a task-specific record only when repository-backed task, checkpoint, and qualifying-evidence bindings can be proved under the applicable contract. It must not infer missing tasks from numbering, commit order, cursor values, chat, or downstream state. Legacy summary fields may remain as deprecated compatibility projections, but they must be deterministically derived from the task-indexed model under an explicitly defined downstream ordering rule and must never contradict it. Ambiguous, partial, failed, or conflicting migration is atomic and fail-closed: preserve the prior state, report the unresolved bindings, and withhold affected qualification and progression rather than fabricate history.
+- **Monotonicity and auditability:** Adding a valid task qualification is append-preserving across the set of qualified tasks. Previously valid qualification facts cannot silently disappear or change identity. Any future invalidation or revocation capability requires separate explicit authority and an attributable audit record; this contract does not authorize one. Repository reconstruction must identify all qualified tasks, each task's implementation checkpoint and qualifying evidence, ordinary-versus-recovery provenance, and the repository-backed reconciliation ordering fact without relying on chat memory.
+- **Stage and status separation:** Implementation qualification means only that the task's implementation checkpoint has qualifying `IMPLEMENTATION_EVIDENCE` and has been reconciled into implementation state. It is distinct from task selection, Stage07 gate outcome, normal Stage08 authorization, Stage09 verification qualification, Stage10/release decision, and deployment authority. Neither an individual task record nor any derived summary upgrades those domains.
+- **Required coexistence behavior:** State must truthfully support `TASK-019` remaining qualified while `TASK-012` is reconciled later from qualifying recovered evidence, with both task/checkpoint/evidence relationships retained, no current or next task selected unless separately governed, and no Stage07 `PASS` inferred.
+- **Failure/blocking:** Missing or unverifiable task identity, checkpoint, evidence, provenance, reconciliation ordering, migration source, or required consistency produces a non-qualifying or `BLOCKED` result for affected reconciliation and dependency use. Unexpected loss of a prior valid task record, summary/history contradiction, or unsupported schema semantics blocks persistence; the system must preserve the last valid repository-backed state and route the gap or conflict to its owner.
+- **Verification expectation:** Exercise empty, single-task, and multi-task state; ordinary sequential qualification; higher-numbered or later task qualified before an older task; later recovered qualification without loss of newer facts; task-specific dependency queries; no automatic next-task selection; idempotent reconciliation; compatible additional evidence; every conflicting checkpoint/evidence combination; legacy singleton migration with complete, incomplete, ambiguous, and contradictory proof; summary derivation and contradiction rejection; atomic migration failure; monotonic preservation; repository reconstruction without chat; and attempts to infer Stage07, Stage08, Stage09, Stage10/release, or deployment authority. Include the coexistence of qualified `TASK-019` and later-reconciled `TASK-012` with no selected task.
+
 ### SPEC-010 - Security, destructive action, and authority-conflict safety
 
 - **Upstream:** G-02, G-04, G-05 -> FR-08, FR-17, NFR-04, EC-07 -> AC-08, AC-17, AC-26, AC-35.
@@ -204,34 +221,34 @@ The canonical chain is `G-* -> FR/NFR/EC -> AC -> SPEC-*`. Goal and AC mappings 
 | FR-03 | AC-03 | SPEC-003 |
 | FR-04 | AC-04 | SPEC-004, SPEC-006 |
 | FR-05 | AC-05 | SPEC-004, SPEC-005, SPEC-006 |
-| FR-06 | AC-06 | SPEC-001, SPEC-013, SPEC-015 |
+| FR-06 | AC-06 | SPEC-001, SPEC-013, SPEC-015, SPEC-018 |
 | FR-07 | AC-07 | SPEC-002, SPEC-013 |
 | FR-08 | AC-08 | SPEC-004, SPEC-005, SPEC-010, SPEC-016 |
 | FR-09 | AC-09 | SPEC-002, SPEC-005, SPEC-015 |
 | FR-10 | AC-10 | SPEC-002, SPEC-005 |
-| FR-11 | AC-11 | SPEC-001, SPEC-007, SPEC-014, SPEC-017 |
-| FR-12 | AC-12 | SPEC-006, SPEC-007, SPEC-016, SPEC-017 |
-| FR-13 | AC-13 | SPEC-006, SPEC-009, SPEC-017 |
-| FR-14 | AC-14 | SPEC-008, SPEC-015, SPEC-016, SPEC-017 |
-| FR-15 | AC-15 | SPEC-008, SPEC-016, SPEC-017 |
-| FR-16 | AC-16 | SPEC-009, SPEC-015, SPEC-017 |
+| FR-11 | AC-11 | SPEC-001, SPEC-007, SPEC-014, SPEC-017, SPEC-018 |
+| FR-12 | AC-12 | SPEC-006, SPEC-007, SPEC-016, SPEC-017, SPEC-018 |
+| FR-13 | AC-13 | SPEC-006, SPEC-009, SPEC-017, SPEC-018 |
+| FR-14 | AC-14 | SPEC-008, SPEC-015, SPEC-016, SPEC-017, SPEC-018 |
+| FR-15 | AC-15 | SPEC-008, SPEC-016, SPEC-017, SPEC-018 |
+| FR-16 | AC-16 | SPEC-009, SPEC-015, SPEC-017, SPEC-018 |
 | FR-17 | AC-17 | SPEC-004, SPEC-010 |
 | FR-18 | AC-18 | SPEC-011 |
 | FR-19 | AC-19 | SPEC-012 |
 | FR-20 | AC-20 | SPEC-013 |
 | FR-21 | AC-21 | SPEC-014 |
-| NFR-01 | AC-23 | SPEC-001, SPEC-008, SPEC-009, SPEC-016, SPEC-017 |
+| NFR-01 | AC-23 | SPEC-001, SPEC-008, SPEC-009, SPEC-016, SPEC-017, SPEC-018 |
 | NFR-02 | AC-24 | SPEC-009, SPEC-015 |
-| NFR-03 | AC-25 | SPEC-007, SPEC-017 |
-| NFR-04 | AC-26 | SPEC-004, SPEC-010, SPEC-016, SPEC-017 |
+| NFR-03 | AC-25 | SPEC-007, SPEC-017, SPEC-018 |
+| NFR-04 | AC-26 | SPEC-004, SPEC-010, SPEC-016, SPEC-017, SPEC-018 |
 | NFR-05 | AC-27 | SPEC-011, SPEC-012 |
 | EC-01 | AC-29 | SPEC-003 |
 | EC-02 | AC-30 | SPEC-002, SPEC-005 |
 | EC-03 | AC-31 | SPEC-002, SPEC-005 |
 | EC-04 | AC-32 | SPEC-006 |
-| EC-05 | AC-33 | SPEC-008, SPEC-017 |
-| EC-06 | AC-34 | SPEC-009, SPEC-017 |
-| EC-07 | AC-35 | SPEC-004, SPEC-010, SPEC-017 |
+| EC-05 | AC-33 | SPEC-008, SPEC-017, SPEC-018 |
+| EC-06 | AC-34 | SPEC-009, SPEC-017, SPEC-018 |
+| EC-07 | AC-35 | SPEC-004, SPEC-010, SPEC-017, SPEC-018 |
 | EC-08 | AC-36 | SPEC-012 |
 
 Coverage total: **34 of 34 applicable P0 requirements**.
