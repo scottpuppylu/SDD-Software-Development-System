@@ -1,11 +1,15 @@
 from pathlib import Path
+import json
 import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import yaml
 
 from sdd_orchestrator.git_runtime import GitRepository, RecoveryManager, GitRuntimeError
+from sdd_orchestrator.evidence_writer import ImplementationQualificationBinding
+from sdd_orchestrator.task_parser import AtomicTask
 from sdd_orchestrator.errors import (
     FailureEnvelopeError, JsonFailureJournal, PartialOutput, RecoveryRoute, new_failure,
 )
@@ -24,7 +28,11 @@ class M5GitTests(unittest.TestCase):
         subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=self.repo, check=True)
         subprocess.run(["git", "config", "user.name", "Test User"], cwd=self.repo, check=True)
         (self.repo / "README.md").write_text("initial\n", encoding="utf-8")
-        subprocess.run(["git", "add", "README.md", ".sdd"], cwd=self.repo, check=True)
+        (self.repo / "tasks.md").write_text(
+            """## TASK-010 - Test task\n\n- **Status:** `TODO`\n- **Allowed files:** `done.txt`.\n- **Verification Commands:** `pytest tests/test_example.py`\n\n## TASK-011 - Next\n\n- **Status:** `TODO`\n- **Allowed files:** `next.txt`.\n- **Verification Commands:** `pytest tests/test_example.py`\n""",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "add", "README.md", "tasks.md", ".sdd"], cwd=self.repo, check=True)
         subprocess.run(["git", "commit", "-m", "chore: initial"], cwd=self.repo, check=True, capture_output=True)
 
     def tearDown(self):
@@ -160,9 +168,24 @@ class M5GitTests(unittest.TestCase):
         self.assertTrue(recovery.warnings)
 
     def test_record_checkpoint_updates_restart_contract(self):
+        state_path = self.repo / ".sdd/state/implementation-state.yaml"
+        state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        state["last_completed_task"] = None
+        state["last_verified_commit"] = None
+        state_path.write_text(yaml.safe_dump(state, sort_keys=False), encoding="utf-8")
+        subprocess.run(["git", "add", ".sdd/state/implementation-state.yaml"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-m", "test: empty legacy state"], cwd=self.repo, check=True, capture_output=True)
         (self.repo / "done.txt").write_text("done\n", encoding="utf-8")
+        evidence_rel = ".sdd/evidence/20260907T030000.000000Z-T010.json"
+        evidence = {
+            "schema_version": "1.0", "stage": "08", "task_id": "T010",
+            "status": "PASS", "recorded_at": "2026-09-07T03:00:00Z",
+            "verification": [{"returncode": 0, "passed": True}],
+            "codex": {"returncode": 0},
+        }
+        (self.repo / evidence_rel).write_text(json.dumps(evidence), encoding="utf-8")
         commit = GitRepository(self.repo).checkpoint(
-            task_id="T010", summary="finish task", paths=["done.txt"]
+            task_id="T010", summary="finish task", paths=["done.txt", evidence_rel]
         )
         mgr = RecoveryManager(self.repo)
         mgr.record_checkpoint(
@@ -170,12 +193,107 @@ class M5GitTests(unittest.TestCase):
             completed_task="T010",
             next_task="T011",
             test_status="PASS",
+            evidence_path=evidence_rel,
         )
         state = yaml.safe_load((self.repo / ".sdd/state/implementation-state.yaml").read_text())
+        self.assertEqual(state["schema_version"], "2.0")
+        self.assertEqual(state["task_qualifications"]["T010"]["implementation_checkpoint"], commit)
         self.assertEqual(state["last_completed_task"], "T010")
         self.assertEqual(state["current_task"], "T011")
         self.assertEqual(state["last_verified_commit"], commit)
         self.assertEqual(state["test_status"]["overall"], "PASS")
+        self.assertTrue(mgr.is_implementation_qualified("T010"))
+        self.assertFalse(mgr.is_implementation_qualified("T011"))
+
+        before = state_path.read_bytes()
+        mgr.record_checkpoint(
+            commit=commit, completed_task="T010", next_task="T011",
+            test_status="PASS", evidence_path=evidence_rel,
+        )
+        self.assertEqual(state_path.read_bytes(), before)
+
+    def test_schema2_dependency_lookup_rejects_singleton_only_state(self):
+        manager = RecoveryManager(self.repo)
+        self.assertFalse(manager.is_implementation_qualified("T019"))
+
+    def test_atomic_state_write_failure_does_not_replace_state(self):
+        manager = RecoveryManager(self.repo)
+        original = manager.implementation_state_path.read_bytes()
+        with mock.patch("sdd_orchestrator.git_runtime.os.replace", side_effect=OSError("interrupted")):
+            with self.assertRaises(OSError):
+                manager._write_state({
+                    "schema_version": "2.0", "task_qualifications": {},
+                    "last_completed_task": None, "last_verified_commit": None,
+                })
+        self.assertEqual(manager.implementation_state_path.read_bytes(), original)
+
+    def test_duplicate_yaml_task_record_fails_closed(self):
+        with self.assertRaises(GitRuntimeError):
+            RecoveryManager._strict_yaml(
+                "schema_version: '2.0'\ntask_qualifications:\n  T010: {}\n  T010: {}\n"
+            )
+
+    def test_out_of_order_t012_reconciliation_preserves_t019(self):
+        manager = RecoveryManager(self.repo)
+        t019_commit, t012_commit = "9" * 40, "1" * 40
+        existing = {
+            "schema_version": "2.0", "current_task": None, "next_task": None,
+            "last_completed_task": "T019", "last_verified_commit": t019_commit,
+            "task_qualifications": {
+                "T019": {
+                    "status": manager.QUALIFIED, "implementation_checkpoint": t019_commit,
+                    "evidence": {"path": ".sdd/evidence/t019.json", "kind": "RECOVERY",
+                                 "record_sha256": "a" * 64, "repository_commit": "8" * 40},
+                    "verification": {"outcome": "PASS"},
+                    "reconciliation": {"id": "r19", "sequence": 1,
+                                       "recorded_at": "2026-09-07T01:00:00Z",
+                                       "source_head": "8" * 40},
+                }
+            },
+        }
+        task = AtomicTask("T012", "old", "TODO", "", [], ["src/a.py"], ["pytest x"])
+        binding = ImplementationQualificationBinding(
+            "T012", t012_commit, "POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY",
+            "b" * 64, "PASS", "2026-09-07T02:00:00Z",
+        )
+        published = {}
+        with (
+            mock.patch.object(manager.git, "resolve_commit", return_value="f" * 40),
+            mock.patch.object(manager, "_task", return_value=task),
+            mock.patch.object(manager, "_resolve_evidence", return_value=(binding, ".sdd/evidence/t012.json", "7" * 40)),
+            mock.patch.object(manager, "_load_state", return_value=existing),
+            mock.patch.object(manager, "_migrate", side_effect=lambda state, _: state),
+            mock.patch.object(manager.git, "is_first_parent_ancestor", side_effect=lambda older, newer: older == t012_commit and newer == t019_commit),
+            mock.patch.object(manager, "_validate_v2"),
+            mock.patch.object(manager, "_write_state", side_effect=lambda state: published.update(state)),
+        ):
+            manager.reconcile_qualification(completed_task="T012", evidence_path=".sdd/evidence/t012.json")
+        self.assertEqual(set(published["task_qualifications"]), {"T012", "T019"})
+        self.assertEqual(published["last_completed_task"], "T019")
+        self.assertIsNone(published["current_task"])
+
+    def test_conflicting_checkpoint_reconciliation_fails_closed(self):
+        manager = RecoveryManager(self.repo)
+        task = AtomicTask("T010", "task", "TODO", "", [], ["done.txt"], ["pytest x"])
+        binding = ImplementationQualificationBinding(
+            "T010", "2" * 40, "ORDINARY_STAGE08", "b" * 64, "PASS",
+            "2026-09-07T02:00:00Z",
+        )
+        state = {
+            "schema_version": "2.0", "task_qualifications": {
+                "T010": {"implementation_checkpoint": "1" * 40,
+                         "evidence": {"record_sha256": "a" * 64}}
+            }
+        }
+        with (
+            mock.patch.object(manager.git, "resolve_commit", return_value="f" * 40),
+            mock.patch.object(manager, "_task", return_value=task),
+            mock.patch.object(manager, "_resolve_evidence", return_value=(binding, ".sdd/evidence/t010.json", "3" * 40)),
+            mock.patch.object(manager, "_load_state", return_value=state),
+            mock.patch.object(manager, "_migrate", side_effect=lambda current, _: current),
+        ):
+            with self.assertRaisesRegex(GitRuntimeError, "Conflicting qualification"):
+                manager.reconcile_qualification(completed_task="T010", evidence_path=".sdd/evidence/t010.json")
 
     def test_failure_journal_preserves_facts_and_filters_routes(self):
         journal = JsonFailureJournal(self.repo / ".sdd" / "failures.json")

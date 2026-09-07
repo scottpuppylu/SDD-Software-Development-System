@@ -807,6 +807,8 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             completed_task=task.task_id,
             next_task=next_task,
             test_status="PASS",
+            evidence_path=evidence,
+            task_contract=task,
         )
         self._mark_convergence_done(task.task_id)
         self._progress(f"{task.task_id} checkpoint {commit}")
@@ -942,7 +944,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             return None
 
         # Replay only checkpoints newer than durable state, in normal order.
-        for commit, recovered_task, *_ in validated:
+        for commit, recovered_task, _, recovered_evidence_path, _ in validated:
             if commit not in commits:
                 continue
             self.recovery.record_checkpoint(
@@ -950,6 +952,8 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 completed_task=recovered_task.task_id,
                 next_task=self._next_task_id(recovered_task.task_id),
                 test_status="PASS",
+                evidence_path=recovered_evidence_path,
+                task_contract=recovered_task,
             )
 
         commit, _, evidence, evidence_path, verification = recovered

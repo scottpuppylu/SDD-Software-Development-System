@@ -3,14 +3,23 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from contextlib import contextmanager
 import hashlib
+import json
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 import re
 import shutil
 import subprocess
 import tempfile
 
 import yaml
+
+from .evidence_writer import (
+    ImplementationQualificationBinding,
+    InvalidEvidence,
+    implementation_qualification_binding,
+)
+from .task_parser import AtomicTask, TaskFileParser
 
 
 class GitRuntimeError(RuntimeError):
@@ -116,6 +125,24 @@ class GitRepository:
     def read_committed_file(self, path: str, commit: str = "HEAD") -> str:
         normalized = Path(path).as_posix()
         return self._run(["show", f"{commit}:{normalized}"]).stdout
+
+    def latest_commit_for_path(self, path: str) -> str | None:
+        proc = self._run(["log", "-1", "--format=%H", "--", Path(path).as_posix()], check=False)
+        value = proc.stdout.strip()
+        return value or None
+
+    def committed_blob_identity(self, path: str, commit: str = "HEAD") -> str | None:
+        proc = self._run(
+            ["rev-parse", "--verify", f"{commit}:{Path(path).as_posix()}"], check=False
+        )
+        return proc.stdout.strip() if proc.returncode == 0 else None
+
+    def working_blob_identity(self, path: str) -> str | None:
+        proc = self._run(["hash-object", "--", Path(path).as_posix()], check=False)
+        return proc.stdout.strip() if proc.returncode == 0 else None
+
+    def is_first_parent_ancestor(self, commit: str, descendant: str = "HEAD") -> bool:
+        return commit in self._run(["rev-list", "--first-parent", descendant]).stdout.splitlines()
 
     def first_parent_commits(self, head: str, lower_exclusive: str) -> list[str] | None:
         """Return the bounded first-parent range, or None when lower is not on it."""
@@ -235,6 +262,8 @@ class GitRepository:
 
 
 class RecoveryManager:
+    STATE_SCHEMA = "2.0"
+    QUALIFIED = "IMPLEMENTATION_QUALIFIED"
     def __init__(self, repo_root: str | Path):
         self.repo_root = Path(repo_root).resolve()
         self.git = GitRepository(self.repo_root)
@@ -264,11 +293,318 @@ class RecoveryManager:
         if self.pending_evidence_path.exists():
             self.pending_evidence_path.unlink()
 
+    @staticmethod
+    def _strict_yaml(text: str) -> Any:
+        class UniqueKeyLoader(yaml.SafeLoader):
+            pass
+
+        def construct_mapping(loader, node, deep=False):
+            mapping = {}
+            for key_node, value_node in node.value:
+                key = loader.construct_object(key_node, deep=deep)
+                if key in mapping:
+                    raise GitRuntimeError(f"Duplicate implementation-state key: {key}")
+                mapping[key] = loader.construct_object(value_node, deep=deep)
+            return mapping
+
+        UniqueKeyLoader.add_constructor(
+            yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, construct_mapping
+        )
+        return yaml.load(text, Loader=UniqueKeyLoader)
+
     def _load_state(self) -> dict[str, Any]:
         if not self.implementation_state_path.exists():
             return {}
-        data = yaml.safe_load(self.implementation_state_path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
+        try:
+            data = self._strict_yaml(self.implementation_state_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            raise GitRuntimeError(f"Malformed implementation state: {exc}") from exc
+        if not isinstance(data, dict):
+            raise GitRuntimeError("Implementation state must be a mapping")
+        return data
+
+    def _task(self, task_id: str) -> AtomicTask:
+        tasks_path = self.repo_root / "tasks.md"
+        if not tasks_path.is_file():
+            raise GitRuntimeError("tasks.md is required for task-specific qualification")
+        tasks = TaskFileParser(tasks_path.read_text(encoding="utf-8")).parse()
+        matches = [task for task in tasks if task.task_id == task_id]
+        if not matches and task_id.startswith("TC"):
+            convergence = self.repo_root / ".sdd" / "convergence" / f"{task_id}.yaml"
+            if convergence.is_file() and not convergence.is_symlink():
+                payload = yaml.safe_load(convergence.read_text(encoding="utf-8"))
+                if isinstance(payload, dict) and payload.get("task_id") == task_id:
+                    matches = [AtomicTask(
+                        task_id=task_id,
+                        title=str(payload.get("title", task_id)),
+                        status=str(payload.get("status", "TODO")),
+                        raw_markdown=yaml.safe_dump(payload, sort_keys=True),
+                        traceability=list(payload.get("traceability") or []),
+                        allowed_paths=list(payload.get("allowed_paths") or []),
+                        verification_commands=list(payload.get("verification_commands") or []),
+                        behavior_scope=str(payload.get("objective", "")),
+                    )]
+        if len(matches) != 1:
+            raise GitRuntimeError(f"Expected exactly one task contract for {task_id}")
+        return matches[0]
+
+    def _evidence_path(self, value: str) -> tuple[str, Path]:
+        rel = Path(value).as_posix()
+        if Path(rel).is_absolute() or ".." in Path(rel).parts:
+            raise GitRuntimeError("Evidence path must be repository-relative")
+        target = (self.repo_root / rel).resolve()
+        evidence_root = (self.repo_root / ".sdd" / "evidence").resolve()
+        if target.parent != evidence_root or target.suffix != ".json" or target.is_symlink():
+            raise GitRuntimeError("Qualification evidence must be an exact .sdd/evidence JSON file")
+        return rel, target
+
+    def _resolve_evidence(
+        self, task: AtomicTask, evidence_path: str
+    ) -> tuple[ImplementationQualificationBinding, str, str]:
+        rel, target = self._evidence_path(evidence_path)
+        if not target.is_file():
+            raise GitRuntimeError(f"Qualification evidence does not exist: {rel}")
+        evidence_commit = self.git.latest_commit_for_path(rel)
+        if not evidence_commit or not self.git.is_ancestor(evidence_commit):
+            raise GitRuntimeError("Qualification evidence is not repository-backed and reachable")
+        committed_blob = self.git.committed_blob_identity(rel, evidence_commit)
+        if committed_blob != self.git.working_blob_identity(rel):
+            raise GitRuntimeError("Working evidence differs from its committed repository record")
+        try:
+            payload = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise GitRuntimeError(f"Invalid qualification evidence: {exc}") from exc
+        if not isinstance(payload, Mapping):
+            raise GitRuntimeError("Qualification evidence must be a JSON object")
+        ordinary_checkpoint = evidence_commit if payload.get("record_kind") is None else None
+        try:
+            binding = implementation_qualification_binding(
+                payload, task, ordinary_checkpoint=ordinary_checkpoint
+            )
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+        checkpoint = self.git.resolve_commit(binding.implementation_checkpoint)
+        if checkpoint != binding.implementation_checkpoint or not self.git.is_ancestor(checkpoint):
+            raise GitRuntimeError("Qualification checkpoint is not reachable")
+        if payload.get("record_kind") is not None:
+            changed = payload.get("checkpoint_changed_paths")
+            if changed != self.git.commit_paths(checkpoint):
+                raise GitRuntimeError("Recovery evidence checkpoint content binding is stale")
+            if set(changed) - set(task.allowed_paths):
+                raise GitRuntimeError("Recovery checkpoint exceeds task allowed paths")
+            if payload.get("checkpoint_tree") != self.git.tree_identity(checkpoint):
+                raise GitRuntimeError("Recovery checkpoint tree identity mismatch")
+            if payload.get("checkpoint_diff_sha256") != self.git.commit_diff_digest(checkpoint):
+                raise GitRuntimeError("Recovery checkpoint diff identity mismatch")
+        return binding, rel, evidence_commit
+
+    def _record(
+        self,
+        binding: ImplementationQualificationBinding,
+        evidence_path: str,
+        evidence_commit: str,
+        *,
+        reconciliation_id: str,
+        sequence: int,
+        source_head: str,
+    ) -> dict[str, Any]:
+        return {
+            "status": self.QUALIFIED,
+            "implementation_checkpoint": binding.implementation_checkpoint,
+            "evidence": {
+                "path": evidence_path,
+                "kind": binding.evidence_kind,
+                "record_sha256": binding.evidence_record_sha256,
+                "repository_commit": evidence_commit,
+            },
+            "verification": {"outcome": binding.verification_outcome},
+            "reconciliation": {
+                "id": reconciliation_id,
+                "sequence": sequence,
+                "recorded_at": binding.recorded_at,
+                "source_head": source_head,
+            },
+        }
+
+    def _discover_legacy_binding(
+        self, task: AtomicTask, checkpoint: str
+    ) -> tuple[ImplementationQualificationBinding, str, str]:
+        candidates = []
+        evidence_dir = self.repo_root / ".sdd" / "evidence"
+        for path in sorted(evidence_dir.glob(f"*-{task.task_id}*.json")):
+            try:
+                candidate = self._resolve_evidence(task, path.relative_to(self.repo_root).as_posix())
+            except GitRuntimeError:
+                continue
+            if candidate[0].implementation_checkpoint == checkpoint:
+                candidates.append(candidate)
+        if len(candidates) != 1:
+            raise GitRuntimeError(
+                f"Legacy {task.task_id} qualification requires exactly one repository-backed proof"
+            )
+        return candidates[0]
+
+    def _migrate(self, state: dict[str, Any], source_head: str) -> dict[str, Any]:
+        version = str(state.get("schema_version", "1.0"))
+        if version == self.STATE_SCHEMA:
+            return state
+        if version != "1.0":
+            raise GitRuntimeError(f"Unsupported implementation-state schema: {version}")
+        completed = state.get("last_completed_task")
+        verified = state.get("last_verified_commit")
+        if bool(completed) != bool(verified):
+            raise GitRuntimeError("Incomplete legacy qualification projection")
+        migrated = dict(state)
+        migrated["schema_version"] = self.STATE_SCHEMA
+        migrated["task_qualifications"] = {}
+        if completed:
+            task = self._task(str(completed))
+            binding, path, evidence_commit = self._discover_legacy_binding(task, str(verified))
+            migrated["task_qualifications"][task.task_id] = self._record(
+                binding,
+                path,
+                evidence_commit,
+                reconciliation_id=f"MIGRATE-{task.task_id}-{binding.evidence_record_sha256[:12]}",
+                sequence=1,
+                source_head=source_head,
+            )
+        return migrated
+
+    def _projection_task(self, records: Mapping[str, Any]) -> str | None:
+        if not records:
+            return None
+        candidates = list(records)
+        latest = []
+        for task_id in candidates:
+            commit = records[task_id]["implementation_checkpoint"]
+            if all(
+                other == task_id
+                or self.git.is_first_parent_ancestor(records[other]["implementation_checkpoint"], commit)
+                for other in candidates
+            ):
+                latest.append(task_id)
+        if len(latest) != 1:
+            raise GitRuntimeError("Qualified checkpoints have no unique ancestry-latest projection")
+        return latest[0]
+
+    def _validate_v2(self, state: dict[str, Any]) -> None:
+        if str(state.get("schema_version")) != self.STATE_SCHEMA:
+            raise GitRuntimeError("Implementation state is not schema 2.0")
+        records = state.get("task_qualifications")
+        if not isinstance(records, dict):
+            raise GitRuntimeError("task_qualifications must be a mapping")
+        sequences = []
+        for task_id, record in records.items():
+            if not re.fullmatch(r"(?:T|TC)\d{3}", str(task_id)) or not isinstance(record, dict):
+                raise GitRuntimeError("Malformed task qualification record")
+            if record.get("status") != self.QUALIFIED:
+                raise GitRuntimeError(f"{task_id} is not implementation-qualified")
+            task = self._task(task_id)
+            evidence = record.get("evidence")
+            reconciliation = record.get("reconciliation")
+            if not isinstance(evidence, dict) or not isinstance(reconciliation, dict):
+                raise GitRuntimeError(f"Malformed {task_id} evidence/reconciliation binding")
+            binding, path, evidence_commit = self._resolve_evidence(task, str(evidence.get("path", "")))
+            expected = (
+                binding.implementation_checkpoint,
+                binding.evidence_kind,
+                binding.evidence_record_sha256,
+                evidence_commit,
+                binding.verification_outcome,
+            )
+            actual = (
+                record.get("implementation_checkpoint"), evidence.get("kind"),
+                evidence.get("record_sha256"), evidence.get("repository_commit"),
+                (record.get("verification") or {}).get("outcome"),
+            )
+            if actual != expected or path != evidence.get("path"):
+                raise GitRuntimeError(f"{task_id} qualification binding conflict")
+            sequence = reconciliation.get("sequence")
+            if not isinstance(sequence, int) or sequence < 1:
+                raise GitRuntimeError(f"Invalid {task_id} reconciliation sequence")
+            sequences.append(sequence)
+        if len(sequences) != len(set(sequences)):
+            raise GitRuntimeError("Duplicate reconciliation sequence")
+        projected = self._projection_task(records)
+        expected_commit = records[projected]["implementation_checkpoint"] if projected else None
+        if state.get("last_completed_task") != projected or state.get("last_verified_commit") != expected_commit:
+            raise GitRuntimeError("Legacy compatibility projection is stale")
+
+    def _write_state(self, state: dict[str, Any]) -> None:
+        self.implementation_state_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=self.implementation_state_path.parent,
+            prefix=".implementation-state-", suffix=".tmp", delete=False,
+        )
+        temporary = Path(handle.name)
+        try:
+            with handle:
+                yaml.safe_dump(state, handle, sort_keys=False, allow_unicode=True)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.implementation_state_path)
+            self._validate_v2(self._load_state())
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def reconcile_qualification(
+        self,
+        *,
+        completed_task: str,
+        evidence_path: str,
+        next_task: str | None = None,
+        move_cursor: bool = False,
+        task_contract: AtomicTask | None = None,
+        expected_checkpoint: str | None = None,
+    ) -> None:
+        head = self.git.resolve_commit("HEAD")
+        if not head:
+            raise GitRuntimeError("Repository HEAD is unavailable")
+        task = task_contract or self._task(completed_task)
+        if task.task_id != completed_task:
+            raise GitRuntimeError("Task contract does not match completed task")
+        binding, path, evidence_commit = self._resolve_evidence(task, evidence_path)
+        if expected_checkpoint is not None and binding.implementation_checkpoint != expected_checkpoint:
+            raise GitRuntimeError("Evidence does not bind the requested checkpoint commit")
+        state = self._migrate(self._load_state(), head)
+        records = state["task_qualifications"]
+        existing = records.get(task.task_id)
+        identity = (binding.implementation_checkpoint, binding.evidence_record_sha256)
+        if existing:
+            existing_identity = (
+                existing.get("implementation_checkpoint"),
+                (existing.get("evidence") or {}).get("record_sha256"),
+            )
+            if existing_identity != identity:
+                raise GitRuntimeError(f"Conflicting qualification already exists for {task.task_id}")
+        else:
+            sequence = max(
+                (record["reconciliation"]["sequence"] for record in records.values()), default=0
+            ) + 1
+            records[task.task_id] = self._record(
+                binding, path, evidence_commit,
+                reconciliation_id=f"RECONCILE-{task.task_id}-{binding.evidence_record_sha256[:12]}",
+                sequence=sequence, source_head=head,
+            )
+        projected = self._projection_task(records)
+        state["last_completed_task"] = projected
+        state["last_verified_commit"] = (
+            records[projected]["implementation_checkpoint"] if projected else None
+        )
+        if move_cursor:
+            state["current_task"] = next_task
+            state["next_task"] = None
+        state.setdefault("test_status", {})["overall"] = "PASS"
+        state.setdefault("blocked_status", {})["blocked"] = False
+        self._validate_v2(state)
+        self._write_state(state)
+
+    def is_implementation_qualified(self, task_id: str) -> bool:
+        state = self._load_state()
+        if str(state.get("schema_version")) != self.STATE_SCHEMA:
+            return False
+        self._validate_v2(state)
+        return task_id in state["task_qualifications"]
 
     def snapshot(self) -> RecoverySnapshot:
         git = self.git.snapshot(recent_limit=20)
@@ -312,16 +648,18 @@ class RecoveryManager:
         completed_task: str,
         next_task: str | None = None,
         test_status: str = "PASS",
+        evidence_path: str | None = None,
+        task_contract: AtomicTask | None = None,
     ) -> None:
-        state = self._load_state()
-        state["last_completed_task"] = completed_task
-        state["current_task"] = next_task
-        state["next_task"] = None
-        state["last_verified_commit"] = commit
-        state.setdefault("test_status", {})["overall"] = test_status
-        state.setdefault("blocked_status", {})["blocked"] = False
-        self.implementation_state_path.parent.mkdir(parents=True, exist_ok=True)
-        self.implementation_state_path.write_text(
-            yaml.safe_dump(state, sort_keys=False, allow_unicode=True),
-            encoding="utf-8",
+        if test_status != "PASS" or not evidence_path:
+            raise GitRuntimeError("Checkpoint state requires repository-backed PASS evidence")
+        if self.git.resolve_commit(commit) != commit:
+            raise GitRuntimeError("Checkpoint commit must be a full reachable commit")
+        self.reconcile_qualification(
+            completed_task=completed_task,
+            evidence_path=evidence_path,
+            next_task=next_task,
+            move_cursor=True,
+            task_contract=task_contract,
+            expected_checkpoint=commit,
         )

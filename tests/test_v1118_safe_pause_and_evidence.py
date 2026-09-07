@@ -148,6 +148,16 @@ class V1118Stage08Tests(unittest.TestCase):
         )
         for evidence_file in (self.repo / ".sdd/evidence").glob("*.json"):
             evidence_file.unlink()
+        implementation_path = self.repo / ".sdd/state/implementation-state.yaml"
+        implementation = yaml.safe_load(implementation_path.read_text(encoding="utf-8"))
+        implementation["schema_version"] = "1.0"
+        implementation["last_completed_task"] = None
+        implementation["last_verified_commit"] = None
+        implementation["current_task"] = None
+        implementation["next_task"] = None
+        implementation_path.write_text(
+            yaml.safe_dump(implementation, sort_keys=False), encoding="utf-8"
+        )
         for rel, text in {
             "AGENTS.md": "# AGENTS\n",
             "docs/PRD.md": "# PRD\nFR-001\n",

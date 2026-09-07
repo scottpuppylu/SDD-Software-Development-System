@@ -95,6 +95,22 @@ class RecoveryQualification:
     reconciliation_eligible: bool = False
 
 
+@dataclass(frozen=True)
+class ImplementationQualificationBinding:
+    """Intrinsic, immutable evidence facts accepted by implementation state.
+
+    Git reachability, committed-blob identity, and checkpoint/task scope are
+    deliberately validated by the Git runtime before this binding is persisted.
+    """
+
+    task_id: str
+    implementation_checkpoint: str
+    evidence_kind: str
+    evidence_record_sha256: str
+    verification_outcome: str
+    recorded_at: str
+
+
 def canonical_sha256(value: Any) -> str:
     encoded = json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -227,6 +243,90 @@ def qualify_recovery_attestation(
     if payload.get("record_sha256") != expected:
         return RecoveryQualification(False, "SCHEMA_INVALID")
     return RecoveryQualification(True, "QUALIFYING", reconciliation_eligible=True)
+
+
+def implementation_qualification_binding(
+    payload: Mapping[str, Any],
+    task: AtomicTask,
+    *,
+    ordinary_checkpoint: str | None = None,
+) -> ImplementationQualificationBinding:
+    """Validate intrinsic ordinary/recovery evidence without inventing state.
+
+    Recovery authorizations are historical by reconciliation time, so this
+    validates the immutable attestation that already qualified and was committed;
+    it does not re-run the authorization lifecycle or verification command.
+    """
+
+    task_id = str(payload.get("task_id", ""))
+    if task_id != task.task_id:
+        raise InvalidEvidence("TASK_MISMATCH: evidence belongs to another task")
+
+    if payload.get("record_kind") == RECOVERY_RECORD_KIND:
+        checks = (
+            (payload.get("schema_version") == RECOVERY_SCHEMA_VERSION, "SCHEMA_INVALID"),
+            (bool(str(payload.get("authorization_id", "")).strip()), "AUTHORITY_INVALID"),
+            (payload.get("authorization_issuer") == "PROJECT_AUTHORITY", "AUTHORITY_INVALID"),
+            (payload.get("verification_outcome") == "PASS", "VERIFICATION_FAILED"),
+            (payload.get("exit_status") == 0, "VERIFICATION_FAILED"),
+            (payload.get("complete") is True, "VERIFICATION_INCOMPLETE"),
+            (payload.get("timed_out") is False, "VERIFICATION_INCOMPLETE"),
+            (payload.get("implementation_mutated") is False, "IMPLEMENTATION_MUTATED"),
+            (payload.get("pre_head") == payload.get("post_head"), "IMPLEMENTATION_MUTATED"),
+        )
+        for valid, reason in checks:
+            if not valid:
+                raise InvalidEvidence(f"{reason}: recovery evidence is non-qualifying")
+        checkpoint = str(payload.get("checkpoint_commit", ""))
+        if not re.fullmatch(r"[0-9a-f]{40}", checkpoint):
+            raise InvalidEvidence("CHECKPOINT_MISMATCH: full checkpoint is required")
+        expected = canonical_sha256({
+            key: value for key, value in payload.items() if key != "record_sha256"
+        })
+        if payload.get("record_sha256") != expected:
+            raise InvalidEvidence("SCHEMA_INVALID: recovery record digest mismatch")
+        recorded_at = str(payload.get("recorded_at", ""))
+        _parse_utc(recorded_at, "recorded_at")
+        return ImplementationQualificationBinding(
+            task_id=task.task_id,
+            implementation_checkpoint=checkpoint,
+            evidence_kind=RECOVERY_RECORD_KIND,
+            evidence_record_sha256=expected,
+            verification_outcome="PASS",
+            recorded_at=recorded_at,
+        )
+
+    verification = payload.get("verification")
+    codex = payload.get("codex")
+    ordinary_valid = (
+        payload.get("schema_version") == "1.0"
+        and payload.get("stage") == "08"
+        and payload.get("status") == "PASS"
+        and isinstance(verification, list)
+        and bool(verification)
+        and all(
+            isinstance(item, Mapping)
+            and item.get("returncode") == 0
+            and item.get("passed") is True
+            for item in verification
+        )
+        and isinstance(codex, Mapping)
+        and codex.get("returncode") == 0
+    )
+    if not ordinary_valid:
+        raise InvalidEvidence("VERIFICATION_FAILED: ordinary evidence is non-qualifying")
+    if ordinary_checkpoint is None or not re.fullmatch(r"[0-9a-f]{40}", ordinary_checkpoint):
+        raise InvalidEvidence("CHECKPOINT_MISMATCH: ordinary evidence requires its atomic checkpoint")
+    recorded_at = str(payload.get("recorded_at", ""))
+    _parse_utc(recorded_at, "recorded_at")
+    return ImplementationQualificationBinding(
+        task_id=task.task_id,
+        implementation_checkpoint=ordinary_checkpoint,
+        evidence_kind="ORDINARY_STAGE08",
+        evidence_record_sha256=canonical_sha256(payload),
+        verification_outcome="PASS",
+        recorded_at=recorded_at,
+    )
 
 
 @dataclass(frozen=True)
