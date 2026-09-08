@@ -107,7 +107,16 @@ class GovernedRecord:
         authority_ids = [item.identity for item in self.authorities]
         if len(authority_ids) != len(set(authority_ids)):
             raise InvalidGovernedRecord("ambiguous duplicate authority identity")
+        for item in self.authorities:
+            if not all((item.identity, item.artifact, item.owner, item.status)):
+                raise InvalidGovernedRecord("authority references require identity, artifact, owner, and status")
+        verification_ids: set[str] = set()
         for item in self.verification:
+            if not item.identity:
+                raise InvalidGovernedRecord("verification identity is required")
+            if item.identity in verification_ids:
+                raise InvalidGovernedRecord(f"ambiguous duplicate verification identity: {item.identity}")
+            verification_ids.add(item.identity)
             if item.result not in ALLOWED_RESULTS:
                 raise InvalidGovernedRecord(f"invalid verification result: {item.result}")
             if item.result == "NOT RUN" and not item.gap:

@@ -114,3 +114,29 @@ def test_truthful_verification_vocabulary_and_required_gap():
         GovernedRecord.from_dict({**record().to_dict(), "verification": [{"identity": "x", "result": "SKIPPED"}]})
     with pytest.raises(InvalidGovernedRecord, match="requires a gap"):
         GovernedRecord.from_dict({**record().to_dict(), "verification": [{"identity": "x", "result": "NOT RUN"}]})
+
+
+def test_authority_references_require_complete_repository_identity():
+    malformed = record().to_dict()
+    malformed["authorities"] = [
+        {"identity": "SPEC-001", "artifact": "", "owner": "03", "status": "APPROVED"}
+    ]
+    with pytest.raises(InvalidGovernedRecord, match="authority references require"):
+        GovernedRecord.from_dict(malformed)
+
+
+def test_verification_identities_are_required_and_unambiguous():
+    missing = record().to_dict()
+    missing["verification"] = [
+        {"identity": "", "result": "NOT RUN", "gap": "awaiting execution"}
+    ]
+    with pytest.raises(InvalidGovernedRecord, match="verification identity is required"):
+        GovernedRecord.from_dict(missing)
+
+    duplicated = record().to_dict()
+    duplicated["verification"] = [
+        {"identity": "TEST-001", "result": "PASS"},
+        {"identity": "TEST-001", "result": "FAIL"},
+    ]
+    with pytest.raises(InvalidGovernedRecord, match="duplicate verification identity"):
+        GovernedRecord.from_dict(duplicated)
