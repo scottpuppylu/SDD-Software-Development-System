@@ -1,4 +1,5 @@
 from pathlib import Path
+from dataclasses import replace as dataclass_replace
 import shutil
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ from sdd_orchestrator.core import (
     LifecycleAggregate,
     LifecycleGovernor,
     LifecycleInvariantError,
+    LifecycleTransition,
     Orchestrator,
     QualificationState,
     ScopedCondition,
@@ -237,6 +239,28 @@ class LifecycleGovernorTests(unittest.TestCase):
         with self.assertRaisesRegex(LifecycleInvariantError, "stale prior-state"):
             self.transition(store, lifecycle("state-2"))
         self.assertEqual(store.value.identity, "newer")
+
+    def test_work_positions_are_unique_and_mutually_exclusive(self):
+        with self.assertRaisesRegex(LifecycleInvariantError, "duplicate current work"):
+            lifecycle(current_work=("T002", "T002")).validate()
+        with self.assertRaisesRegex(LifecycleInvariantError, "must be disjoint"):
+            lifecycle(current_work=("T002",), next_work=("T002",)).validate()
+
+    def test_transition_history_requires_complete_unique_identities(self):
+        transition = LifecycleTransition(
+            identity="transition-1",
+            prior_state_identity="state-0",
+            new_state_identity="state-1",
+            affected_scope=("T002",),
+            reason="task began",
+            sources=("TASK-002",),
+            next_route="CONTINUE_T002",
+        )
+        with self.assertRaisesRegex(LifecycleInvariantError, "duplicate transition identity"):
+            lifecycle(transitions=(transition, transition)).validate()
+        incomplete = dataclass_replace(transition, next_route="")
+        with self.assertRaisesRegex(LifecycleInvariantError, "incomplete record"):
+            lifecycle(transitions=(incomplete,)).validate()
 
     def test_scoped_pause_and_independent_continuation(self):
         paused = lifecycle(

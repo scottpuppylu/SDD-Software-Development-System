@@ -239,6 +239,37 @@ class LifecycleAggregate:
     def validate(self) -> None:
         if not self.identity or not self.current_stage or not self.authority_summary:
             raise LifecycleInvariantError("identity, current stage, and authority summary are required")
+        work_sets = {
+            "completed": set(self.completed_work),
+            "current": set(self.current_work),
+            "next": set(self.next_work),
+        }
+        for name, values in (
+            ("completed", self.completed_work),
+            ("current", self.current_work),
+            ("next", self.next_work),
+        ):
+            if len(values) != len(set(values)):
+                raise LifecycleInvariantError(f"duplicate {name} work identity")
+        if work_sets["current"] & work_sets["next"]:
+            raise LifecycleInvariantError("current and next work must be disjoint")
+        transition_ids: set[str] = set()
+        for transition in self.transitions:
+            if not all((
+                transition.identity,
+                transition.prior_state_identity,
+                transition.new_state_identity,
+                transition.affected_scope,
+                transition.reason,
+                transition.sources,
+                transition.next_route,
+            )):
+                raise LifecycleInvariantError("transition history contains an incomplete record")
+            if transition.identity in transition_ids:
+                raise LifecycleInvariantError(
+                    f"duplicate transition identity: {transition.identity}"
+                )
+            transition_ids.add(transition.identity)
         q = self.qualifications
         if q.implementation_authorized and (not q.approved or q.stage07_result != "PASS"):
             raise LifecycleInvariantError("implementation authorization requires approval and Stage07 PASS")
