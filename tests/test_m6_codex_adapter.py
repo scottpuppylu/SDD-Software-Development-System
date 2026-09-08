@@ -92,6 +92,8 @@ class M6CodexAdapterTests(unittest.TestCase):
         implementation = yaml.safe_load(
             implementation_path.read_text(encoding="utf-8")
         )
+        implementation["schema_version"] = "1.0"
+        implementation.pop("task_qualifications", None)
         implementation["last_completed_task"] = None
         implementation["current_task"] = None
         implementation["next_task"] = None

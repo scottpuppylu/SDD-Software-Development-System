@@ -24,6 +24,17 @@ class M5GitTests(unittest.TestCase):
         self.repo = Path(self.tmp.name) / "repo"
         self.repo.mkdir()
         shutil.copytree(SOURCE_ROOT / ".sdd", self.repo / ".sdd")
+        implementation_path = self.repo / ".sdd/state/implementation-state.yaml"
+        implementation = yaml.safe_load(implementation_path.read_text(encoding="utf-8"))
+        implementation["schema_version"] = "1.0"
+        implementation.pop("task_qualifications", None)
+        implementation["last_completed_task"] = None
+        implementation["last_verified_commit"] = None
+        implementation["current_task"] = None
+        implementation["next_task"] = None
+        implementation_path.write_text(
+            yaml.safe_dump(implementation, sort_keys=False), encoding="utf-8"
+        )
         subprocess.run(["git", "init"], cwd=self.repo, check=True, capture_output=True)
         subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=self.repo, check=True)
         subprocess.run(["git", "config", "user.name", "Test User"], cwd=self.repo, check=True)
@@ -44,6 +55,21 @@ class M5GitTests(unittest.TestCase):
         self.assertTrue(snap.is_repository)
         self.assertIsNotNone(snap.head_commit)
         self.assertIn("README.md", snap.dirty_paths)
+
+    def test_fixture_repository_does_not_inherit_live_qualification_history(self):
+        state = yaml.safe_load(
+            (self.repo / ".sdd/state/implementation-state.yaml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(state["schema_version"], "1.0")
+        self.assertNotIn("task_qualifications", state)
+        self.assertIsNone(state["last_completed_task"])
+        self.assertIsNone(GitRepository(self.repo).resolve_commit("07f18d293df68ff36b9c3006414d15cc02c888b3"))
+
+    def test_fixture_repository_missing_checkpoint_remains_fail_closed(self):
+        git = GitRepository(self.repo)
+        self.assertFalse(
+            git.is_first_parent_ancestor("07f18d293df68ff36b9c3006414d15cc02c888b3", "HEAD")
+        )
 
     def test_checkpoint_requires_explicit_paths(self):
         with self.assertRaises(GitRuntimeError):
@@ -173,8 +199,6 @@ class M5GitTests(unittest.TestCase):
         state["last_completed_task"] = None
         state["last_verified_commit"] = None
         state_path.write_text(yaml.safe_dump(state, sort_keys=False), encoding="utf-8")
-        subprocess.run(["git", "add", ".sdd/state/implementation-state.yaml"], cwd=self.repo, check=True)
-        subprocess.run(["git", "commit", "-m", "test: empty legacy state"], cwd=self.repo, check=True, capture_output=True)
         (self.repo / "done.txt").write_text("done\n", encoding="utf-8")
         evidence_rel = ".sdd/evidence/20260907T030000.000000Z-T010.json"
         evidence = {
@@ -233,6 +257,45 @@ class M5GitTests(unittest.TestCase):
                 "schema_version: '2.0'\ntask_qualifications:\n  T010: {}\n  T010: {}\n"
             )
 
+    def test_task_qualification_serialization_is_numeric_and_insertion_independent(self):
+        manager = RecoveryManager(self.repo)
+        task_ids = ("T001", "T002", "T010", "T019", "T020", "T100")
+        records = {task_id: {"task_id": task_id} for task_id in reversed(task_ids)}
+        state = {
+            "schema_version": "2.0", "current_task": None, "next_task": None,
+            "last_completed_task": "T020", "last_verified_commit": "a" * 40,
+            "task_qualifications": records,
+        }
+        canonical = manager._canonicalize_task_qualifications(state)
+        self.assertEqual(list(canonical["task_qualifications"]), list(task_ids))
+        self.assertEqual(list(state["task_qualifications"]), list(reversed(task_ids)))
+        self.assertEqual(canonical["task_qualifications"], records)
+        self.assertEqual(canonical["last_completed_task"], "T020")
+        self.assertIsNone(canonical["current_task"])
+        first = yaml.safe_dump(canonical, sort_keys=False, allow_unicode=True)
+        reordered = dict(state)
+        reordered["task_qualifications"] = {
+            task_id: records[task_id] for task_id in ("T019", "T001", "T100", "T010", "T020", "T002")
+        }
+        second = yaml.safe_dump(
+            manager._canonicalize_task_qualifications(reordered),
+            sort_keys=False, allow_unicode=True,
+        )
+        round_trip = yaml.safe_dump(
+            manager._canonicalize_task_qualifications(yaml.safe_load(first)),
+            sort_keys=False, allow_unicode=True,
+        )
+        self.assertEqual(first, second)
+        self.assertEqual(first, round_trip)
+
+    def test_task_qualification_serialization_rejects_malformed_task_id(self):
+        manager = RecoveryManager(self.repo)
+        with self.assertRaisesRegex(GitRuntimeError, "Malformed task qualification"):
+            manager._canonicalize_task_qualifications({
+                "schema_version": "2.0",
+                "task_qualifications": {"T20": {"task_id": "T20"}},
+            })
+
     def test_out_of_order_t012_reconciliation_preserves_t019(self):
         manager = RecoveryManager(self.repo)
         t019_commit, t012_commit = "9" * 40, "1" * 40
@@ -268,7 +331,7 @@ class M5GitTests(unittest.TestCase):
             mock.patch.object(manager, "_write_state", side_effect=lambda state: published.update(state)),
         ):
             manager.reconcile_qualification(completed_task="T012", evidence_path=".sdd/evidence/t012.json")
-        self.assertEqual(set(published["task_qualifications"]), {"T012", "T019"})
+        self.assertEqual(list(published["task_qualifications"]), ["T012", "T019"])
         self.assertEqual(published["last_completed_task"], "T019")
         self.assertIsNone(published["current_task"])
 

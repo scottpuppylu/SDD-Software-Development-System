@@ -151,6 +151,7 @@ class V1118Stage08Tests(unittest.TestCase):
         implementation_path = self.repo / ".sdd/state/implementation-state.yaml"
         implementation = yaml.safe_load(implementation_path.read_text(encoding="utf-8"))
         implementation["schema_version"] = "1.0"
+        implementation.pop("task_qualifications", None)
         implementation["last_completed_task"] = None
         implementation["last_verified_commit"] = None
         implementation["current_task"] = None

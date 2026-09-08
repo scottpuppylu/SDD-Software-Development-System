@@ -487,6 +487,25 @@ class RecoveryManager:
             raise GitRuntimeError("Qualified checkpoints have no unique ancestry-latest projection")
         return latest[0]
 
+    @staticmethod
+    def _canonical_task_sort_key(task_id: str) -> tuple[int, int, str]:
+        match = re.fullmatch(r"(T|TC)(\d{3})", str(task_id))
+        if not match:
+            raise GitRuntimeError("Malformed task qualification record")
+        prefix, number = match.groups()
+        return (0 if prefix == "T" else 1, int(number), str(task_id))
+
+    def _canonicalize_task_qualifications(self, state: dict[str, Any]) -> dict[str, Any]:
+        records = state.get("task_qualifications")
+        if not isinstance(records, dict):
+            raise GitRuntimeError("task_qualifications must be a mapping")
+        canonical = dict(state)
+        canonical["task_qualifications"] = {
+            task_id: records[task_id]
+            for task_id in sorted(records, key=self._canonical_task_sort_key)
+        }
+        return canonical
+
     def _validate_v2(self, state: dict[str, Any]) -> None:
         if str(state.get("schema_version")) != self.STATE_SCHEMA:
             raise GitRuntimeError("Implementation state is not schema 2.0")
@@ -531,6 +550,7 @@ class RecoveryManager:
             raise GitRuntimeError("Legacy compatibility projection is stale")
 
     def _write_state(self, state: dict[str, Any]) -> None:
+        state = self._canonicalize_task_qualifications(state)
         self.implementation_state_path.parent.mkdir(parents=True, exist_ok=True)
         handle = tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", dir=self.implementation_state_path.parent,
@@ -586,6 +606,8 @@ class RecoveryManager:
                 reconciliation_id=f"RECONCILE-{task.task_id}-{binding.evidence_record_sha256[:12]}",
                 sequence=sequence, source_head=head,
             )
+        state = self._canonicalize_task_qualifications(state)
+        records = state["task_qualifications"]
         projected = self._projection_task(records)
         state["last_completed_task"] = projected
         state["last_verified_commit"] = (
