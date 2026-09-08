@@ -1,10 +1,10 @@
-schema_version: '1.0'
+schema_version: '2.0'
 current_stage: 08
 current_branch: null
-last_completed_task: T019
+last_completed_task: T020
 current_task: null
 next_task: null
-last_verified_commit: 07f18d293df68ff36b9c3006414d15cc02c888b3
+last_verified_commit: 3b490e48a05f8fc4a2469f219386a6176d6ad9e6
 test_status:
   overall: PASS
   required_checks: []
@@ -20,3 +20,34 @@ resume:
 
     '
   chat_memory_authoritative: false
+task_qualifications:
+  T019:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 07f18d293df68ff36b9c3006414d15cc02c888b3
+    evidence:
+      path: .sdd/evidence/20260907T013610.835817Z-T019-recovery-T019-EVIDENCE-RECOVERY-003.json
+      kind: POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY
+      record_sha256: b247f8f7856f6e7622b9febfdbe6e050dab0a87b139c35dd94c2b69d938391a8
+      repository_commit: 03682911fa5b2d6fb4113eef62ec7b23e0f1ebf5
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: MIGRATE-T019-b247f8f7856f
+      sequence: 1
+      recorded_at: '2026-09-07T01:36:10.835817Z'
+      source_head: 96e9fd26320103bcd83e423eae0ecfb6d2ae179b
+  T020:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 3b490e48a05f8fc4a2469f219386a6176d6ad9e6
+    evidence:
+      path: .sdd/evidence/20260907T081125.376514Z-T020-recovery-T020-EVIDENCE-RECOVERY-001.json
+      kind: POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY
+      record_sha256: 364051ef1511767863e328960568f65a9d01281f70ecced4bf76b55f878076e1
+      repository_commit: 96e9fd26320103bcd83e423eae0ecfb6d2ae179b
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-T020-364051ef1511
+      sequence: 2
+      recorded_at: '2026-09-07T08:11:25.376514Z'
+      source_head: 96e9fd26320103bcd83e423eae0ecfb6d2ae179b
