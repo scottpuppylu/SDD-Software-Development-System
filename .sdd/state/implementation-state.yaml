@@ -21,6 +21,21 @@ resume:
     '
   chat_memory_authoritative: false
 task_qualifications:
+  T012:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: ccffccef435481d82d748e2235df1c53d20f7127
+    evidence:
+      path: .sdd/evidence/20260907T023726.044768Z-T012-recovery-T012-EVIDENCE-RECOVERY-001.json
+      kind: POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY
+      record_sha256: 6332f08d223c88fe12496170bda06559691e05be1bc7a5b565b093d85fc366c2
+      repository_commit: 533b333ccc7d530372cd25d35952b427292fcfc6
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-T012-6332f08d223c
+      sequence: 3
+      recorded_at: '2026-09-07T02:37:26.044768Z'
+      source_head: 78c6360838c395f22d4612995bc3d245ba1c78a4
   T019:
     status: IMPLEMENTATION_QUALIFIED
     implementation_checkpoint: 07f18d293df68ff36b9c3006414d15cc02c888b3
