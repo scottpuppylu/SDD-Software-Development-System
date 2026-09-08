@@ -131,7 +131,7 @@ class LifecycleCommandProcessor:
             ):
                 raise LifecycleInvariantError("command identity was already used for different content")
             return LifecycleCommandResult(
-                command.identity, command.action, current.identity,
+                command.identity, command.action, prior.new_state_identity,
                 command.affected_scope, prior.next_route, True,
             )
         if current.identity != command.expected_state_identity:

@@ -404,6 +404,23 @@ class LifecycleCommandProcessorTests(unittest.TestCase):
                 self.command("PAUSE", reason="different")
             )
 
+    def test_duplicate_result_remains_bound_to_original_transition(self):
+        store, original = self.process(lifecycle(), self.command("PAUSE"))
+        resumed = self.command(
+            "RESUME", identity="cmd-2", expected="state-2", new="state-3"
+        )
+        store, _ = self.process(store.value, resumed)
+        state_after_resume = store.value
+
+        replay = LifecycleCommandProcessor(LifecycleGovernor(store)).process(
+            self.command("PAUSE")
+        )
+
+        self.assertTrue(replay.duplicate)
+        self.assertEqual(replay.state_identity, original.state_identity)
+        self.assertEqual(replay.next_route, original.next_route)
+        self.assertIs(store.value, state_after_resume)
+
     def test_invalid_commands_leave_state_unchanged(self):
         cases = (
             self.command("PAUSE", expected="stale"),
