@@ -18,6 +18,141 @@ class PipelineRunResult:
     stages_run: list[dict[str, Any]] = field(default_factory=list)
 
 
+READINESS_DIMENSIONS = (
+    "problem",
+    "target_user",
+    "mvp_scope",
+    "important_behavior_flow",
+    "critical_exception_risk_blockers",
+    "material_scope_changing_tbd",
+    "product_baseline_approval",
+)
+
+APPROVED_INTAKE_FORMS = {
+    "PLAIN_LANGUAGE",
+    "DOCUMENT",
+    "IMAGE_OR_UI_REFERENCE",
+    "WEBSITE_OR_SYSTEM_REFERENCE",
+    "EXISTING_PROGRAM_MODIFICATION",
+}
+
+READINESS_RESULTS = {"PASS", "FAIL", "NOT RUN"}
+NON_AUTHORITATIVE_SOURCES = {"AI_PROPOSAL", "INFERENCE", "SILENCE"}
+
+
+class RequirementReadinessError(ValueError):
+    """The proposed readiness evaluation is malformed or authority-invalid."""
+
+
+@dataclass(frozen=True)
+class ReadinessDimensionFinding:
+    dimension: str
+    result: str
+    affected_scope: tuple[str, ...]
+    evidence_reference: str | None
+    authority_reference: str | None
+    source_kind: str
+    explanation: str = ""
+    clarification_question: str | None = None
+
+
+@dataclass(frozen=True)
+class RequirementReadinessRequest:
+    intake_form: str
+    intake_reference: str
+    proposed_baseline_reference: str
+    findings: tuple[ReadinessDimensionFinding, ...]
+    noncritical_downstream_details: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RequirementReadinessDecision:
+    result: str
+    ready: bool
+    findings: tuple[ReadinessDimensionFinding, ...]
+    blocked_scope: tuple[str, ...]
+    clarification_questions: tuple[str, ...]
+    next_route: str
+    intake_reference: str
+    proposed_baseline_reference: str
+
+
+class RequirementReadinessEvaluator:
+    """Evaluate DES-003 product readiness without creating Product authority."""
+
+    def evaluate(self, request: RequirementReadinessRequest) -> RequirementReadinessDecision:
+        if request.intake_form not in APPROVED_INTAKE_FORMS:
+            raise RequirementReadinessError("unsupported product intake form")
+        if not request.intake_reference or not request.proposed_baseline_reference:
+            raise RequirementReadinessError("intake and proposed baseline references are required")
+
+        by_dimension: dict[str, ReadinessDimensionFinding] = {}
+        for finding in request.findings:
+            if finding.dimension not in READINESS_DIMENSIONS:
+                raise RequirementReadinessError(f"unknown readiness dimension: {finding.dimension}")
+            if finding.dimension in by_dimension:
+                raise RequirementReadinessError(f"duplicate readiness dimension: {finding.dimension}")
+            if finding.result not in READINESS_RESULTS:
+                raise RequirementReadinessError(
+                    f"invalid readiness result for {finding.dimension}: {finding.result}"
+                )
+            if not finding.affected_scope or not all(finding.affected_scope):
+                raise RequirementReadinessError(f"affected scope is required for {finding.dimension}")
+            if not finding.explanation:
+                raise RequirementReadinessError(
+                    f"plain-language explanation is required for {finding.dimension}"
+                )
+            if finding.result == "PASS":
+                if not finding.evidence_reference or not finding.authority_reference:
+                    raise RequirementReadinessError(
+                        f"PASS requires evidence and authority for {finding.dimension}"
+                    )
+                if finding.source_kind in NON_AUTHORITATIVE_SOURCES:
+                    raise RequirementReadinessError(
+                        f"{finding.source_kind} cannot establish {finding.dimension} readiness"
+                    )
+                if (
+                    finding.dimension == "product_baseline_approval"
+                    and finding.source_kind != "PRODUCT_AUTHORITY"
+                ):
+                    raise RequirementReadinessError(
+                        "product baseline approval requires Product authority"
+                    )
+            elif not finding.clarification_question:
+                raise RequirementReadinessError(
+                    f"focused clarification is required for {finding.dimension}"
+                )
+            by_dimension[finding.dimension] = finding
+
+        missing = [name for name in READINESS_DIMENSIONS if name not in by_dimension]
+        if missing:
+            raise RequirementReadinessError(
+                "missing readiness dimensions: " + ", ".join(missing)
+            )
+
+        ordered = tuple(by_dimension[name] for name in READINESS_DIMENSIONS)
+        unresolved = tuple(item for item in ordered if item.result != "PASS")
+        blocked_scope = tuple(
+            sorted({scope for item in unresolved for scope in item.affected_scope})
+        )
+        questions = tuple(
+            item.clarification_question for item in unresolved if item.clarification_question
+        )
+        ready = not unresolved
+        return RequirementReadinessDecision(
+            result="PASS" if ready else "FAIL",
+            ready=ready,
+            findings=ordered,
+            blocked_scope=blocked_scope,
+            clarification_questions=questions,
+            next_route=(
+                "READY_FOR_PRODUCT_BASELINE" if ready else "PRODUCT_CLARIFICATION_REQUIRED"
+            ),
+            intake_reference=request.intake_reference,
+            proposed_baseline_reference=request.proposed_baseline_reference,
+        )
+
+
 class PipelineController:
     """Runs multiple SDD stages without manual artifact copy/paste.
 
