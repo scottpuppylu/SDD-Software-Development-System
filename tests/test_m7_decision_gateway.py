@@ -55,6 +55,29 @@ class DecisionGatewayTests(unittest.TestCase):
         with self.assertRaises(DecisionGatewayError):
             self.create(affected_artifacts=[])
 
+    def test_identity_is_structurally_bounded_and_cannot_escape_store(self):
+        for identity in ("HD-../outside", "HD-A/B", "HD-", "NOT-HD-1"):
+            with self.subTest(identity=identity), self.assertRaisesRegex(
+                DecisionGatewayError, "invalid identity"
+            ):
+                self.create(decision_id=identity)
+        self.assertEqual(list(self.repo.rglob("outside.yaml")), [])
+
+    def test_independent_scope_must_be_disjoint_from_affected_and_dependents(self):
+        for independent, dependencies in (
+            (["feature:bounded-behavior"], []),
+            (["TASK-9"], ["TASK-9"]),
+        ):
+            with self.subTest(independent=independent), self.assertRaisesRegex(
+                DecisionGatewayError, "Independent scope overlaps"
+            ):
+                self.create(
+                    independent_scope=independent,
+                    dependencies=dependencies,
+                )
+        self.assertEqual(self.gateway.list(), [])
+        self.assertFalse(self.orch.project_state["blocking"]["is_blocked"])
+
     def test_all_result_paths_retain_attribution_and_history(self):
         for result, expected in (("APPROVE", "APPROVED"), ("REJECT", "REJECTED"),
                                  ("REQUEST_REVISION", "REVISION_REQUESTED"),

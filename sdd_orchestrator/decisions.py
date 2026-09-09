@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import re
 import tempfile
 from typing import Any
 import uuid
@@ -22,6 +23,7 @@ class DecisionGatewayError(SDDOrchestratorError):
 PENDING = "PENDING"
 FINAL_STATUSES = {"APPROVED", "REJECTED", "REVISION_REQUESTED", "WITHDRAWN"}
 ALL_STATUSES = {PENDING, *FINAL_STATUSES}
+DECISION_ID_PATTERN = re.compile(r"HD-[A-Z0-9][A-Z0-9_-]*")
 
 
 @dataclass
@@ -120,16 +122,28 @@ class DecisionGateway:
             raise DecisionGatewayError("Decision reason is required")
         owners = sorted({self.orchestrator.authority_owner(d) for d in domains})
         identity = decision_id or f"HD-{uuid.uuid4().hex.upper()}"
+        if not DECISION_ID_PATTERN.fullmatch(identity):
+            raise DecisionGatewayError(
+                f"Human Decision identity collision or invalid identity: {identity}"
+            )
         path = self.root / f"{identity}.yaml"
-        if not identity.startswith("HD-") or path.exists():
+        if path.exists():
             raise DecisionGatewayError(f"Human Decision identity collision or invalid identity: {identity}")
+        dependent_scope = self._clean(dependencies)
+        proven_independent = self._clean(independent_scope)
+        overlap = set(proven_independent).intersection(scope) | set(proven_independent).intersection(dependent_scope)
+        if overlap:
+            raise DecisionGatewayError(
+                "Independent scope overlaps affected or dependent scope: "
+                + ", ".join(sorted(overlap))
+            )
         now = self._now()
         req = DecisionRequest(
             identity, PENDING, now, None, decision_type, source_stage.zfill(2),
             domains, owners, question.strip(), context.strip(), choices, risk, scope,
             None, None, consequence.strip() if consequence else
             "Affected work is paused; the recorded outcome governs only this named condition.",
-            self._clean(dependencies), self._clean(independent_scope), [],
+            dependent_scope, proven_independent, [],
             str(target_version).strip() or "UNSPECIFIED", 1,
             [DecisionEvent(1, PENDING, None, source_stage.zfill(2),
                            f"CREATE:{identity}", now, 1, context.strip())],
