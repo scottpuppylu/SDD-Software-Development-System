@@ -151,6 +151,30 @@ class AuthorityRegistryTests(unittest.TestCase):
         self.assertEqual(ambiguous.unresolved_condition, "ambiguous-current-version")
         self.assertEqual(len(AuthorityRegistry(conflict_store=self.store).conflicts()), 2)
 
+    def test_explicit_conflict_cannot_be_overridden_by_approved_entry(self):
+        approved = self.entry()
+        conflicting = self.entry(
+            "CONFLICTING",
+            approved=False,
+            version="prd-v2",
+            unresolved_condition="same-domain-contract-conflict",
+            scope=("T005", "T099"),
+        )
+        result = AuthorityRegistry(
+            (approved, conflicting), conflict_store=self.store
+        ).resolve("PRODUCT_REQUIREMENT", ("T005", "T099", "T100"))
+
+        self.assertFalse(result.approved)
+        self.assertEqual(result.status, "CONFLICTING")
+        self.assertEqual(result.unresolved_condition, "authority-conflict")
+        self.assertEqual(result.affected_scope, ("T005", "T099"))
+        self.assertEqual(result.unaffected_scope, ("T100",))
+        self.assertEqual(result.permitted_route, "ROUTE_TO_STAGE_02")
+        self.assertEqual(
+            AuthorityRegistry(conflict_store=self.store).conflicts()[0].protocol,
+            ("DETECT", "REPORT", "BLOCK", "ROUTE_TO_AUTHORITATIVE_OWNER"),
+        )
+
     def test_cross_domain_conflict_records_four_steps_and_minimum_disclosure(self):
         registry = AuthorityRegistry(conflict_store=self.store)
         record = registry.record_cross_domain_conflict("AUTH-1", ("PRODUCT_REQUIREMENT", "TECHNICAL_CONTRACT"), ("T005",), condition="contract-mismatch", safe_references=("docs/PRD.md#AC-04", "docs/spec.md#SPEC-004"))
@@ -166,6 +190,19 @@ class AuthorityRegistryTests(unittest.TestCase):
             AuthorityRegistry.reject_global_precedence()
         for result, flag, expected in (("PASS", True, True), ("PASS", False, False), ("FAIL", True, False), (None, True, False)):
             self.assertEqual(AuthorityRegistry.normal_implementation_authorized(stage07_result=result, implementation_authorization=flag), expected)
+        for substitute in (
+            "HUMAN_DECISION_APPROVED",
+            "IMPLEMENTATION_QUALIFIED",
+            "VERIFICATION_PASS",
+            "STAGE09_PASS",
+        ):
+            with self.subTest(substitute=substitute):
+                self.assertFalse(
+                    AuthorityRegistry.normal_implementation_authorized(
+                        stage07_result=substitute,
+                        implementation_authorization=True,
+                    )
+                )
 
     def test_invalid_approval_freshness_and_status_combinations_are_rejected(self):
         invalid = (

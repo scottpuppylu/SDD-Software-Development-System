@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "T005",
+  "title": "Authority registry and conflict handling",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/core.py",
+    "tests/test_orchestrator.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_orchestrator.py",
+      "returncode": 0,
+      "stdout": "..................................           [100%]\n34 passed, 28 subtests passed in 5.92s\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "TASK-005 implementation completed within sealed envelope 1e4f79bde1d092ce9e3c0e8b9cffdb202d609d5245fbc6c24b6af44904b384f8",
+    "stderr": ""
+  },
+  "recorded_at": "20260909T000608.793975Z"
+}

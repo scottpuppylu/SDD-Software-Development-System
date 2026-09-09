@@ -113,6 +113,11 @@ class AuthorityRegistry:
         mismapped = [e for e in candidates if e.source != configured_source]
         if mismapped:
             return self._blocked_resolution(domain, question_scope, "out-of-scope-authority-source", mismapped)
+        explicit_conflicts = [e for e in candidates if e.status == "CONFLICTING"]
+        if explicit_conflicts:
+            return self._blocked_resolution(
+                domain, question_scope, "authority-conflict", explicit_conflicts
+            )
         applicable = [e for e in candidates if e.status == "APPROVED_CURRENT_AUTHORITY"]
         if len(applicable) == 1:
             entry = applicable[0]
