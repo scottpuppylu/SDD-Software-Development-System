@@ -1,3 +1,4 @@
+from copy import deepcopy
 from pathlib import Path
 import shutil
 import tempfile
@@ -5,6 +6,7 @@ import unittest
 
 from sdd_orchestrator.core import Orchestrator
 from sdd_orchestrator.executor import StaticExecutor, StageExecutionResult
+from sdd_orchestrator.result_serialization import project_status_report
 from sdd_orchestrator.runner import StageRunner, StageExecutionValidationError
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
@@ -155,14 +157,123 @@ class StageRunnerTests(unittest.TestCase):
         self.write("docs/proposal.md", "proposal")
         orch = Orchestrator(self.repo)
         runner = StageRunner(orch)
+        entry_stage = orch.project_state["lifecycle"]["current_stage"]
         packet = runner.create_execution_packet(
             "02", semantic_inputs={"APPROVED_PRODUCT_DECISIONS": "yes"}
         )
         self.assertTrue(packet.exists())
-        self.assertEqual(orch.project_state["lifecycle"]["current_stage"], "01")
+        self.assertEqual(orch.project_state["lifecycle"]["current_stage"], entry_stage)
         text = packet.read_text(encoding="utf-8")
         self.assertIn("docs/proposal.md", text)
         self.assertIn("PRODUCT_REQUIREMENTS", text)
+
+
+class StatusReportProjectionTests(unittest.TestCase):
+    def _snapshot(self):
+        return {
+            "snapshot_identity": "state-42",
+            "snapshot_version": "commit-abc",
+            "current_stage": "08",
+            "completed_work": ["TASK-008"],
+            "current_work": ["TASK-009"],
+            "next_work": ["TASK-010"],
+            "pending_decisions": [],
+            "authority_state": [{"identity": "AUTH-07", "status": "APPROVED_CURRENT_AUTHORITY"}],
+            "conditions": [],
+            "continuation_eligible": True,
+            "affected_scope": ["status reporting"],
+            "preserved_work": ["TASK-008"],
+            "required_action": "Continue the authorized reporting task.",
+            "next_eligible_route": "TASK-009",
+            "verification": [
+                {"identity": "runner-tests", "outcome": "PASS", "behavior": "status projection"},
+                {"identity": "stage09-review", "outcome": "NOT RUN", "gap": "Stage09 has not evaluated the work."},
+            ],
+            "evidence_gaps": ["Stage09 decision has not been made."],
+            "regression_risk": ["Unreviewed adapters may format the report differently."],
+            "qualifications": {
+                "approved": True,
+                "implementation_authorized": True,
+                "stage07_result": "PASS",
+                "complete": False,
+                "verified": False,
+                "stage09_result": None,
+                "stage10_eligible": False,
+                "release_ready": False,
+                "released": False,
+            },
+            "safe_references": ["tasks.md#TASK-009"],
+        }
+
+    def test_projection_is_plain_language_first_complete_and_read_only(self):
+        snapshot = self._snapshot()
+        original = deepcopy(snapshot)
+
+        report = project_status_report(snapshot, observed_snapshot_identity="state-42")
+
+        self.assertEqual(next(iter(report)), "summary")
+        self.assertIn("governed journey", report["summary"]["situation"])
+        self.assertEqual(report["lifecycle"]["current_stage"], "08")
+        self.assertEqual(report["lifecycle"]["completed_work"], ["TASK-008"])
+        self.assertEqual(report["lifecycle"]["next_work"], ["TASK-010"])
+        self.assertTrue(report["lifecycle"]["continuation_eligible"])
+        self.assertEqual(report["evidence"]["verification"][1]["outcome"], "NOT RUN")
+        self.assertFalse(report["qualifications"]["complete"])
+        self.assertFalse(report["qualifications"]["verified"])
+        self.assertEqual(snapshot, original)
+
+    def test_stale_snapshot_withholds_continuation_and_stronger_status(self):
+        report = project_status_report(
+            self._snapshot(), observed_snapshot_identity="state-43"
+        )
+
+        self.assertTrue(report["identifiers"]["stale"])
+        self.assertEqual(report["lifecycle"]["status"], "INCOMPLETE")
+        self.assertFalse(report["lifecycle"]["continuation_eligible"])
+        self.assertEqual(
+            report["summary"]["next_eligible_route"], "REFRESH_GOVERNED_SNAPSHOT"
+        )
+
+    def test_missing_and_contradictory_facts_stay_unresolved(self):
+        snapshot = {
+            "continuation_eligible": True,
+            "qualifications": {
+                "approved": False,
+                "implementation_authorized": True,
+                "stage07_result": "NOT RUN",
+            },
+            "verification": [{"identity": "unknown-check"}],
+        }
+
+        report = project_status_report(snapshot)
+
+        self.assertEqual(report["identifiers"]["snapshot_identity"], "TBD")
+        self.assertEqual(report["lifecycle"]["current_stage"], "TBD")
+        self.assertEqual(report["lifecycle"]["status"], "BLOCKED")
+        self.assertFalse(report["lifecycle"]["continuation_eligible"])
+        self.assertEqual(report["evidence"]["verification"][0]["outcome"], "NOT RUN")
+        self.assertTrue(report["reporting_failures"])
+        self.assertTrue(report["qualifications"]["implementation_authorized"])
+
+    def test_sensitive_values_are_redacted_but_safe_references_remain(self):
+        snapshot = self._snapshot()
+        snapshot["conditions"] = [{
+            "status": "BLOCKED",
+            "scope": "deployment",
+            "reason": "Credential resolution is required.",
+            "owner": "security owner",
+            "api_token": "do-not-display",
+            "safe_reference": "SEC-17",
+        }]
+        snapshot["continuation_eligible"] = True
+
+        report = project_status_report(snapshot)
+
+        condition = report["lifecycle"]["conditions"][0]
+        self.assertEqual(condition["api_token"], "[REDACTED]")
+        self.assertEqual(condition["safe_reference"], "SEC-17")
+        self.assertEqual(report["lifecycle"]["status"], "BLOCKED")
+        self.assertFalse(report["lifecycle"]["continuation_eligible"])
 
 
 if __name__ == "__main__":
