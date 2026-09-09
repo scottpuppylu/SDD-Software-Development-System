@@ -345,20 +345,48 @@ class EvidenceRecord:
     regression_risk: str
     required: bool = True
     security_related: bool = False
+    criterion_satisfied: bool | None = None
 
     def __post_init__(self) -> None:
         for name in ("check_id", "criterion", "scope", "evidence_version", "current_version", "regression_risk"):
-            if not getattr(self, name).strip():
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
                 raise InvalidEvidence(f"{name} is required")
-        if self.outcome not in EVIDENCE_OUTCOMES:
+        if not isinstance(self.executed, bool):
+            raise InvalidEvidence(f"{self.check_id} requires a boolean execution status")
+        if not isinstance(self.outcome, str) or self.outcome not in EVIDENCE_OUTCOMES:
             raise InvalidEvidence(f"{self.check_id} has invalid outcome {self.outcome!r}")
-        if not self.coverage_links or any(not link.strip() for link in self.coverage_links):
+        if not isinstance(self.coverage_links, (tuple, list)) or not self.coverage_links or any(
+            not isinstance(link, str) or not link.strip() for link in self.coverage_links
+        ):
             raise InvalidEvidence(f"{self.check_id} requires coverage links")
+        object.__setattr__(self, "coverage_links", tuple(self.coverage_links))
+        for name in ("relevant", "required", "security_related"):
+            if not isinstance(getattr(self, name), bool):
+                raise InvalidEvidence(f"{self.check_id} requires boolean {name}")
         if self.outcome == "NOT RUN":
-            if self.executed or self.evidence_reference or not self.evidence_gap:
+            if (
+                self.executed
+                or self.evidence_reference is not None
+                or not isinstance(self.evidence_gap, str)
+                or not self.evidence_gap.strip()
+                or self.criterion_satisfied is not None
+            ):
                 raise InvalidEvidence("NOT RUN requires no execution/evidence and an explicit gap")
-        elif not self.executed or not self.evidence_reference or self.evidence_gap:
-            raise InvalidEvidence(f"{self.outcome} requires execution/evidence and no evidence gap")
+        else:
+            expected_satisfaction = self.outcome == "PASS"
+            if self.criterion_satisfied is None:
+                object.__setattr__(self, "criterion_satisfied", expected_satisfaction)
+            if (
+                not self.executed
+                or not isinstance(self.evidence_reference, str)
+                or not self.evidence_reference.strip()
+                or self.evidence_gap is not None
+                or self.criterion_satisfied is not expected_satisfaction
+            ):
+                raise InvalidEvidence(
+                    f"{self.outcome} requires executed evidence and a matching criterion result"
+                )
         _validate_safe_reference(self.evidence_reference)
 
     @property
@@ -374,9 +402,16 @@ class EvidenceRecord:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "EvidenceRecord":
-        fields = {key: value[key] for key in cls.__dataclass_fields__}
-        fields["coverage_links"] = tuple(fields["coverage_links"])
-        return cls(**fields)
+        try:
+            fields = {
+                key: value[key]
+                for key in cls.__dataclass_fields__
+                if key in value
+            }
+            fields["coverage_links"] = tuple(fields["coverage_links"])
+            return cls(**fields)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InvalidEvidence(f"malformed evidence record: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -395,7 +430,12 @@ class QualificationInputs:
 def qualification_inputs(records: Iterable[EvidenceRecord]) -> QualificationInputs:
     """Project raw facts only; Stage09/Stage10 must make their own decisions."""
     items = tuple(records)
-    required = tuple(item for item in items if item.required)
+    if any(not isinstance(item, EvidenceRecord) for item in items):
+        raise InvalidEvidence("qualification inputs must contain evidence records")
+    current_by_check: dict[str, EvidenceRecord] = {}
+    for item in items:
+        current_by_check[item.check_id] = item
+    required = tuple(item for item in current_by_check.values() if item.required)
     gaps: list[str] = []
     for item in required:
         if item.outcome == "NOT RUN":
@@ -437,13 +477,29 @@ class EvidenceRegistry:
             raise InvalidEvidence(f"cannot load evidence registry {self.path}: {exc}") from exc
 
     def append(self, record: EvidenceRecord) -> None:
+        if not isinstance(record, EvidenceRecord):
+            raise InvalidEvidence("registry accepts only validated evidence records")
         records = self.load()
         if any(item.check_id == record.check_id and item == record for item in records):
             raise InvalidEvidence(f"duplicate evidence record {record.check_id}")
+        history = tuple(item for item in records if item.check_id == record.check_id)
+        for prior in history:
+            if (
+                prior.criterion != record.criterion
+                or prior.scope != record.scope
+                or prior.coverage_links != record.coverage_links
+            ):
+                raise InvalidEvidence(
+                    f"stable check identity {record.check_id} cannot change criterion, scope, or coverage"
+                )
+        if any(item.required for item in history) and not record.required:
+            raise InvalidEvidence(f"required check {record.check_id} cannot be downgraded")
+        if any(item.security_related for item in history) and not record.security_related:
+            raise InvalidEvidence(f"security check {record.check_id} cannot be downgraded")
         payload = {"schema_version": "1.0", "records": [item.to_dict() for item in (*records, record)]}
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path: Path | None = None
         try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile("w", dir=self.path.parent, prefix=".tmp-evidence-", delete=False, encoding="utf-8") as handle:
                 temporary_path = Path(handle.name)
                 json.dump(payload, handle, ensure_ascii=False, indent=2)

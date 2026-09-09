@@ -368,8 +368,11 @@ class T008EvidenceRegistryTests(unittest.TestCase):
         for changes in (
             {"outcome": "SKIP"},
             {"outcome": "PASS", "executed": False},
+            {"outcome": "PASS", "criterion_satisfied": False},
+            {"outcome": "FAIL", "criterion_satisfied": True},
             {"outcome": "NOT RUN", "executed": False, "evidence_reference": None, "evidence_gap": None},
             {"coverage_links": ()},
+            {"executed": "yes"},
         ):
             with self.subTest(changes=changes), self.assertRaises(InvalidEvidence):
                 self.record(**changes)
@@ -400,6 +403,24 @@ class T008EvidenceRegistryTests(unittest.TestCase):
             loaded = registry.load()
             self.assertEqual([item.outcome for item in loaded], ["FAIL", "PASS"])
             self.assertEqual(len(loaded), 2)
+            current = qualification_inputs(loaded)
+            self.assertTrue(current.evidence_complete)
+            self.assertIsNone(current.verification_decision)
+            self.assertIsNone(current.release_decision)
+
+    def test_stable_identity_and_required_security_checks_cannot_be_downgraded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = EvidenceRegistry(Path(directory) / "registry.json")
+            registry.append(self.record(outcome="FAIL", security_related=True))
+            for changes in (
+                {"criterion": "different criterion", "security_related": True},
+                {"scope": "TASK-OTHER", "security_related": True},
+                {"coverage_links": ("TASK-008",), "security_related": True},
+                {"required": False, "security_related": True},
+                {"security_related": False},
+            ):
+                with self.subTest(changes=changes), self.assertRaises(InvalidEvidence):
+                    registry.append(self.record(**changes))
 
     def test_registry_failure_is_explicit_and_preserves_prior_state(self):
         with tempfile.TemporaryDirectory() as directory:
