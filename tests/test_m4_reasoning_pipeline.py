@@ -7,11 +7,15 @@ import json
 from unittest.mock import patch
 
 from sdd_orchestrator.core import Orchestrator
-from sdd_orchestrator.executor import StageExecutionResult
+from sdd_orchestrator.executor import StageExecutionRequest, StageExecutionResult
 from sdd_orchestrator.pipeline import PipelineController
 from sdd_orchestrator.providers import (
     OpenAIResponsesExecutor,
+    ProviderPolicyViolationError,
+    ProviderUnavailableError,
     ReasoningProviderError,
+    ReasoningInvocation,
+    ReasoningProviderBoundary,
     _result_schema,
 )
 from sdd_orchestrator.runner import StageRunner
@@ -48,6 +52,147 @@ class M4Tests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    @staticmethod
+    def provider_request():
+        return StageExecutionRequest(
+            stage_id="03",
+            stage_name="Specification",
+            stage_type="reasoning",
+            core_question="Define the technical contract",
+            contract={"outputs": {"files": ["docs/spec.md"]}},
+            artifacts={},
+        )
+
+    def invocation(self, **overrides):
+        values = {
+            "attempt_id": "attempt-007-a",
+            "operation": "DRAFT_SPECIFICATION",
+            "request": self.provider_request(),
+            "authoritative_context_refs": ("docs/PRD.md@sha256:abc",),
+            "permitted_capabilities": frozenset({"DRAFT", "REASON"}),
+            "affected_scope": ("docs/spec.md",),
+            "validation_inputs": {"result_vocabulary": ("PASS", "FAIL", "NOT RUN")},
+        }
+        values.update(overrides)
+        return ReasoningInvocation(**values)
+
+    def stage01_orchestrator(self):
+        orch = Orchestrator(self.repo)
+        orch.project_state["lifecycle"].update(
+            {
+                "current_stage": "01",
+                "current_stage_name": "PROPOSAL",
+                "last_completed_stage": None,
+                "next_action": "RUN_STAGE",
+            }
+        )
+        for stage_id, state in orch.project_state["stages"].items():
+            state["status"] = "IN_PROGRESS" if str(stage_id).zfill(2) == "01" else "TODO"
+            state["result"] = None
+        orch.project_state["authorizations"]["implementation"] = False
+        orch.project_state["blocking"] = {"is_blocked": False, "reasons": []}
+        return orch
+
+    def test_replaceable_providers_preserve_non_authoritative_semantics(self):
+        class Substitute:
+            def __init__(self, provider_name):
+                self.provider_name = provider_name
+
+            def execute(self, request):
+                return StageExecutionResult(
+                    status="COMPLETED",
+                    artifacts={"docs/spec.md": "# proposed spec"},
+                    metadata={"provider": self.provider_name},
+                )
+
+        results = [
+            ReasoningProviderBoundary(Substitute(name)).invoke(self.invocation())
+            for name in ("provider-a", "provider-b")
+        ]
+        for result in results:
+            self.assertEqual(result.status, "PROPOSED")
+            self.assertFalse(result.authoritative)
+            self.assertFalse(result.persisted)
+            self.assertEqual(
+                result.proposed_output.metadata["provider_output_status"],
+                "PROPOSED_UNVALIDATED",
+            )
+        self.assertEqual(results[0].proposed_output.status, results[1].proposed_output.status)
+        self.assertEqual(results[0].proposed_output.artifacts, results[1].proposed_output.artifacts)
+
+    def test_failure_classes_preserve_attempt_scope_state_and_routes(self):
+        failures = [
+            (ProviderUnavailableError("offline"), "UNAVAILABLE"),
+            (TimeoutError("deadline"), "TIMEOUT"),
+            (ProviderPolicyViolationError("refused"), "POLICY_VIOLATION"),
+            (ValueError("bad payload"), "MALFORMED"),
+        ]
+        for error, category in failures:
+            with self.subTest(category=category):
+                class FailingProvider:
+                    def execute(self, request):
+                        raise error
+
+                result = ReasoningProviderBoundary(FailingProvider()).invoke(self.invocation())
+                self.assertEqual(result.status, "BLOCKED")
+                self.assertEqual(result.failure.category, category)
+                self.assertEqual(result.failure.attempt_id, "attempt-007-a")
+                self.assertEqual(result.failure.operation, "DRAFT_SPECIFICATION")
+                self.assertEqual(result.failure.affected_scope, ("docs/spec.md",))
+                self.assertTrue(result.failure.prior_state_preserved)
+                self.assertTrue(result.failure.unsafe_continuation_stopped)
+                self.assertTrue(result.failure.eligible_routes)
+
+    def test_boundary_rejects_scope_overrun_and_inference_to_approval(self):
+        class Substitute:
+            def __init__(self, result):
+                self.result = result
+
+            def execute(self, request):
+                return self.result
+
+        overrun = ReasoningProviderBoundary(
+            Substitute(StageExecutionResult(status="COMPLETED", artifacts={"outside.txt": "x"}))
+        ).invoke(self.invocation())
+        self.assertEqual(overrun.failure.category, "OUT_OF_SCOPE")
+
+        approval = ReasoningProviderBoundary(
+            Substitute(StageExecutionResult(status="COMPLETED", metadata={"approval_created": True}))
+        ).invoke(self.invocation())
+        self.assertEqual(approval.failure.category, "AUTHORITY_CROSSING")
+
+        malformed = ReasoningProviderBoundary(
+            Substitute(StageExecutionResult(status="COMPLETED", artifacts=None))
+        ).invoke(self.invocation())
+        self.assertEqual(malformed.failure.category, "MALFORMED")
+
+    def test_write_capability_without_stage08_envelope_never_invokes_provider(self):
+        class MustNotRun:
+            called = False
+
+            def execute(self, request):
+                self.called = True
+                return StageExecutionResult(status="COMPLETED")
+
+        provider = MustNotRun()
+        invocation = self.invocation(
+            permitted_capabilities=frozenset({"AUTHORIZED_STAGE08_ASSISTANCE"})
+        )
+        result = ReasoningProviderBoundary(provider).invoke(invocation)
+        self.assertEqual(result.failure.category, "NO_AUTHORIZATION")
+        self.assertFalse(provider.called)
+
+    def test_missing_authority_reference_and_unknown_capability_fail_closed(self):
+        class MustNotRun:
+            def execute(self, request):
+                self.fail("provider should not run")
+
+        boundary = ReasoningProviderBoundary(MustNotRun())
+        no_authority = boundary.invoke(self.invocation(authoritative_context_refs=()))
+        self.assertEqual(no_authority.failure.category, "AUTHORITY_CROSSING")
+        policy = boundary.invoke(self.invocation(permitted_capabilities=frozenset({"APPROVE"})))
+        self.assertEqual(policy.failure.category, "POLICY_VIOLATION")
 
     def test_openai_executor_requires_environment_key(self):
         old = os.environ.pop("OPENAI_API_KEY", None)
@@ -145,7 +290,7 @@ class M4Tests(unittest.TestCase):
         self.assertNotIn("test-secret", json.dumps(captured["body"]))
 
     def test_pipeline_01_to_03_without_manual_artifact_handoff(self):
-        orch = Orchestrator(self.repo)
+        orch = self.stage01_orchestrator()
         controller = PipelineController(orch)
         executor = StageAwareExecutor()
         result = controller.run_until(
@@ -171,7 +316,7 @@ class M4Tests(unittest.TestCase):
         self.assertIn("docs/PRD.md", stage03.artifacts)
 
     def test_pipeline_injects_non_decision_defaults_not_new_authority(self):
-        orch = Orchestrator(self.repo)
+        orch = self.stage01_orchestrator()
         controller = PipelineController(orch)
         executor = StageAwareExecutor()
         controller.run_until(
@@ -198,7 +343,7 @@ class M4Tests(unittest.TestCase):
                     remediation_reasons=["NEEDS_CLARIFICATION"],
                 )
 
-        orch = Orchestrator(self.repo)
+        orch = self.stage01_orchestrator()
         controller = PipelineController(orch)
         result = controller.run_until(
             BlockingExecutor(),

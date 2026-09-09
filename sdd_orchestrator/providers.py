@@ -8,9 +8,10 @@ import shutil
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Mapping, Protocol
 
 from .executor import (
     SharedExecutorPrerequisiteError,
@@ -26,6 +27,7 @@ from .telemetry.models import (
     Usage,
     UsageSource,
 )
+from .task_parser import SealedExecutionEnvelope
 
 
 class ReasoningProviderError(RuntimeError):
@@ -36,6 +38,266 @@ class SharedReasoningProviderPrerequisiteError(
     ReasoningProviderError, SharedExecutorPrerequisiteError
 ):
     pass
+
+
+class ProviderUnavailableError(ReasoningProviderError):
+    """The selected adapter cannot service this bounded invocation."""
+
+
+class ProviderPolicyViolationError(ReasoningProviderError):
+    """The provider refused or violated the declared policy boundary."""
+
+
+REASONING_CAPABILITIES = frozenset(
+    {
+        "ANALYZE",
+        "ASK_QUESTIONS",
+        "PROPOSE",
+        "DRAFT",
+        "REASON",
+        "AUTHORIZED_STAGE08_ASSISTANCE",
+        "VERIFICATION_ASSISTANCE",
+    }
+)
+WRITE_CAPABILITY = "AUTHORIZED_STAGE08_ASSISTANCE"
+
+
+class ReasoningProvider(Protocol):
+    """Replaceable adapter; governance semantics live in the boundary below."""
+
+    def execute(self, request: StageExecutionRequest) -> StageExecutionResult:
+        ...
+
+
+@dataclass(frozen=True)
+class ReasoningInvocation:
+    """Bounded, attributable input to a replaceable reasoning provider."""
+
+    attempt_id: str
+    operation: str
+    request: StageExecutionRequest
+    authoritative_context_refs: tuple[str, ...]
+    permitted_capabilities: frozenset[str]
+    affected_scope: tuple[str, ...]
+    expected_result: str = "STAGE_EXECUTION_RESULT"
+    validation_inputs: Mapping[str, Any] = field(default_factory=dict)
+    authorization_envelope: SealedExecutionEnvelope | None = None
+
+
+@dataclass(frozen=True)
+class ProviderFailure:
+    category: str
+    attempt_id: str
+    operation: str
+    affected_scope: tuple[str, ...]
+    detail: str
+    eligible_routes: tuple[str, ...]
+    prior_state_preserved: bool = True
+    unsafe_continuation_stopped: bool = True
+
+
+@dataclass(frozen=True)
+class ReasoningBoundaryResult:
+    status: str
+    attempt_id: str
+    operation: str
+    proposed_output: StageExecutionResult | None = None
+    failure: ProviderFailure | None = None
+    authoritative: bool = False
+    persisted: bool = False
+
+
+_FAILURE_ROUTES = {
+    "UNAVAILABLE": ("RETRY", "ALTERNATE_PROVIDER", "ESCALATION"),
+    "TIMEOUT": ("RETRY", "ALTERNATE_PROVIDER", "ESCALATION"),
+    "MALFORMED": ("RETRY", "ALTERNATE_PROVIDER", "REMEDIATION", "ESCALATION"),
+    "POLICY_VIOLATION": (
+        "ALTERNATE_PROVIDER",
+        "REMEDIATION",
+        "ESCALATION",
+        "HUMAN_DECISION",
+    ),
+    "OUT_OF_SCOPE": ("REVISION", "ESCALATION"),
+    "AUTHORITY_CROSSING": ("ESCALATION", "HUMAN_DECISION"),
+    "NO_AUTHORIZATION": ("ESCALATION", "HUMAN_DECISION"),
+}
+
+
+class ReasoningProviderBoundary:
+    """Provider-independent guard for SPEC-006 / SPEC-009 / DES-006.
+
+    This port does not persist output or grant authority. It validates the
+    provider exchange and returns proposed output for an owning boundary to
+    validate further and, when authorized, persist.
+    """
+
+    def __init__(
+        self,
+        provider: ReasoningProvider,
+        *,
+        authorization_validator: Callable[[SealedExecutionEnvelope], bool] | None = None,
+    ):
+        self.provider = provider
+        self.authorization_validator = authorization_validator
+
+    @staticmethod
+    def _safe_detail(detail: str) -> str:
+        bounded = detail[:1000]
+        return re.sub(
+            r"(?i)(authorization\s*[:=]\s*bearer|api[_-]?key\s*[:=])\s*[^\s,;]+",
+            r"\1 [REDACTED]",
+            bounded,
+        )
+
+    @staticmethod
+    def _failure(invocation: ReasoningInvocation, category: str, detail: str) -> ReasoningBoundaryResult:
+        return ReasoningBoundaryResult(
+            status="BLOCKED",
+            attempt_id=invocation.attempt_id,
+            operation=invocation.operation,
+            failure=ProviderFailure(
+                category=category,
+                attempt_id=invocation.attempt_id,
+                operation=invocation.operation,
+                affected_scope=invocation.affected_scope,
+                detail=ReasoningProviderBoundary._safe_detail(detail),
+                eligible_routes=_FAILURE_ROUTES[category],
+            ),
+        )
+
+    def _envelope_covers(self, invocation: ReasoningInvocation) -> bool:
+        envelope = invocation.authorization_envelope
+        if envelope is None or invocation.request.stage_id != "08":
+            return False
+        if not envelope.envelope_id or not envelope.task_id or not envelope.baseline_commit:
+            return False
+        allowed = set(envelope.allowed_paths)
+        if not allowed or not all(path in allowed for path in invocation.affected_scope):
+            return False
+        if self.authorization_validator is None:
+            return False
+        try:
+            return self.authorization_validator(envelope) is True
+        except Exception:
+            return False
+
+    def _preflight(self, invocation: ReasoningInvocation) -> ReasoningBoundaryResult | None:
+        if not invocation.attempt_id.strip() or not invocation.operation.strip():
+            return self._failure(invocation, "MALFORMED", "attempt_id and operation are required")
+        if not invocation.authoritative_context_refs:
+            return self._failure(
+                invocation,
+                "AUTHORITY_CROSSING",
+                "authoritative context references are required; chat context is not authority",
+            )
+        if not invocation.affected_scope:
+            return self._failure(invocation, "OUT_OF_SCOPE", "affected scope must be declared")
+        unknown = invocation.permitted_capabilities - REASONING_CAPABILITIES
+        if unknown or not invocation.permitted_capabilities:
+            return self._failure(
+                invocation,
+                "POLICY_VIOLATION",
+                f"undeclared or unsupported capabilities: {sorted(unknown)}",
+            )
+        if invocation.expected_result != "STAGE_EXECUTION_RESULT":
+            return self._failure(invocation, "MALFORMED", "unsupported expected structured result")
+        if WRITE_CAPABILITY in invocation.permitted_capabilities and not self._envelope_covers(invocation):
+            return self._failure(
+                invocation,
+                "NO_AUTHORIZATION",
+                "write-capable invocation requires a sealed Stage08 envelope covering affected scope",
+            )
+        return None
+
+    def _validate_output(
+        self, invocation: ReasoningInvocation, output: Any
+    ) -> ReasoningBoundaryResult | None:
+        if not isinstance(output, StageExecutionResult):
+            return self._failure(invocation, "MALFORMED", "provider returned no StageExecutionResult")
+        if output.status not in {"COMPLETED", "BLOCKED"}:
+            return self._failure(invocation, "MALFORMED", "provider returned an invalid status")
+        if not isinstance(output.artifacts, dict) or any(
+            not isinstance(path, str) or not isinstance(content, str)
+            for path, content in output.artifacts.items()
+        ):
+            return self._failure(invocation, "MALFORMED", "provider returned invalid artifacts")
+        if not isinstance(output.metadata, dict):
+            return self._failure(invocation, "MALFORMED", "provider returned invalid metadata")
+        if not isinstance(output.remediation_reasons, list) or any(
+            not isinstance(reason, str) for reason in output.remediation_reasons
+        ):
+            return self._failure(
+                invocation, "MALFORMED", "provider returned invalid remediation reasons"
+            )
+        result_vocabulary = set(
+            invocation.request.contract.get("result_vocabulary", []) or []
+        )
+        if output.result is not None and result_vocabulary and output.result not in result_vocabulary:
+            return self._failure(
+                invocation, "MALFORMED", "provider returned a result outside the stage vocabulary"
+            )
+        allowed_outputs = set(_allowed_output_paths(invocation.request))
+        unexpected = set(output.artifacts) - allowed_outputs
+        if unexpected:
+            return self._failure(
+                invocation,
+                "OUT_OF_SCOPE",
+                f"provider emitted artifacts outside declared outputs: {sorted(unexpected)}",
+            )
+        forbidden_claims = {
+            "authority_created",
+            "approval_created",
+            "evidence_created",
+            "qualification_committed",
+            "gate_bypassed",
+        }
+        claims = {key for key in forbidden_claims if output.metadata.get(key)}
+        if claims:
+            return self._failure(
+                invocation,
+                "AUTHORITY_CROSSING",
+                f"provider attempted governed-core claims: {sorted(claims)}",
+            )
+        return None
+
+    def invoke(self, invocation: ReasoningInvocation) -> ReasoningBoundaryResult:
+        blocked = self._preflight(invocation)
+        if blocked is not None:
+            return blocked
+        try:
+            output = self.provider.execute(invocation.request)
+        except (TimeoutError, subprocess.TimeoutExpired) as exc:
+            return self._failure(invocation, "TIMEOUT", str(exc) or "provider timed out")
+        except (ProviderUnavailableError, SharedReasoningProviderPrerequisiteError) as exc:
+            return self._failure(invocation, "UNAVAILABLE", str(exc))
+        except ProviderPolicyViolationError as exc:
+            return self._failure(invocation, "POLICY_VIOLATION", str(exc))
+        except Exception as exc:
+            return self._failure(invocation, "MALFORMED", f"{type(exc).__name__}: {exc}")
+
+        try:
+            blocked = self._validate_output(invocation, output)
+        except Exception as exc:
+            return self._failure(
+                invocation, "MALFORMED", f"output validation failed: {type(exc).__name__}: {exc}"
+            )
+        if blocked is not None:
+            return blocked
+        metadata = dict(output.metadata)
+        metadata.update(
+            {
+                "provider_output_status": "PROPOSED_UNVALIDATED",
+                "provider_attempt_id": invocation.attempt_id,
+                "provider_operation": invocation.operation,
+            }
+        )
+        proposed = replace(output, metadata=metadata)
+        return ReasoningBoundaryResult(
+            status="PROPOSED",
+            attempt_id=invocation.attempt_id,
+            operation=invocation.operation,
+            proposed_output=proposed,
+        )
 
 
 @dataclass(frozen=True)
