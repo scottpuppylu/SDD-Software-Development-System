@@ -460,6 +460,7 @@ class T011SafetyInterlockTests(unittest.TestCase):
         self.assertTrue(eligible.safe_to_continue)
         for authorization in (
             self.authorization(target="cache/other"),
+            self.authorization(scope=("cache/item-7", "cache/item-7")),
             self.authorization(actor="intruder"),
             self.authorization(snapshot_identity="git:old"),
             self.authorization(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)),
@@ -477,7 +478,60 @@ class T011SafetyInterlockTests(unittest.TestCase):
         ))
         self.assertEqual(result.status, "BLOCKED")
         self.assertEqual(result.route, "ROUTE_TO_AUTHORITATIVE_OWNER")
+        self.assertEqual(result.conflict_protocol, (
+            "DETECT", "REPORT", "BLOCK", "ROUTE_TO_AUTHORITATIVE_OWNER",
+        ))
+        self.assertEqual(result.blocker_severities, ("HIGH",))
         self.assertEqual(result.blocker_references, ("[REDACTED_REFERENCE]",))
+        self.assertNotIn("do-not-leak", repr(result))
+
+    def test_bare_resolved_flag_cannot_self_clear_a_blocker(self):
+        blocker = SafetyBlocker(
+            reference="SEC-011", category="SECURITY", severity="CRITICAL",
+            affected_scope=("cache/item-7",), owner="SecurityOwner",
+            required_decision="record security resolution", resolved=True,
+        )
+        result = safety_preflight(self.request(
+            authorization=self.authorization(), blockers=(blocker,), resume_blocked_scope=True,
+        ))
+        self.assertEqual(result.status, "BLOCKED")
+        self.assertIn("UNRESOLVED_SECURITY_CONCERN", result.finding_categories)
+
+        resolved = SafetyBlocker(
+            **{
+                **blocker.__dict__,
+                "resolution_reference": "SEC-RESOLUTION-011",
+                "resolution_actor": "SecurityOwner",
+                "resolution_authority_identity": "AUTH-v2",
+                "resolution_snapshot_identity": "git:abc",
+            }
+        )
+        eligible = safety_preflight(self.request(
+            authorization=self.authorization(), blockers=(resolved,), resume_blocked_scope=True,
+        ))
+        self.assertEqual(eligible.status, "ELIGIBLE")
+        self.assertEqual(eligible.resolution_references, ("SEC-RESOLUTION-011",))
+
+    def test_resume_without_current_blocker_identity_fails_closed(self):
+        result = safety_preflight(self.request(
+            authorization=self.authorization(), resume_blocked_scope=True,
+        ))
+        self.assertEqual(result.status, "BLOCKED")
+        self.assertIn(
+            "MISSING_BLOCKER_IDENTITY_OR_RESOLUTION", result.finding_categories,
+        )
+
+    def test_result_redacts_sensitive_target_scope_and_dependency_references(self):
+        result = safety_preflight(self.request(
+            target="secret=do-not-leak", scope=("secret=do-not-leak",),
+            authorization=self.authorization(
+                target="secret=do-not-leak", scope=("secret=do-not-leak",),
+            ),
+            independent_scope=("docs",), dependency_finding_reference="token=do-not-leak",
+        ))
+        self.assertEqual(result.target, "[REDACTED_REFERENCE]")
+        self.assertEqual(result.affected_scope, ("[REDACTED_REFERENCE]",))
+        self.assertEqual(result.dependency_finding_reference, "[REDACTED_REFERENCE]")
         self.assertNotIn("do-not-leak", repr(result))
 
     def test_unaffected_scope_requires_explicit_nonoverlapping_dependency_finding(self):
@@ -491,6 +545,29 @@ class T011SafetyInterlockTests(unittest.TestCase):
         ))
         self.assertEqual(allowed.status, "ELIGIBLE")
         self.assertEqual(allowed.independent_scope, ("docs",))
+        self.assertEqual(allowed.dependency_finding_reference, "DEP-011")
+
+        nested_overlap = safety_preflight(self.request(
+            authorization=self.authorization(), independent_scope=("cache/item-7/report",),
+            dependency_finding_reference="DEP-011",
+        ))
+        self.assertEqual(nested_overlap.status, "BLOCKED")
+        self.assertEqual(nested_overlap.independent_scope, ())
+
+    def test_all_protected_risk_classes_fail_closed_and_broad_targets_are_rejected(self):
+        for risk in ("DESTRUCTIVE", "HIGH_RISK", "SECURITY", "AUTHORITY_CONFLICT"):
+            with self.subTest(risk=risk):
+                result = safety_preflight(self.request(risk_level=risk))
+                self.assertEqual(result.status, "BLOCKED")
+                self.assertFalse(result.safe_to_continue)
+        for target, scope in (("*", ("cache/item-7",)), ("cache/item-7", ("docs",))):
+            with self.subTest(target=target, scope=scope):
+                result = safety_preflight(self.request(
+                    target=target, scope=scope,
+                    authorization=self.authorization(target=target, scope=scope),
+                ))
+                self.assertEqual(result.status, "BLOCKED")
+                self.assertIn("AMBIGUOUS_TARGET_OR_SCOPE", result.finding_categories)
 
 
 if __name__ == "__main__":
