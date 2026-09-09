@@ -7,7 +7,7 @@ lifecycle:
   current_stage: 08
   current_stage_name: IMPLEMENTATION_RUNNER
   last_completed_stage: '07'
-  next_action: EXECUTE_TASK_009_THROUGH_SEALED_STAGE08
+  next_action: EXECUTE_TASK_010_THROUGH_SEALED_STAGE08
 stages:
   '01':
     status: DONE
@@ -57,8 +57,8 @@ artifacts:
   handoff_report: null
 git:
   branch: telemetry-measurement-v2
-  head_commit: b74932e4fa4185641f95416c2c4e0efc6478db60
-  last_verified_commit: d50b1b18a5b992140b460776109d933ecc03306d
+  head_commit: 49948d21b8f3e398d28fc6da4bf1c4f1e9912c50
+  last_verified_commit: d4ae1a543578fcd30ca06820c7f7e9bc7ed6436e
 provenance:
   current_authority_package:
     status: APPROVED_CURRENT_PROSPECTIVE_AUTHORITY
