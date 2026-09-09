@@ -57,6 +57,42 @@ class VerificationReference:
 
 
 @dataclass(frozen=True)
+class ObservationReference:
+    """Non-authoritative implementation evidence, kept separate from authority."""
+
+    identity: str
+    reference: str
+    affected_scope: str
+
+
+@dataclass(frozen=True)
+class ImpactAmbiguity:
+    identity: str
+    gap: str
+    affected_scope: str
+    owner_route: str
+    material: bool = True
+
+
+@dataclass(frozen=True)
+class ImpactRisk:
+    identity: str
+    risk: str
+    affected_scope: str
+    owner_route: str
+    high_risk: bool = False
+
+
+@dataclass(frozen=True)
+class ImpactAssessment:
+    dependent_completion_allowed: bool
+    status: str
+    gaps: tuple[str, ...]
+    risks: tuple[str, ...]
+    owner_routes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TraceLink:
     source: str
     source_kind: str
@@ -75,6 +111,196 @@ class TraceLink:
             raise InvalidGovernedRecord(
                 f"stale link {self.source} -> {self.target}: {self.version} != {current_version}"
             )
+
+
+@dataclass(frozen=True)
+class ModificationImpactLedger:
+    """Bounded impact analysis for one requested modification (TASK-013)."""
+
+    modification_id: str
+    request_reference: str
+    requested_change: tuple[str, ...]
+    authorized_change_scope: tuple[str, ...]
+    affected_behavior_data: tuple[str, ...]
+    preservation_expectations: tuple[str, ...]
+    authority_basis: tuple[AuthorityReference, ...]
+    observed_evidence: tuple[ObservationReference, ...]
+    ambiguities: tuple[ImpactAmbiguity, ...]
+    risks: tuple[ImpactRisk, ...]
+    governing_requirements: tuple[str, ...]
+    governing_contracts: tuple[str, ...]
+    governing_designs: tuple[str, ...]
+    governing_tasks: tuple[str, ...]
+    links: tuple[TraceLink, ...]
+    input_version: str
+    current_version: str
+
+    def validate(self) -> None:
+        required = (
+            self.modification_id,
+            self.request_reference,
+            self.input_version,
+            self.current_version,
+        )
+        if not all(required) or not self.requested_change:
+            raise InvalidGovernedRecord("modification identity, request, version, and requested change are required")
+        collections = {
+            "requested change": self.requested_change,
+            "authorized change scope": self.authorized_change_scope,
+            "affected behavior/data": self.affected_behavior_data,
+            "preservation expectations": self.preservation_expectations,
+            "governing requirements": self.governing_requirements,
+            "governing contracts": self.governing_contracts,
+            "governing designs": self.governing_designs,
+            "governing tasks": self.governing_tasks,
+        }
+        for label, values in collections.items():
+            if any(not value for value in values) or len(values) != len(set(values)):
+                raise InvalidGovernedRecord(f"blank or duplicate {label} classification")
+        conflict = set(self.requested_change) & set(self.preservation_expectations)
+        if conflict:
+            raise InvalidGovernedRecord(f"conflicting requested/preserved classifications: {sorted(conflict)}")
+
+        authority_ids: set[str] = set()
+        for item in self.authority_basis:
+            if not all((item.identity, item.artifact, item.owner, item.status)):
+                raise InvalidGovernedRecord("authority basis requires identity, artifact, owner, and status")
+            if item.identity in authority_ids:
+                raise InvalidGovernedRecord(f"ambiguous duplicate authority identity: {item.identity}")
+            authority_ids.add(item.identity)
+
+        observation_ids: set[str] = set()
+        for item in self.observed_evidence:
+            if not all((item.identity, item.reference, item.affected_scope)):
+                raise InvalidGovernedRecord("observed evidence requires identity, reference, and affected scope")
+            if item.identity in observation_ids:
+                raise InvalidGovernedRecord(f"ambiguous duplicate observation identity: {item.identity}")
+            observation_ids.add(item.identity)
+
+        for item in (*self.ambiguities, *self.risks):
+            if not all((item.identity, item.affected_scope, item.owner_route)):
+                raise InvalidGovernedRecord("ambiguity/risk requires identity, affected scope, and owner route")
+        if any(not item.gap for item in self.ambiguities):
+            raise InvalidGovernedRecord("ambiguity requires an exact gap")
+        if any(not item.risk for item in self.risks):
+            raise InvalidGovernedRecord("risk requires an exact description")
+
+        seen_links: set[tuple[str, str, str]] = set()
+        for link in self.links:
+            link.validate(self.current_version)
+            identity = (link.source, link.target, link.affected_scope)
+            if identity in seen_links:
+                raise InvalidGovernedRecord(f"ambiguous duplicate link: {identity}")
+            seen_links.add(identity)
+
+    def assess(self) -> ImpactAssessment:
+        self.validate()
+        gaps: list[str] = []
+        risks = [f"{item.identity}: {item.risk} (scope: {item.affected_scope})" for item in self.risks]
+        routes: list[str] = []
+
+        if not self.authority_basis:
+            gaps.append("missing authority basis")
+            routes.append("authoritative owner")
+        if not self.affected_behavior_data:
+            gaps.append("affected behavior/data scope is materially unknown")
+            routes.append("impact-ledger owner")
+        if not self.preservation_expectations:
+            gaps.append("preservation scope is materially unknown")
+            routes.append("impact-ledger owner")
+        unauthorized = sorted(set(self.requested_change) - set(self.authorized_change_scope))
+        if unauthorized:
+            gaps.append(f"requested scope exceeds authorized change scope: {unauthorized}")
+            routes.append("Stage07 implementation-authorization owner")
+        if self.input_version != self.current_version:
+            gaps.append(f"stale impact input: {self.input_version} != {self.current_version}")
+            routes.append("impact-ledger owner")
+        for item in self.ambiguities:
+            if item.material:
+                gaps.append(f"{item.identity}: {item.gap} (scope: {item.affected_scope})")
+                routes.append(item.owner_route)
+        for item in self.risks:
+            routes.append("TASK-011 safety interlock" if item.high_risk else item.owner_route)
+
+        governing_groups = (
+            ("requirements", self.governing_requirements, "Stage02 product-requirement owner"),
+            ("contracts", self.governing_contracts, "Stage03 technical-contract owner"),
+            ("designs", self.governing_designs, "Stage04 implementation-design owner"),
+            ("tasks", self.governing_tasks, "Stage06 task owner"),
+        )
+        for label, identities, owner in governing_groups:
+            if not identities:
+                gaps.append(f"missing governing {label}")
+                routes.append(owner)
+
+        required_trace = set(
+            self.governing_requirements
+            + self.governing_contracts
+            + self.governing_designs
+            + self.governing_tasks
+        )
+        linked = {link.source for link in self.links} | {link.target for link in self.links}
+        missing_trace = sorted(required_trace - linked)
+        if missing_trace:
+            gaps.append(f"missing governing trace links: {missing_trace}")
+            routes.append("traceability owner")
+        adjacency: dict[str, set[str]] = {}
+        for link in self.links:
+            adjacency.setdefault(link.source, set()).add(link.target)
+        disconnected: list[str] = []
+        for identity in self.governing_requirements + self.governing_contracts + self.governing_designs:
+            pending = [identity]
+            visited: set[str] = set()
+            while pending:
+                candidate = pending.pop()
+                if candidate in visited:
+                    continue
+                visited.add(candidate)
+                pending.extend(adjacency.get(candidate, ()))
+            if not set(self.governing_tasks) & visited:
+                disconnected.append(identity)
+        if disconnected:
+            gaps.append(f"governing trace does not reach a task: {sorted(disconnected)}")
+            routes.append("traceability owner")
+
+        routes = list(dict.fromkeys(routes))
+        return ImpactAssessment(
+            dependent_completion_allowed=not gaps and not self.risks,
+            status="READY" if not gaps and not self.risks else "BLOCKED",
+            gaps=tuple(gaps),
+            risks=tuple(risks),
+            owner_routes=tuple(routes),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ModificationImpactLedger":
+        try:
+            ledger = cls(
+                modification_id=value["modification_id"],
+                request_reference=value["request_reference"],
+                requested_change=tuple(value.get("requested_change", ())),
+                authorized_change_scope=tuple(value.get("authorized_change_scope", ())),
+                affected_behavior_data=tuple(value.get("affected_behavior_data", ())),
+                preservation_expectations=tuple(value.get("preservation_expectations", ())),
+                authority_basis=tuple(AuthorityReference(**item) for item in value.get("authority_basis", ())),
+                observed_evidence=tuple(ObservationReference(**item) for item in value.get("observed_evidence", ())),
+                ambiguities=tuple(ImpactAmbiguity(**item) for item in value.get("ambiguities", ())),
+                risks=tuple(ImpactRisk(**item) for item in value.get("risks", ())),
+                governing_requirements=tuple(value.get("governing_requirements", ())),
+                governing_contracts=tuple(value.get("governing_contracts", ())),
+                governing_designs=tuple(value.get("governing_designs", ())),
+                governing_tasks=tuple(value.get("governing_tasks", ())),
+                links=tuple(TraceLink(**item) for item in value.get("links", ())),
+                input_version=value["input_version"],
+                current_version=value["current_version"],
+            )
+        except (KeyError, TypeError) as exc:
+            raise InvalidGovernedRecord(f"malformed impact ledger: {exc}") from exc
+        ledger.validate()
+        return ledger
 
 
 @dataclass(frozen=True)
@@ -205,6 +431,51 @@ class RepositoryStateStore:
             temporary = None
         except Exception as exc:
             raise PublicationError(self.record_path, affected_scope, exc) from exc
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink()
+                except FileNotFoundError:
+                    pass
+
+
+class ImpactLedgerStore:
+    """Atomically persist a caller-located modification impact ledger."""
+
+    def __init__(self, ledger_path: str | Path):
+        self.ledger_path = Path(ledger_path)
+
+    def load(self) -> ModificationImpactLedger:
+        try:
+            value = json.loads(self.ledger_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise InvalidGovernedRecord(f"cannot reconstruct {self.ledger_path}: {exc}") from exc
+        if not isinstance(value, dict):
+            raise InvalidGovernedRecord("impact ledger must be an object")
+        return ModificationImpactLedger.from_dict(value)
+
+    def publish(self, ledger: ModificationImpactLedger) -> None:
+        ledger.validate()
+        self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary: Path | None = None
+        try:
+            descriptor, name = tempfile.mkstemp(
+                prefix=f".{self.ledger_path.name}.", suffix=".tmp", dir=self.ledger_path.parent
+            )
+            temporary = Path(name)
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+                json.dump(ledger.to_dict(), stream, indent=2, sort_keys=True)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.ledger_path)
+            temporary = None
+        except Exception as exc:
+            assessment = ledger.assess()
+            scope = ", ".join(ledger.affected_behavior_data) or ", ".join(ledger.requested_change)
+            if assessment.gaps:
+                scope = f"{scope}; gaps: {'; '.join(assessment.gaps)}"
+            raise PublicationError(self.ledger_path, scope, exc) from exc
         finally:
             if temporary is not None:
                 try:
