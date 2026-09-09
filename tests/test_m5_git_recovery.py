@@ -406,6 +406,37 @@ class M5GitTests(unittest.TestCase):
         with self.assertRaises(FailureEnvelopeError):
             journal.persist(rewritten)
 
+    def test_failure_journal_rejects_rewritten_preserved_progress(self):
+        journal = JsonFailureJournal(self.repo / ".sdd" / "failures.json")
+        original = new_failure(
+            operation="execute", step="write", cause_class="EXECUTION",
+            affected_scope=("TASK-010",), pre_operation_identity="abc123",
+            owner="Stage08", safe_reference="execution-failure",
+            valid_completed_work=("TASK-005",),
+            partial_outputs=(PartialOutput("bounded-diff", "UNVERIFIED"),),
+            candidate_routes=(RecoveryRoute("ESCALATION", "ProjectAuthority"),),
+        )
+        journal.persist(original)
+        rewritten = new_failure(
+            operation=original.operation, step=original.step,
+            cause_class=original.cause_class, affected_scope=original.affected_scope,
+            pre_operation_identity=original.pre_operation_identity,
+            owner=original.owner, safe_reference=original.safe_reference,
+        )
+        object.__setattr__(rewritten, "failure_id", original.failure_id)
+        object.__setattr__(rewritten, "occurred_at", original.occurred_at)
+
+        with self.assertRaisesRegex(FailureEnvelopeError, "immutable"):
+            journal.persist(rewritten)
+        self.assertEqual(journal.get(original.failure_id), original)
+
+    def test_failure_journal_rejects_ambiguous_duplicate_json_keys(self):
+        path = self.repo / ".sdd" / "failures.json"
+        path.write_text('{"failures": {}, "failures": {}}\n', encoding="utf-8")
+
+        with self.assertRaisesRegex(FailureEnvelopeError, "duplicate JSON key"):
+            JsonFailureJournal(path).get("failure-missing")
+
     def test_authority_failure_cannot_be_marked_safe_or_complete(self):
         with self.assertRaises(FailureEnvelopeError):
             new_failure(

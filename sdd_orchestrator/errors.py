@@ -33,6 +33,15 @@ class FailureEnvelopeError(SDDOrchestratorError):
     """The durable failure record is missing, malformed, or could not be persisted."""
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
 @dataclass(frozen=True)
 class PartialOutput:
     reference: str
@@ -91,7 +100,10 @@ class FailureEnvelope:
     def validate(self) -> None:
         required = (self.failure_id, self.operation, self.step, self.pre_operation_identity,
                     self.owner, self.safe_reference)
-        if not all(required) or not self.affected_scope:
+        if not all(isinstance(item, str) and item.strip() for item in required):
+            raise FailureEnvelopeError("failure identity, point, scope, owner, and safe reference are required")
+        if (not self.affected_scope
+                or any(not isinstance(item, str) or not item.strip() for item in self.affected_scope)):
             raise FailureEnvelopeError("failure identity, point, scope, owner, and safe reference are required")
         if self.cause_class not in FAILURE_CLASSES:
             raise FailureEnvelopeError(f"invalid cause class: {self.cause_class}")
@@ -109,6 +121,9 @@ class FailureEnvelope:
             attempt.validate()
             if attempt.failure_id != self.failure_id:
                 raise FailureEnvelopeError("every attempt must link to the original failure")
+        attempt_ids = [attempt.attempt_id for attempt in self.attempts]
+        if len(attempt_ids) != len(set(attempt_ids)):
+            raise FailureEnvelopeError("attempt identities must be unique within a failure")
 
     def eligible_routes(self, facts: Iterable[str]) -> tuple[RecoveryRoute, ...]:
         known = set(facts)
@@ -118,6 +133,7 @@ class FailureEnvelope:
         self, route: str, *, facts: Iterable[str] = (), status: str = "INCOMPLETE",
         safe_reference: str | None = None,
     ) -> "FailureEnvelope":
+        self.validate()
         if route not in {item.kind for item in self.eligible_routes(facts)}:
             raise FailureEnvelopeError("route is not eligible under current preconditions")
         attempt = FailureAttempt(
@@ -165,7 +181,10 @@ class JsonFailureJournal:
         if not self.path.exists():
             return {"failures": {}}
         try:
-            value = json.loads(self.path.read_text(encoding="utf-8"))
+            value = json.loads(
+                self.path.read_text(encoding="utf-8"),
+                object_pairs_hook=_reject_duplicate_json_keys,
+            )
             if not isinstance(value, dict) or not isinstance(value.get("failures"), dict):
                 raise ValueError("journal must contain a failures object")
             return value
@@ -185,8 +204,12 @@ class JsonFailureJournal:
         prior = failures.get(envelope.failure_id)
         if prior is not None:
             original = FailureEnvelope.from_dict(prior)
-            immutable = ("operation", "step", "cause_class", "affected_scope",
-                         "pre_operation_identity", "owner", "safe_reference", "occurred_at")
+            immutable = (
+                "failure_id", "operation", "step", "cause_class", "affected_scope",
+                "pre_operation_identity", "truthful_status", "unsafe_to_continue",
+                "owner", "safe_reference", "valid_completed_work", "partial_outputs",
+                "candidate_routes", "occurred_at",
+            )
             if any(getattr(original, name) != getattr(envelope, name) for name in immutable):
                 raise FailureEnvelopeError("original failure facts are immutable")
             if envelope.attempts[:len(original.attempts)] != original.attempts:
