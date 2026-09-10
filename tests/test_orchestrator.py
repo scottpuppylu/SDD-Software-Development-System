@@ -27,12 +27,14 @@ from sdd_orchestrator.system_controller import (
     APPROVED_INTAKE_FORMS,
     ChannelNeutralOperationPort,
     GovernedOperationRequest,
+    FullSystemController,
     LifecycleCommand,
     LifecycleCommandProcessor,
     LifecycleOperationContext,
     LocalMVPAdapter,
 )
 from sdd_orchestrator.decisions import DecisionGateway
+from sdd_orchestrator.executor import StaticExecutor, StageExecutionResult
 from sdd_orchestrator.cli import main as cli_main
 
 
@@ -667,6 +669,53 @@ class ChannelNeutralOperationPortTests(unittest.TestCase):
             ChannelNeutralOperationPort(Orchestrator(self.repo))
         ).invoke(self.request("INSPECT_STATUS", command="recovery-status"))
         self.assertEqual(recovered.data["journey"]["status"], "CLARIFICATION_REQUIRED")
+
+    def test_each_operation_reloads_repository_backed_governance_state(self):
+        self.submit()
+        state = yaml.safe_load(self.orchestrator.project_state_path.read_text(encoding="utf-8"))
+        state["authorizations"]["implementation"] = False
+        state["lifecycle"]["next_action"] = "RERUN_STAGE_07"
+        self.orchestrator._save_yaml(self.orchestrator.project_state_path, state)
+
+        result = self.adapter.invoke(self.request(
+            "INSPECT_STATUS", command="fresh-status"
+        ))
+
+        governed = result.data["governed_status"]
+        self.assertFalse(governed["implementation_authorized"])
+        self.assertFalse(governed["execution_may_continue"])
+        self.assertEqual(governed["next_action"], "RERUN_STAGE_07")
+
+    def test_full_controller_blocks_contradictory_snapshot_before_execution(self):
+        state = yaml.safe_load(self.orchestrator.project_state_path.read_text(encoding="utf-8"))
+        state["lifecycle"]["current_stage"] = "08"
+        state["stages"]["07"]["result"] = "FAIL"
+        state["authorizations"]["implementation"] = True
+        state["blocking"] = {"is_blocked": False, "reasons": []}
+        self.orchestrator._save_yaml(self.orchestrator.project_state_path, state)
+
+        class CodexMustNotRun:
+            called = False
+
+            def run_until_complete(self, **_kwargs):
+                self.called = True
+                raise AssertionError("ineligible Stage08 execution was invoked")
+
+        codex = CodexMustNotRun()
+        controller = FullSystemController(
+            self.orchestrator,
+            StaticExecutor(StageExecutionResult(status="BLOCKED")),
+            codex,
+        )
+        summary = controller.run(max_steps=1)
+
+        self.assertEqual(summary.status, "BLOCKED")
+        self.assertFalse(codex.called)
+        self.assertEqual(
+            summary.events[0]["failure_class"],
+            "CONTRADICTORY_GOVERNED_SNAPSHOT",
+        )
+        self.assertFalse(summary.events[0]["qualifications"]["verified"])
 
     def test_cli_is_a_viable_json_local_adapter(self):
         stdout = io.StringIO()

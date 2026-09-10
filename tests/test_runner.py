@@ -7,7 +7,11 @@ import unittest
 from sdd_orchestrator.core import Orchestrator
 from sdd_orchestrator.executor import StaticExecutor, StageExecutionResult
 from sdd_orchestrator.result_serialization import project_status_report
-from sdd_orchestrator.runner import StageRunner, StageExecutionValidationError
+from sdd_orchestrator.runner import (
+    GovernedRepositorySnapshot,
+    StageRunner,
+    StageExecutionValidationError,
+)
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 
@@ -166,6 +170,47 @@ class StageRunnerTests(unittest.TestCase):
         text = packet.read_text(encoding="utf-8")
         self.assertIn("docs/proposal.md", text)
         self.assertIn("PRODUCT_REQUIREMENTS", text)
+
+    def test_governed_snapshot_reloads_repository_state_and_separates_qualifications(self):
+        orch = Orchestrator(self.repo)
+        runner = StageRunner(orch)
+        state = deepcopy(orch.project_state)
+        state["lifecycle"]["current_stage"] = "08"
+        state["lifecycle"]["next_action"] = "EXECUTE_TASK"
+        state["stages"]["07"]["result"] = "PASS"
+        state["stages"]["09"]["result"] = None
+        state["authorizations"]["implementation"] = True
+        state["authorizations"]["release"] = False
+        state["blocking"] = {"is_blocked": False, "reasons": []}
+        orch._save_yaml(orch.project_state_path, state)
+
+        snapshot = runner.governed_snapshot()
+
+        self.assertIsInstance(snapshot, GovernedRepositorySnapshot)
+        self.assertEqual(snapshot.current_stage, "08")
+        self.assertTrue(snapshot.stage08_eligible)
+        self.assertTrue(snapshot.qualifications["implementation_authorized"])
+        self.assertFalse(snapshot.qualifications["verified"])
+        self.assertFalse(snapshot.qualifications["release_authorized"])
+        self.assertEqual(orch.project_state["lifecycle"]["next_action"], "EXECUTE_TASK")
+
+    def test_governed_snapshot_rejects_contradictory_gate_facts(self):
+        orch = Orchestrator(self.repo)
+        state = deepcopy(orch.project_state)
+        state["lifecycle"]["current_stage"] = "08"
+        state["stages"]["07"]["result"] = "FAIL"
+        state["authorizations"]["implementation"] = True
+        state["blocking"] = {"is_blocked": False, "reasons": []}
+        orch._save_yaml(orch.project_state_path, state)
+
+        snapshot = StageRunner(orch).governed_snapshot()
+
+        self.assertIn(
+            "IMPLEMENTATION_AUTHORIZATION_WITHOUT_STAGE07_PASS",
+            snapshot.contradictions,
+        )
+        self.assertFalse(snapshot.continuation_eligible)
+        self.assertFalse(snapshot.stage08_eligible)
 
 
 class StatusReportProjectionTests(unittest.TestCase):

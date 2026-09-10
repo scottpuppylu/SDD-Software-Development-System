@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "T017",
+  "title": "Governed-core lifecycle integration",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/runner.py",
+    "sdd_orchestrator/system_controller.py",
+    "tests/test_orchestrator.py",
+    "tests/test_runner.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_runner.py tests/test_orchestrator.py",
+      "returncode": 0,
+      "stdout": "59 passed, 33 subtests passed in 25.89s",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "{\"acceptance_criteria\": {\"AC-01\": \"PASS\", \"AC-02\": \"PASS\", \"AC-03\": \"PASS\", \"AC-04\": \"PASS\", \"AC-05\": \"PASS\", \"AC-06\": \"PASS\", \"AC-07\": \"PASS\", \"AC-08\": \"PASS\", \"AC-09\": \"PASS\", \"AC-10\": \"PASS\", \"AC-11\": \"PASS\", \"AC-12\": \"PASS\", \"AC-13\": \"PASS\", \"AC-14\": \"PASS\", \"AC-15\": \"PASS\", \"AC-16\": \"PASS\", \"AC-17\": \"PASS\", \"AC-18\": \"PASS\", \"AC-19\": \"PASS\", \"AC-20\": \"PASS\", \"AC-21\": \"PASS\", \"AC-23\": \"PASS\", \"AC-24\": \"PASS\", \"AC-25\": \"PASS\", \"AC-26\": \"PASS\", \"AC-27\": \"PASS\", \"AC-29\": \"PASS\", \"AC-30\": \"PASS\", \"AC-31\": \"PASS\", \"AC-32\": \"PASS\", \"AC-33\": \"PASS\", \"AC-34\": \"PASS\", \"AC-35\": \"PASS\", \"AC-36\": \"PASS\"}, \"authorized_baseline\": \"311d71c2912b3c21da70bc45a372dc70e9a08ac7\", \"execution_bound_head\": \"d4ebca2f0a0d4e423b9fd504560e3ad93719a6b6\", \"implementation_diff_sha256\": \"de203a8d0392f3af170471d27e8be7f80155a96dd69ad89edde9b701a7663159\", \"sealed_execution_envelope_id\": \"8f19d11d0f928802e052389feb8dfecc13ce96f96fc97865909acb2be7436d2e\", \"stage07_authorization_commit\": \"d4ebca2f0a0d4e423b9fd504560e3ad93719a6b6\", \"task_id\": \"T017\", \"verification\": \"PASS\", \"verification_summary\": \"59 passed, 33 subtests passed\"}",
+    "stderr": ""
+  },
+  "recorded_at": "20260910T051318.814896Z"
+}

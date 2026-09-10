@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 import json
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -26,6 +27,64 @@ class StageExecutionValidationError(SDDOrchestratorError):
     pass
 
 
+@dataclass(frozen=True)
+class GovernedRepositorySnapshot:
+    """Fresh, read-only integration view used to make routing decisions.
+
+    The view deliberately keeps evidence and gate qualifications separate.  It
+    is a consistency boundary, not a source of authority.
+    """
+
+    identity: str
+    head_commit: str
+    branch: str
+    dirty_paths: tuple[str, ...]
+    current_stage: str
+    next_action: str
+    blockers: tuple[str, ...]
+    contradictions: tuple[str, ...]
+    pending_decisions: tuple[str, ...]
+    implementation_authorized: bool
+    stage07_result: str | None
+    stage09_result: str | None
+    release_authorized: bool
+    completed_tasks: tuple[str, ...]
+    current_task: str | None
+    regression_gaps: tuple[str, ...]
+
+    @property
+    def continuation_eligible(self) -> bool:
+        return not (self.blockers or self.contradictions or self.pending_decisions)
+
+    @property
+    def stage08_eligible(self) -> bool:
+        return (
+            self.current_stage == "08"
+            and self.continuation_eligible
+            and self.stage07_result == "PASS"
+            and self.implementation_authorized
+        )
+
+    @property
+    def implementation_complete(self) -> bool:
+        return (
+            self.current_stage in {"09", "10"}
+            and self.current_task is None
+            and not self.regression_gaps
+        )
+
+    @property
+    def qualifications(self) -> dict[str, bool]:
+        return {
+            "implementation_authorized": self.stage08_eligible,
+            "implementation_complete": self.implementation_complete,
+            "verified": self.stage09_result == "PASS",
+            "release_authorized": (
+                self.release_authorized and self.stage09_result == "PASS"
+            ),
+        }
+
+
 class StageRunner:
     def __init__(
         self,
@@ -42,6 +101,101 @@ class StageRunner:
         self.telemetry_recorder = telemetry_recorder
         self.compilation_mode = compilation_mode
         self.failure_journal = failure_journal
+
+    def governed_snapshot(
+        self, *, pending_decisions: tuple[str, ...] = ()
+    ) -> GovernedRepositorySnapshot:
+        """Reload all runtime state and return one internally checked snapshot."""
+        fresh = Orchestrator(self.repo_root)
+        # Keep callers that retain the injected Orchestrator instance in sync.
+        self.orchestrator.project_state = fresh.project_state
+        self.orchestrator.authority_state = fresh.authority_state
+        self.orchestrator.implementation_state = fresh.implementation_state
+        project = fresh.project_state
+        implementation = fresh.implementation_state
+        stage07 = project.get("stages", {}).get("07", {}).get("result")
+        stage09 = project.get("stages", {}).get("09", {}).get("result")
+        implementation_authorized = bool(
+            project.get("authorizations", {}).get("implementation")
+        )
+        release_authorized = bool(project.get("authorizations", {}).get("release"))
+        contradictions: list[str] = []
+        if implementation_authorized and stage07 != "PASS":
+            contradictions.append("IMPLEMENTATION_AUTHORIZATION_WITHOUT_STAGE07_PASS")
+        if release_authorized and stage09 != "PASS":
+            contradictions.append("RELEASE_AUTHORIZATION_WITHOUT_STAGE09_PASS")
+        authority = fresh.authority_state
+        authority_conditions = tuple(
+            f"AUTHORITY_CONFLICT:{item.get('conflict_id') or item.get('id') or 'UNIDENTIFIED'}"
+            if isinstance(item, dict) else f"AUTHORITY_CONFLICT:{item}"
+            for item in authority.get("unresolved_conflicts", []) or []
+        ) + tuple(
+            f"BLOCKING_TBD:{item.get('tbd_id') or item.get('id') or 'UNIDENTIFIED'}"
+            if isinstance(item, dict) else f"BLOCKING_TBD:{item}"
+            for item in authority.get("blocking_tbds", []) or []
+        )
+        recorded_blocking = project.get("blocking", {})
+        blockers = tuple(dict.fromkeys(
+            [str(item) for item in recorded_blocking.get("reasons", []) or []]
+            + list(authority_conditions)
+        ))
+        if bool(recorded_blocking.get("is_blocked")) != bool(
+            recorded_blocking.get("reasons")
+        ):
+            contradictions.append("BLOCKING_FLAG_AND_REASONS_DISAGREE")
+
+        task_qualifications = implementation.get("task_qualifications") or {}
+        completed = tuple(sorted(
+            str(task) for task, fact in task_qualifications.items()
+            if isinstance(fact, dict) and fact.get("status") == "IMPLEMENTATION_QUALIFIED"
+        ))
+        current_task = implementation.get("current_task")
+        known_issues = implementation.get("known_issues") or []
+        regression_gaps = tuple(
+            str(item.get("identity") or item.get("scope") or item)
+            if isinstance(item, dict) else str(item)
+            for item in known_issues
+            if not isinstance(item, dict)
+            or str(item.get("status", "OPEN")).upper() not in {"RESOLVED", "CLOSED"}
+        )
+        head = self._git(["rev-parse", "HEAD"], allow_failure=True) or "UNAVAILABLE"
+        branch = self._git(["branch", "--show-current"], allow_failure=True) or "DETACHED"
+        porcelain = self._git(["status", "--porcelain"], allow_failure=True)
+        dirty = tuple(
+            line[3:].split(" -> ")[-1]
+            for line in porcelain.splitlines()
+            if len(line) >= 4
+        )
+        source = {
+            "head": head,
+            "branch": branch,
+            "dirty": dirty,
+            "project": project,
+            "authority": authority,
+            "implementation": implementation,
+            "pending_decisions": pending_decisions,
+        }
+        identity = hashlib.sha256(
+            json.dumps(source, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return GovernedRepositorySnapshot(
+            identity=identity,
+            head_commit=head,
+            branch=branch,
+            dirty_paths=dirty,
+            current_stage=fresh.current_stage_id,
+            next_action=str(project.get("lifecycle", {}).get("next_action") or "STOP"),
+            blockers=blockers,
+            contradictions=tuple(contradictions),
+            pending_decisions=tuple(sorted(pending_decisions)),
+            implementation_authorized=implementation_authorized,
+            stage07_result=stage07,
+            stage09_result=stage09,
+            release_authorized=release_authorized,
+            completed_tasks=completed,
+            current_task=str(current_task) if current_task else None,
+            regression_gaps=regression_gaps,
+        )
 
     def build_request(
         self,

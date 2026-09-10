@@ -17,7 +17,7 @@ from .core import (
     ScopedCondition,
 )
 from .executor import StageExecutor
-from .runner import StageRunner
+from .runner import GovernedRepositorySnapshot, StageRunner
 from .codex_adapter import Stage08CodexRunner
 from .decisions import DecisionGateway
 from .git_runtime import GitRepository
@@ -158,6 +158,13 @@ class ChannelNeutralOperationPort:
         return operation
 
     def execute(self, request: GovernedOperationRequest) -> GovernedOperationResult:
+        # A port instance may outlive a process/session boundary.  Reload the
+        # repository-owned facts before validating or applying every command.
+        fresh = Orchestrator(self.repo_root)
+        self.orchestrator.project_state = fresh.project_state
+        self.orchestrator.authority_state = fresh.authority_state
+        self.orchestrator.implementation_state = fresh.implementation_state
+        self.decisions = DecisionGateway(self.orchestrator)
         operation = self._validate(request)
         journal = self._load()
         fingerprint = self._identity({
@@ -632,6 +639,12 @@ class FullSystemController:
         self.decisions = DecisionGateway(orchestrator)
         self.git = GitRepository(orchestrator.repo_root)
 
+    def governed_snapshot(self) -> GovernedRepositorySnapshot:
+        """Return the fresh, common routing snapshot for every component."""
+        self.decisions = DecisionGateway(self.orchestrator)
+        pending = tuple(item.decision_id for item in self.decisions.list(status="PENDING"))
+        return self.runner.governed_snapshot(pending_decisions=pending)
+
     def _repo_structure(self, max_entries: int = 500) -> str:
         ignored = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build"}
         entries = []
@@ -816,12 +829,37 @@ class FullSystemController:
         start = self.orchestrator.current_stage_id
         events: list[dict[str, Any]] = []
         for _ in range(max_steps):
-            open_decisions = self.decisions.list(status="OPEN")
+            snapshot = self.governed_snapshot()
+            if snapshot.contradictions:
+                events.append({
+                    "status": "BLOCKED",
+                    "failure_class": "CONTRADICTORY_GOVERNED_SNAPSHOT",
+                    "affected_scope": [f"stage:{snapshot.current_stage}"],
+                    "safe_references": list(snapshot.contradictions),
+                    "snapshot_identity": snapshot.identity,
+                    "next": "ROUTE_TO_AUTHORITATIVE_OWNER",
+                    "qualifications": snapshot.qualifications,
+                })
+                return SystemRunSummary(
+                    start, snapshot.current_stage, "BLOCKED", events
+                )
+            open_decisions = self.decisions.list(status="PENDING")
             if open_decisions:
                 return SystemRunSummary(start, self.orchestrator.current_stage_id, "WAIT_FOR_HUMAN_DECISION", events, [asdict(d) for d in open_decisions])
 
-            sid = self.orchestrator.current_stage_id
+            sid = snapshot.current_stage
             if sid == "08":
+                if not snapshot.stage08_eligible:
+                    events.append({
+                        "status": "BLOCKED",
+                        "failure_class": "STAGE08_NOT_ELIGIBLE",
+                        "affected_scope": ["stage:08"],
+                        "safe_references": list(snapshot.blockers),
+                        "snapshot_identity": snapshot.identity,
+                        "next": "STAGE07_OR_BLOCKER_OWNER",
+                        "qualifications": snapshot.qualifications,
+                    })
+                    return SystemRunSummary(start, sid, "BLOCKED", events)
                 result = self.codex_runner.run_until_complete(max_tasks=max_steps)
                 events.append(result)
                 if result.get("status") != "COMPLETED":
