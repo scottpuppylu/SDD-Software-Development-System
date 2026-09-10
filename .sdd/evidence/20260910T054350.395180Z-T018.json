@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "T018",
+  "title": "P0 lifecycle and preservation scenario coverage",
+  "status": "PASS",
+  "changed_paths": [
+    "tests/test_runner.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_orchestrator.py tests/test_runner.py tests/test_m7_decision_gateway.py tests/test_m4_reasoning_pipeline.py tests/test_m5_git_recovery.py tests/test_v1118_safe_pause_and_evidence.py",
+      "returncode": 0,
+      "stdout": "137 passed, 139 subtests passed in 139.71s (0:02:19)",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "{\"acceptance_criteria\": {\"AC-01\": \"PASS\", \"AC-02\": \"PASS\", \"AC-03\": \"PASS\", \"AC-04\": \"PASS\", \"AC-05\": \"PASS\", \"AC-06\": \"PASS\", \"AC-07\": \"PASS\", \"AC-08\": \"PASS\", \"AC-09\": \"PASS\", \"AC-10\": \"PASS\", \"AC-11\": \"PASS\", \"AC-12\": \"PASS\", \"AC-13\": \"PASS\", \"AC-14\": \"PASS\", \"AC-15\": \"PASS\", \"AC-16\": \"PASS\", \"AC-17\": \"PASS\", \"AC-18\": \"PASS\", \"AC-19\": \"PASS\", \"AC-20\": \"PASS\", \"AC-21\": \"PASS\", \"AC-23\": \"PASS\", \"AC-24\": \"PASS\", \"AC-25\": \"PASS\", \"AC-26\": \"PASS\", \"AC-27\": \"PASS\", \"AC-29\": \"PASS\", \"AC-30\": \"PASS\", \"AC-31\": \"PASS\", \"AC-32\": \"PASS\", \"AC-33\": \"PASS\", \"AC-34\": \"PASS\", \"AC-35\": \"PASS\", \"AC-36\": \"PASS\"}, \"authorized_baseline\": \"88c40fa069bf817ca6293611fd970768276ea122\", \"execution_bound_head\": \"502798dcdd3c2ed58e8da956e0fee973eee4ccad\", \"implementation_diff_sha256\": \"13f27e92971a950ed266b26aa5b37a2a05f5ae67711f8c763e05f7d230d83e85\", \"implementation_graph_complete\": false, \"sealed_execution_envelope_id\": \"7a8161cd3b1677f0afec3c6faebd060cb6846ac8c4317731116e5be4ed712e4f\", \"stage07_authorization_commit\": \"502798dcdd3c2ed58e8da956e0fee973eee4ccad\", \"stage09_decision\": \"NOT_EVALUATED\", \"task_id\": \"T018\", \"verification\": \"PASS\", \"verification_summary\": \"137 passed, 139 subtests passed\"}",
+    "stderr": ""
+  },
+  "recorded_at": "20260910T054350.395180Z"
+}
