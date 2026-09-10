@@ -44,7 +44,78 @@ LLM / Coding Agent owns only provider-specific reasoning and/or authorized execu
 
 ---
 
-## 2. Canonical Lifecycle
+## 2. Architecture Constitution
+
+The following architecture principles are normative across the SDD lifecycle.
+They supplement, and do not weaken or replace, the domain-specific authority
+and the existing security, cost, upgrade, and provider governance below.
+
+### AC-01 — Thin Core / Fat Edge
+
+The Core Hub / Control Plane is limited to lifecycle, routing, addressing, task
+dispatch, authority, Gate, policy enforcement, and minimal coordination. It
+must not contain domain-specific business logic, provider-specific
+implementation logic, complex data transformation, or domain-state
+management. Complex capabilities belong in independently replaceable Edge /
+Spoke / Skill / Module components.
+
+### AC-02 — Thin Harness / Fat Skills
+
+The Harness is limited to bootstrap, wiring, dependency injection, interface
+binding, and lifecycle integration. It must not contain domain knowledge or
+business logic. Skills and domain modules must be cohesive, self-contained,
+independently testable, replaceable, and upgradeable.
+
+### AC-03 — Provider and Capability Independence
+
+Codex, Claude Code, Astra, and future LLM, coding-agent, or execution
+providers must integrate through adapter and skill contracts. Provider-specific
+branch logic must not contaminate the Core or Harness.
+
+### AC-04 — Governance Before Execution
+
+Before any agent or tool execution, identity, authorization, data
+classification, security policy, cost/token budget, sandbox policy, and tool
+permission checks must complete. Failure of any check is fail-closed and
+blocks execution.
+
+### AC-05 — Default Deny / Least Capability
+
+Agent, tool, credential, network, filesystem, Git, and deployment capabilities
+are deny-by-default and least-privilege / least-capability. Anything not
+explicitly authorized is prohibited.
+
+### AC-06 — Bounded Autonomous Execution
+
+Token, cost, tool-call, runtime-duration, filesystem-scope, network-access,
+Git-action, deployment-action, and secret-access limits must be explicit and
+enforced. Exceeding a limit must not silently continue.
+
+### AC-07 — Architecture Enforcement
+
+Stage 04 must apply these principles to module boundaries. Stage 05 must define
+the related agent and repository governance. Stage 07 must enforce these
+principles as mandatory Pre-Implementation Gate checks; a violation must not
+yield `PASS`.
+
+### AC-08 — Agent Governance Control Coverage
+
+Agent Governance must define or reference controls for data-sensitivity
+classification, identity and capability permissions, encryption in transit and
+at rest, sandbox execution, prompt-injection and malicious-instruction
+detection, blocking malicious or unauthorized tool calls, and token/cost
+budget enforcement. Existing specialized contracts remain authoritative for
+their respective domains.
+
+### AC-09 — Architecture-Conformant Provider Changes
+
+Model and provider evaluation must include Architecture Constitution
+conformance. A model or provider must not become the default solely because it
+is newer, stronger, or has higher benchmark scores.
+
+---
+
+## 3. Canonical Lifecycle
 
 `INITIALIZATION_ENTRY` exists before the lifecycle but is **not a Stage**.
 
@@ -69,7 +140,7 @@ Stage 10 = Handoff / Release Readiness
 
 ---
 
-## 3. Domain-Specific Authority
+## 4. Domain-Specific Authority
 
 | Domain | Authority |
 |---|---|
@@ -92,7 +163,7 @@ No downstream Stage, Orchestrator, Agent, infrastructure privilege, Human Decisi
 
 ---
 
-## 4. Stage Contracts
+## 5. Stage Contracts
 
 ### Stage 01 — Product Proposal
 Output: `docs/proposal.md`
@@ -109,10 +180,16 @@ Owns technical state, schema, API/interface, validation, error, security/privacy
 ### Stage 04 — Software Design
 Output: `docs/Design.md`
 Owns architecture, module boundaries, implementation strategy, dependencies, framework/library, observability and repository mapping.
+Stage 04 must apply AC-01 through AC-07 and record Core, Harness, Edge,
+Spoke, Skill, Module, and adapter boundaries accordingly.
 
 ### Stage 05 — Agent Governance
 Output: `AGENTS.md`
 Owns permissions, prohibitions, authority-conflict behavior, testing, Git checkpoint, start/resume, protected scope and escalation.
+Stage 05 must define or reference the AC-08 controls for data sensitivity,
+identity/capability permission, encryption in transit and at rest, sandbox
+execution, prompt-injection or malicious-instruction detection, unauthorized
+tool-call blocking, and token/cost enforcement.
 
 ### Stage 06 — Implementation Tasks
 Output: `tasks.md`
@@ -120,6 +197,11 @@ Atomic Tasks must be independently executable, verifiable, traceable and checkpo
 
 ### Stage 07 — Pre-Implementation Gate
 Result: `PASS | FAIL | INCOMPLETE`
+
+The Gate must check AC-01 through AC-08, including architecture boundaries,
+provider independence, governance-before-execution, default-deny/least
+capability, bounded execution, and Stage 05 control coverage. Any failed,
+missing, or unverifiable check blocks `PASS`.
 
 Only:
 
@@ -155,7 +237,7 @@ Result:
 
 ---
 
-## 5. Traceability
+## 6. Traceability
 
 Forward:
 
@@ -169,7 +251,7 @@ Stage 09 must support bidirectional traceability.
 
 ---
 
-## 6. Restart / Recovery
+## 7. Restart / Recovery
 
 Execution state must not depend on chat memory.
 
@@ -185,7 +267,7 @@ Pre-existing implementation recovery may exist as an exception path, but may not
 
 ---
 
-## 7. Initialization Entry
+## 8. Initialization Entry
 
 Formal contract:
 `SDD_INITIALIZATION_ENTRY_CONTRACT.md`
@@ -203,7 +285,7 @@ It cannot create Stage/Gate authority.
 
 ---
 
-## 8. Agent Adapter
+## 9. Agent Adapter
 
 Formal contract:
 `SDD_AGENT_ADAPTER_CONTRACT.md`
@@ -226,7 +308,7 @@ Current mapping:
 
 ---
 
-## 9. Human Approval
+## 10. Human Approval
 
 Formal contract:
 `SDD_HUMAN_APPROVAL_BOUNDARY_MATRIX.md`
@@ -248,7 +330,7 @@ Human Decision is durable authoritative input; owning Stage applies it.
 
 ---
 
-## 10. Git / Snapshot / Restore
+## 11. Git / Snapshot / Restore
 
 Formal contract:
 `SDD_SNAPSHOT_GIT_CONTRACT.md`
@@ -272,7 +354,7 @@ Snapshot itself creates no lifecycle authority.
 
 ---
 
-## 11. Zero-DevEnv / Remote Sandbox Security
+## 12. Zero-DevEnv / Remote Sandbox Security
 
 Formal contract:
 `SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md`
@@ -298,9 +380,13 @@ Key rules:
 
 Remote Sandbox is infrastructure, not Authority.
 
+Remote Sandbox enforcement implements AC-04 through AC-06 and must preserve
+AC-05 deny-by-default / least-capability behavior; the formal contract remains
+the detailed security authority.
+
 ---
 
-## 12. Cost / Token Governance
+## 13. Cost / Token Governance
 
 Formal contract:
 `SDD_COST_TOKEN_GOVERNANCE_CONTRACT.md`
@@ -322,9 +408,12 @@ Budget must never trigger silent truncation of required authority/governance/evi
 
 Cost-aware provider routing may use only SDD-conformant adapters.
 
+Cost and token limits are an enforcement component of AC-04 and AC-06; this
+section's formal contract remains the detailed cost/token authority.
+
 ---
 
-## 13. Upgrade / Patch Governance
+## 14. Upgrade / Patch Governance
 
 Formal contract:
 `SDD_UPGRADE_PATCH_PROTOCOL.md`
@@ -348,7 +437,7 @@ Candidate changes must be isolated, validated, release-identified, staged and ro
 
 ---
 
-## 14. Model / Provider Upgrade Policy
+## 15. Model / Provider Upgrade Policy
 
 New models/providers are evaluated, never auto-promoted simply because they are newer or stronger.
 
@@ -365,6 +454,8 @@ Evaluate:
 - reproducibility
 - security
 - SDD Gate/evidence compatibility
+- Architecture Constitution conformance, including AC-01 through AC-06 and
+  provider/capability independence
 
 Possible outcomes:
 - APPROVE_DEFAULT
@@ -373,9 +464,13 @@ Possible outcomes:
 - HOLD_FOR_MORE_EVIDENCE
 - REJECT
 
+No model or provider may be promoted to default solely because it is newer,
+stronger, or benchmark-leading; AC-09 conformance and the complete evaluation
+remain required.
+
 ---
 
-## 15. Completion Definition
+## 16. Completion Definition
 
 A project is not complete merely because code exists.
 
@@ -390,7 +485,7 @@ Minimum governed completion:
 
 ---
 
-## 16. SDD v1.0 Candidate Maturity
+## 17. SDD v1.0 Candidate Maturity
 
 ### Governance Complete
 The following normative governance areas are now defined:
@@ -402,6 +497,7 @@ The following normative governance areas are now defined:
 - Remote Sandbox security
 - Cost/Token governance
 - Upgrade/Patch governance
+- Architecture Constitution
 
 ### Runtime Partial / Pending Implementation
 Not yet production-complete:
@@ -419,7 +515,7 @@ These are implementation gaps, not missing governance principles.
 
 ---
 
-## 17. v1.0 Candidate Release Rule
+## 18. v1.0 Candidate Release Rule
 
 This document may become `v1.0` only after:
 
