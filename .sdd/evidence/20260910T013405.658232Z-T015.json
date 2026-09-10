@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "T015",
+  "title": "Channel-neutral governed operations and local MVP adapter",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/cli.py",
+    "sdd_orchestrator/system_controller.py",
+    "tests/test_orchestrator.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_orchestrator.py",
+      "returncode": 0,
+      "stdout": "40 passed, 33 subtests passed in 11.65s",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "{\"acceptance_criteria\": {\"AC-01\": \"PASS\", \"AC-02\": \"PASS\", \"AC-06\": \"PASS\", \"AC-07\": \"PASS\", \"AC-09\": \"PASS\", \"AC-14\": \"PASS\", \"AC-16\": \"PASS\", \"AC-20\": \"PASS\", \"AC-24\": \"PASS\"}, \"authorized_baseline\": \"2662293912c0153ddde38557c6ab2c73ac1f4e8b\", \"execution_bound_head\": \"c2f7723fee00c1870c6f1db5d0037b953cdbe5a0\", \"implementation_diff_sha256\": \"c0fbfdf72e3d7799d9326dde6808ecc1c8c3da6014b1198c8dbb773054535989\", \"sealed_execution_envelope_id\": \"058e0f9fcd4502cc8e548f587aebc08ce310ac0702b54b5408d77a6e8d4b87d7\", \"stage07_authorization_commit\": \"c2f7723fee00c1870c6f1db5d0037b953cdbe5a0\", \"task_id\": \"T015\", \"verification\": \"PASS\", \"verification_summary\": \"40 passed, 33 subtests passed\"}",
+    "stderr": ""
+  },
+  "recorded_at": "20260910T013405.658232Z"
+}

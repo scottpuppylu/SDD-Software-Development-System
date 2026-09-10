@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict, replace
+import copy
+import hashlib
 import json
+import os
+from pathlib import Path
+import tempfile
 from typing import Any, Callable
 
 from .core import (
@@ -35,6 +40,361 @@ LIFECYCLE_ACTIONS = {
     "REJECT_PROPOSAL",
     "APPROVE_DECISION",
 }
+
+GOVERNED_OPERATIONS = frozenset({
+    "SUBMIT_REQUEST", "INSPECT_STATUS", "CONTINUE_OR_RESUME", "PAUSE",
+    "RECEIVE_DECISION", "APPROVE", "REJECT", "REQUEST_REVISION",
+    "RECEIVE_FAILURE_OR_BLOCKER", "RECEIVE_VERIFICATION_SUMMARY",
+})
+
+APPROVED_INTAKE_FORMS = frozenset({
+    "PLAIN_LANGUAGE", "DOCUMENT", "IMAGE_OR_UI_REFERENCE",
+    "WEBSITE_OR_SYSTEM_REFERENCE", "MODIFICATION_REQUEST",
+})
+
+
+@dataclass(frozen=True)
+class GovernedOperationRequest:
+    journey_identity: str
+    command_identity: str
+    operation: str
+    target_identity: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    expected_snapshot_identity: str | None = None
+
+
+@dataclass(frozen=True)
+class GovernedOperationResult:
+    journey_identity: str
+    command_identity: str
+    operation: str
+    target_identity: str
+    snapshot_identity: str
+    accepted: bool
+    command_committed: bool
+    duplicate: bool
+    delivery_succeeded: bool
+    situation: str
+    consequence: str
+    required_user_action: str
+    next_route: str
+    data: dict[str, Any] = field(default_factory=dict)
+
+
+class ChannelNeutralOperationPort:
+    """Repository-backed governed operations, independent of presentation channel."""
+
+    SCHEMA_VERSION = "1.0"
+    MAX_TEXT = 100_000
+
+    def __init__(self, orchestrator: Orchestrator):
+        self.orchestrator = orchestrator
+        self.repo_root = orchestrator.repo_root
+        self.journal_path = self.repo_root / ".sdd" / "state" / "local-mvp-operations.json"
+        self.decisions = DecisionGateway(orchestrator)
+
+    @staticmethod
+    def _canonical(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    @classmethod
+    def _identity(cls, value: Any) -> str:
+        return hashlib.sha256(cls._canonical(value).encode("utf-8")).hexdigest()
+
+    def _load(self) -> dict[str, Any]:
+        if not self.journal_path.exists():
+            return {"schema_version": self.SCHEMA_VERSION, "journeys": {}, "commands": {}}
+        value = json.loads(self.journal_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(value, dict)
+            or value.get("schema_version") != self.SCHEMA_VERSION
+            or not isinstance(value.get("journeys"), dict)
+            or not isinstance(value.get("commands"), dict)
+        ):
+            raise LifecycleInvariantError("local operation journal is malformed or unsupported")
+        return value
+
+    def _write(self, value: dict[str, Any]) -> None:
+        self.journal_path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, name = tempfile.mkstemp(
+            prefix=".local-mvp-operations-", suffix=".tmp", dir=self.journal_path.parent
+        )
+        temporary = Path(name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+                json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.journal_path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _snapshot_identity(self, journal: dict[str, Any]) -> str:
+        implementation_path = self.repo_root / ".sdd" / "state" / "implementation-state.yaml"
+        implementation = implementation_path.read_text(encoding="utf-8") if implementation_path.exists() else ""
+        durable = {
+            "project_state": self.orchestrator.project_state,
+            "implementation_state_sha256": hashlib.sha256(implementation.encode("utf-8")).hexdigest(),
+            "journeys": journal["journeys"],
+            "decisions": [asdict(item) for item in self.decisions.list()],
+        }
+        return self._identity(durable)
+
+    def _validate(self, request: GovernedOperationRequest) -> str:
+        required = (
+            request.journey_identity, request.command_identity,
+            request.operation, request.target_identity,
+        )
+        if not all(isinstance(item, str) and item.strip() for item in required):
+            raise LifecycleInvariantError("malformed governed operation identity")
+        operation = request.operation.strip().upper()
+        if operation not in GOVERNED_OPERATIONS:
+            raise LifecycleInvariantError(f"unsupported governed operation: {operation}")
+        if not isinstance(request.payload, dict):
+            raise LifecycleInvariantError("operation payload must be an object")
+        if len(self._canonical(request.payload)) > self.MAX_TEXT:
+            raise LifecycleInvariantError("operation payload exceeds the bounded local limit")
+        return operation
+
+    def execute(self, request: GovernedOperationRequest) -> GovernedOperationResult:
+        operation = self._validate(request)
+        journal = self._load()
+        fingerprint = self._identity({
+            "journey_identity": request.journey_identity,
+            "command_identity": request.command_identity,
+            "operation": operation,
+            "target_identity": request.target_identity,
+            "payload": request.payload,
+            "expected_snapshot_identity": request.expected_snapshot_identity,
+        })
+        prior = journal["commands"].get(request.command_identity)
+        if prior is not None:
+            if prior.get("fingerprint") != fingerprint:
+                raise LifecycleInvariantError("command identity was already used for different content")
+            return GovernedOperationResult(**{**prior["result"], "duplicate": True})
+
+        before_identity = self._snapshot_identity(journal)
+        if (
+            request.expected_snapshot_identity is not None
+            and request.expected_snapshot_identity != before_identity
+        ):
+            raise LifecycleInvariantError(
+                f"stale operation snapshot: {request.expected_snapshot_identity} != {before_identity}"
+            )
+
+        working = copy.deepcopy(journal)
+        situation, consequence, action, route, data = self._apply(
+            operation, request, working
+        )
+        snapshot_identity = self._snapshot_identity(working)
+        result = GovernedOperationResult(
+            request.journey_identity, request.command_identity, operation,
+            request.target_identity, snapshot_identity, True, True, False, True,
+            situation, consequence, action, route, data,
+        )
+        working["commands"][request.command_identity] = {
+            "fingerprint": fingerprint,
+            "result": asdict(result),
+        }
+        self._write(working)
+        return result
+
+    def _journey(self, journal: dict[str, Any], request: GovernedOperationRequest) -> dict[str, Any]:
+        journey = journal["journeys"].get(request.journey_identity)
+        if not isinstance(journey, dict):
+            raise LifecycleInvariantError("journey is not repository-backed; submit it first")
+        return journey
+
+    def _implementation_state(self) -> dict[str, Any]:
+        path = self.repo_root / ".sdd" / "state" / "implementation-state.yaml"
+        if not path.exists():
+            return {}
+        import yaml
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+    def _governed_status(self, journey: dict[str, Any]) -> dict[str, Any]:
+        project = self.orchestrator.project_state
+        implementation = self._implementation_state()
+        blocking = copy.deepcopy(project.get("blocking", {}))
+        pending = [item.presentation() for item in self.decisions.list(status="PENDING")]
+        qualifications = implementation.get("task_qualifications") or {}
+        current = implementation.get("current_task")
+        next_task = implementation.get("next_task")
+        authorized = bool(project.get("authorizations", {}).get("implementation"))
+        return {
+            "current_stage": self.orchestrator.stage_summary(),
+            "completed_work": sorted(qualifications),
+            "current_work": [current] if current else [],
+            "next_work": [next_task] if next_task else [],
+            "journey_status": journey["status"],
+            "blocked_or_incomplete": blocking,
+            "pending_human_decisions": pending,
+            "authority": {
+                "approved": copy.deepcopy(project.get("provenance", {}).get("current_authority_package", {})),
+                "unapproved_or_conflicting": {
+                    "conflicts": copy.deepcopy(self.orchestrator.authority_state.get("unresolved_conflicts", [])),
+                    "blocking_tbds": copy.deepcopy(self.orchestrator.authority_state.get("blocking_tbds", [])),
+                },
+            },
+            "implementation_authorized": authorized,
+            "execution_may_continue": bool(
+                authorized and not blocking.get("is_blocked") and journey["status"] != "PAUSED"
+            ),
+            "next_action": project["lifecycle"]["next_action"],
+        }
+
+    def _apply(
+        self, operation: str, request: GovernedOperationRequest,
+        journal: dict[str, Any],
+    ) -> tuple[str, str, str, str, dict[str, Any]]:
+        payload = request.payload
+        if operation == "SUBMIT_REQUEST":
+            intake = str(payload.get("intake_form", "")).upper()
+            content = payload.get("content")
+            if intake not in APPROVED_INTAKE_FORMS or not isinstance(content, str) or not content.strip():
+                raise LifecycleInvariantError("submit requires a supported intake_form and non-empty content")
+            if request.journey_identity in journal["journeys"]:
+                raise LifecycleInvariantError("journey identity already exists")
+            missing = list(payload.get("missing_information") or ["desired outcome", "success criteria"])
+            questions = list(payload.get("clarification_questions") or [
+                "What outcome should this request achieve?",
+                "How will you decide that the result is acceptable?",
+            ])
+            journal["journeys"][request.journey_identity] = {
+                "target_identity": request.target_identity,
+                "status": "CLARIFICATION_REQUIRED",
+                "intake_form": intake,
+                "content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                "missing_information": missing,
+                "clarification_questions": questions,
+                "failures": [],
+            }
+            return (
+                "Your request was accepted and clarification has started.",
+                "Implementation cannot begin until the listed material gaps are resolved.",
+                "Answer the focused clarification questions.", "CLARIFY_REQUIREMENTS",
+                {"intake_form": intake, "missing_information": missing,
+                 "clarification_questions": questions},
+            )
+
+        journey = self._journey(journal, request)
+        if operation == "INSPECT_STATUS":
+            status = self._governed_status(journey)
+            return (
+                f"Journey {request.journey_identity} is {journey['status']}.",
+                "The displayed lifecycle, authority, and blocker facts control what may continue.",
+                "Follow the reported next route.", str(self.orchestrator.project_state["lifecycle"]["next_action"]),
+                {"journey": copy.deepcopy(journey), "governed_status": status},
+            )
+        if operation == "PAUSE":
+            journey["status"] = "PAUSED"
+            return ("The journey is paused.", "No journey progression is eligible while paused.",
+                    "Resume when you want eligible work to continue.", "WAIT_FOR_RESUME", {})
+        if operation == "CONTINUE_OR_RESUME":
+            blockers = self.orchestrator.project_state.get("blocking", {})
+            if blockers.get("is_blocked"):
+                raise LifecycleInvariantError("governed blockers prevent continuation")
+            journey["status"] = "ACTIVE"
+            return ("The journey is active.", "Only currently authorized and eligible work may continue.",
+                    "Continue with the reported governed next step.",
+                    str(self.orchestrator.project_state["lifecycle"]["next_action"]), {})
+        if operation == "RECEIVE_DECISION":
+            decision = self.decisions.get(request.target_identity)
+            return ("A Human Decision requires attention.", decision.consequence,
+                    "Choose only one of the displayed options.", "WAIT_FOR_HUMAN_DECISION",
+                    {"decision": decision.presentation()})
+        if operation in {"APPROVE", "REJECT", "REQUEST_REVISION"}:
+            decision = self.decisions.get(request.target_identity)
+            resolution = {"APPROVE": "APPROVE", "REJECT": "REJECT",
+                          "REQUEST_REVISION": "REQUEST_REVISION"}[operation]
+            updated = self.decisions.resolve(
+                request.target_identity, resolution=resolution,
+                actor=str(payload.get("actor", "")),
+                reference=str(payload.get("reference", "")),
+                expected_version=payload.get("expected_version"),
+                expected_target_version=payload.get("expected_target_version"),
+                note=payload.get("note"),
+            )
+            journey["status"] = (
+                "DECISION_APPROVED" if updated.status == "APPROVED"
+                else "REVISION_REQUIRED" if updated.status == "REVISION_REQUESTED"
+                else "REJECTED"
+            )
+            return (f"The decision was recorded as {updated.status}.", updated.consequence,
+                    "Follow the owner route shown in governed status.",
+                    str(self.orchestrator.project_state["lifecycle"]["next_action"]),
+                    {"decision": updated.presentation()})
+        if operation == "RECEIVE_FAILURE_OR_BLOCKER":
+            blockers = copy.deepcopy(self.orchestrator.project_state.get("blocking", {}))
+            return ("The current failure or blocker state was retrieved.",
+                    "Blocked scope must not continue; valid prior work remains preserved.",
+                    "Use the named retry, owner, revision, or decision route.",
+                    str(self.orchestrator.project_state["lifecycle"]["next_action"]),
+                    {"blocking": blockers, "journey_failures": list(journey.get("failures", []))})
+        implementation = self._implementation_state()
+        outcome = str((implementation.get("test_status") or {}).get("overall") or "NOT RUN").upper()
+        if outcome not in {"PASS", "FAIL", "NOT RUN"}:
+            outcome = "NOT RUN"
+        checks = payload.get("checks")
+        if checks is None:
+            checks = [{"check": "repository task verification", "outcome": outcome,
+                       "behaviors": list(payload.get("requirements_with_evidence") or [])}]
+        if not isinstance(checks, list) or not checks:
+            raise LifecycleInvariantError("verification summary requires one or more checks")
+        normalized_checks = []
+        for item in checks:
+            if not isinstance(item, dict) or not str(item.get("check", "")).strip():
+                raise LifecycleInvariantError("verification check identity is required")
+            check_outcome = str(item.get("outcome", "NOT RUN")).upper()
+            if check_outcome not in {"PASS", "FAIL", "NOT RUN"}:
+                raise LifecycleInvariantError("verification outcomes must be PASS, FAIL, or NOT RUN")
+            normalized_checks.append({
+                "check": str(item["check"]), "outcome": check_outcome,
+                "behaviors": list(item.get("behaviors") or []),
+            })
+        evidence_behaviors = sorted({
+            behavior for item in normalized_checks if item["outcome"] == "PASS"
+            for behavior in item["behaviors"]
+        })
+        return ("The verification summary was retrieved.",
+                "Verification evidence does not itself create Stage09 or release qualification.",
+                "Review evidence gaps and the next governed gate.", "REVIEW_VERIFICATION_SUMMARY",
+                {"outcome": "FAIL" if any(item["outcome"] == "FAIL" for item in normalized_checks)
+                            else "NOT RUN" if any(item["outcome"] == "NOT RUN" for item in normalized_checks)
+                            else "PASS",
+                 "checks": normalized_checks,
+                 "executed_checks": [item["check"] for item in normalized_checks if item["outcome"] != "NOT RUN"],
+                 "unexecuted_checks": [item["check"] for item in normalized_checks if item["outcome"] == "NOT RUN"],
+                 "requirements_with_evidence": evidence_behaviors,
+                 "evidence_gaps": list(payload.get("evidence_gaps") or []),
+                 "regression_risk": str(payload.get("regression_risk") or "Not established by this summary."),
+                 "qualification": "NOT_EVALUATED_BY_STAGE09"})
+
+
+class LocalMVPAdapter:
+    """Local delivery adapter; delivery failure never rewrites committed effects."""
+
+    def __init__(self, port: ChannelNeutralOperationPort):
+        self.port = port
+
+    def invoke(
+        self, request: GovernedOperationRequest,
+        *, deliver: Callable[[GovernedOperationResult], None] | None = None,
+    ) -> GovernedOperationResult:
+        result = self.port.execute(request)
+        if deliver is None:
+            return result
+        try:
+            deliver(result)
+        except Exception:
+            return replace(
+                result, delivery_succeeded=False,
+                consequence=(result.consequence + " The command committed, but local delivery failed."),
+                required_user_action="Retry delivery with the same command identity or inspect status locally.",
+                next_route="RETRY_DELIVERY_OR_INSPECT_STATUS",
+            )
+        return result
 
 
 @dataclass(frozen=True)

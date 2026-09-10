@@ -1,8 +1,13 @@
 from pathlib import Path
 from dataclasses import replace as dataclass_replace
+from contextlib import redirect_stdout
+import io
+import json
 import shutil
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import yaml
 
 from sdd_orchestrator.core import (
@@ -19,10 +24,16 @@ from sdd_orchestrator.core import (
     ScopedCondition,
 )
 from sdd_orchestrator.system_controller import (
+    APPROVED_INTAKE_FORMS,
+    ChannelNeutralOperationPort,
+    GovernedOperationRequest,
     LifecycleCommand,
     LifecycleCommandProcessor,
     LifecycleOperationContext,
+    LocalMVPAdapter,
 )
+from sdd_orchestrator.decisions import DecisionGateway
+from sdd_orchestrator.cli import main as cli_main
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
@@ -510,6 +521,168 @@ class LifecycleCommandProcessorTests(unittest.TestCase):
         store.fail_publish = False
         result = LifecycleCommandProcessor(LifecycleGovernor(store)).process(command)
         self.assertFalse(result.duplicate)
+
+
+class ChannelNeutralOperationPortTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self.tmp.name) / "repo"
+        shutil.copytree(SOURCE_ROOT / ".sdd", self.repo / ".sdd")
+        self.orchestrator = Orchestrator(self.repo)
+        self.port = ChannelNeutralOperationPort(self.orchestrator)
+        self.adapter = LocalMVPAdapter(self.port)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def request(self, operation, *, journey="journey-1", command=None,
+                target="request-1", payload=None, expected=None):
+        return GovernedOperationRequest(
+            journey, command or f"command-{operation.lower()}", operation,
+            target, payload or {}, expected,
+        )
+
+    def submit(self, *, journey="journey-1", command="command-submit",
+               intake="PLAIN_LANGUAGE"):
+        return self.adapter.invoke(self.request(
+            "SUBMIT_REQUEST", journey=journey, command=command,
+            payload={"intake_form": intake, "content": "Build a helpful local tool."},
+        ))
+
+    def test_every_approved_intake_form_starts_plain_language_clarification(self):
+        for number, intake in enumerate(sorted(APPROVED_INTAKE_FORMS), 1):
+            with self.subTest(intake=intake):
+                result = self.submit(
+                    journey=f"journey-{number}", command=f"submit-{number}", intake=intake
+                )
+                self.assertTrue(result.accepted)
+                self.assertTrue(result.command_committed)
+                self.assertEqual(result.next_route, "CLARIFY_REQUIREMENTS")
+                self.assertTrue(
+                    any("outcome" in item for item in result.data["missing_information"])
+                )
+                self.assertIn("clarification", result.situation.lower())
+                self.assertNotIn("Build a helpful", json.dumps(result.data))
+
+    def test_local_journey_pause_resume_status_failure_and_verification_summary(self):
+        self.submit()
+        paused = self.adapter.invoke(self.request("PAUSE", command="command-pause"))
+        self.assertEqual(paused.next_route, "WAIT_FOR_RESUME")
+        inspected = self.adapter.invoke(self.request("INSPECT_STATUS", command="command-status"))
+        self.assertEqual(inspected.data["journey"]["status"], "PAUSED")
+        status = inspected.data["governed_status"]
+        self.assertEqual(
+            set(status),
+            {"current_stage", "completed_work", "current_work", "next_work",
+             "journey_status", "blocked_or_incomplete", "pending_human_decisions",
+             "authority", "implementation_authorized", "execution_may_continue",
+             "next_action"},
+        )
+        self.assertFalse(status["execution_may_continue"])
+        resumed = self.adapter.invoke(self.request("CONTINUE_OR_RESUME", command="command-resume"))
+        self.assertEqual(resumed.situation, "The journey is active.")
+        failure = self.adapter.invoke(self.request(
+            "RECEIVE_FAILURE_OR_BLOCKER", command="command-failure"
+        ))
+        self.assertIn("blocking", failure.data)
+        summary = self.adapter.invoke(self.request(
+            "RECEIVE_VERIFICATION_SUMMARY", command="command-summary",
+            payload={"checks": [
+                         {"check": "intake", "outcome": "PASS", "behaviors": ["AC-01"]},
+                         {"check": "reporting", "outcome": "FAIL", "behaviors": ["AC-24"]},
+                         {"check": "later adapter", "outcome": "NOT RUN", "behaviors": []},
+                     ],
+                     "evidence_gaps": ["AC-24"], "regression_risk": "Known gap"},
+        ))
+        self.assertEqual(summary.data["outcome"], "FAIL")
+        self.assertEqual(summary.data["executed_checks"], ["intake", "reporting"])
+        self.assertEqual(summary.data["unexecuted_checks"], ["later adapter"])
+        self.assertEqual(summary.data["requirements_with_evidence"], ["AC-01"])
+        self.assertEqual(summary.data["qualification"], "NOT_EVALUATED_BY_STAGE09")
+
+    def test_decision_receive_approve_reject_and_revision_use_authoritative_gateway(self):
+        self.submit()
+        gateway = DecisionGateway(self.orchestrator)
+        cases = (
+            ("APPROVE", "APPROVED", "HD-APPROVE"),
+            ("REJECT", "REJECTED", "HD-REJECT"),
+            ("REQUEST_REVISION", "REVISION_REQUESTED", "HD-REVISION"),
+        )
+        for number, (operation, expected, decision_id) in enumerate(cases, 1):
+            decision = gateway.create(
+                decision_type="PRODUCT_DECISION", source_stage="02",
+                authority_domains=["PRODUCT_REQUIREMENT"], question="Choose the outcome",
+                context="The affected product choice needs explicit authority.",
+                options=[operation], affected_artifacts=["docs/PRD.md"],
+                target_version="v1", decision_id=decision_id,
+            )
+            if operation == "APPROVE":
+                with self.assertRaisesRegex(LifecycleInvariantError, "blockers prevent continuation"):
+                    self.adapter.invoke(self.request(
+                        "CONTINUE_OR_RESUME", command="continue-before-decision"
+                    ))
+            received = self.adapter.invoke(self.request(
+                "RECEIVE_DECISION", command=f"receive-{number}", target=decision_id
+            ))
+            self.assertEqual(received.data["decision"]["status"], "PENDING")
+            resolved = self.adapter.invoke(self.request(
+                operation, command=f"resolve-{number}", target=decision_id,
+                payload={"actor": "02", "reference": f"approval-{number}",
+                         "expected_version": decision.record_version,
+                         "expected_target_version": "v1"},
+            ))
+            self.assertEqual(resolved.data["decision"]["status"], expected)
+
+    def test_stale_malformed_and_reused_commands_are_rejected_without_rewrite(self):
+        original = self.submit()
+        restarted = LocalMVPAdapter(ChannelNeutralOperationPort(Orchestrator(self.repo)))
+        replay = restarted.invoke(self.request(
+            "SUBMIT_REQUEST", command="command-submit",
+            payload={"intake_form": "PLAIN_LANGUAGE", "content": "Build a helpful local tool."},
+        ))
+        self.assertTrue(replay.duplicate)
+        self.assertEqual(replay.snapshot_identity, original.snapshot_identity)
+        with self.assertRaisesRegex(LifecycleInvariantError, "different content"):
+            restarted.invoke(self.request(
+                "SUBMIT_REQUEST", command="command-submit",
+                payload={"intake_form": "DOCUMENT", "content": "different"},
+            ))
+        with self.assertRaisesRegex(LifecycleInvariantError, "stale operation snapshot"):
+            restarted.invoke(self.request(
+                "INSPECT_STATUS", command="stale-command", expected="stale"
+            ))
+        with self.assertRaisesRegex(LifecycleInvariantError, "unsupported"):
+            restarted.invoke(self.request("UNKNOWN", command="unknown-command"))
+
+    def test_delivery_failure_preserves_committed_command_and_local_resume(self):
+        delivered = self.adapter.invoke(
+            self.request("SUBMIT_REQUEST", command="delivery-command",
+                         payload={"intake_form": "PLAIN_LANGUAGE", "content": "idea"}),
+            deliver=lambda result: (_ for _ in ()).throw(OSError("channel unavailable")),
+        )
+        self.assertTrue(delivered.command_committed)
+        self.assertFalse(delivered.delivery_succeeded)
+        self.assertEqual(delivered.next_route, "RETRY_DELIVERY_OR_INSPECT_STATUS")
+        recovered = LocalMVPAdapter(
+            ChannelNeutralOperationPort(Orchestrator(self.repo))
+        ).invoke(self.request("INSPECT_STATUS", command="recovery-status"))
+        self.assertEqual(recovered.data["journey"]["status"], "CLARIFICATION_REQUIRED")
+
+    def test_cli_is_a_viable_json_local_adapter(self):
+        stdout = io.StringIO()
+        argv = [
+            "sdd", "--repo", str(self.repo), "operation",
+            "--journey", "cli-journey", "--command-id", "cli-command",
+            "--operation", "SUBMIT_REQUEST", "--target", "cli-request",
+            "--payload-json", json.dumps({
+                "intake_form": "PLAIN_LANGUAGE", "content": "A vague one-line idea"
+            }),
+        ]
+        with patch.object(sys, "argv", argv), redirect_stdout(stdout):
+            cli_main()
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["command_committed"])
+        self.assertEqual(payload["next_route"], "CLARIFY_REQUIREMENTS")
 
 
 if __name__ == "__main__":

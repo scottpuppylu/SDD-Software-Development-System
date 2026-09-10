@@ -13,7 +13,13 @@ from .providers import CodexExecReasoningExecutor, OpenAIResponsesExecutor, Reas
 from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
 from .codex_adapter import Stage08CodexRunner, CodexCLI, CodexAdapterError
 from .decisions import DecisionGateway, DecisionGatewayError
-from .system_controller import FullSystemController
+from .system_controller import (
+    GOVERNED_OPERATIONS,
+    ChannelNeutralOperationPort,
+    FullSystemController,
+    GovernedOperationRequest,
+    LocalMVPAdapter,
+)
 from .telemetry.recorder import TelemetryRecorder
 from .context_activation import resolve_context_compilation_mode
 
@@ -56,6 +62,14 @@ def main():
     sub.add_parser("status")
     sub.add_parser("current")
     sub.add_parser("reconcile-stage07-provenance")
+
+    p_operation = sub.add_parser("operation")
+    p_operation.add_argument("--journey", required=True)
+    p_operation.add_argument("--command-id", required=True)
+    p_operation.add_argument("--operation", required=True, choices=sorted(GOVERNED_OPERATIONS))
+    p_operation.add_argument("--target", required=True)
+    p_operation.add_argument("--expected-snapshot")
+    p_operation.add_argument("--payload-json", default="{}")
 
     p_check = sub.add_parser("check")
     p_check.add_argument("--stage")
@@ -152,6 +166,24 @@ def main():
     args = parser.parse_args()
     repo = Path(args.repo)
     compilation_mode = resolve_context_compilation_mode()
+
+    if args.command == "operation":
+        try:
+            payload = json.loads(args.payload_json)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"SDD error: operation payload is not valid JSON: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise SystemExit("SDD error: operation payload must be a JSON object")
+        request = GovernedOperationRequest(
+            journey_identity=args.journey,
+            command_identity=args.command_id,
+            operation=args.operation,
+            target_identity=args.target,
+            payload=payload,
+            expected_snapshot_identity=args.expected_snapshot,
+        )
+        _print(LocalMVPAdapter(ChannelNeutralOperationPort(Orchestrator(repo))).invoke(request))
+        return
 
     if args.command == "git-status":
         _print(GitRepository(repo).snapshot())
