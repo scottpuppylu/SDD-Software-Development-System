@@ -7,6 +7,34 @@ from pathlib import Path
 from typing import Callable
 
 from .errors import CodexAdapterError
+from .governed_state import ModificationImpactLedger
+from .verification_execution import (
+    RegressionCoverageView,
+    RegressionEvidence,
+    build_regression_coverage_view,
+)
+
+
+def evaluate_regression_completion(
+    ledger: ModificationImpactLedger,
+    evidence: list[RegressionEvidence] | tuple[RegressionEvidence, ...],
+    *,
+    current_version: str | None = None,
+) -> RegressionCoverageView:
+    """Fail-closed runtime boundary for the non-qualifying completion guard."""
+
+    version = current_version or getattr(ledger, "current_version", "")
+    modification_id = getattr(ledger, "modification_id", "unknown-modification")
+    try:
+        return build_regression_coverage_view(
+            ledger, evidence, current_version=current_version
+        )
+    except Exception as exc:
+        return RegressionCoverageView.computation_failure(
+            modification_id=modification_id,
+            current_version=version,
+            reason=str(exc),
+        )
 
 
 def resolve_project_python(
