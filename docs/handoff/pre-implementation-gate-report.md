@@ -13,7 +13,7 @@ AUTHORIZED_NEXT_OPERATION = SEALED_STAGE08_TASK_014_IMPLEMENTATION
 NEXT_STAGE = 08
 ```
 
-This fresh decision is bound to evaluated baseline `845cda4637498363d53bff8d4c5a3c6e29818622` on branch `telemetry-measurement-v2`. The entry worktree was clean. It authorizes only TASK-014 under its exact repository-stored Stage06 contract and the sealed Stage08 execution-envelope mechanism. It does not execute TASK-014 or authorize another task.
+This fresh decision is bound to evaluated baseline `6d6d7421027d2fae082aad7557e310824960f446` on branch `telemetry-measurement-v2`. The entry worktree was clean. It authorizes only TASK-014 under its exact repository-stored Stage06 contract and the sealed Stage08 execution-envelope mechanism. It does not execute TASK-014 or authorize another task.
 
 ## 2. Repository-backed qualification state
 
@@ -21,6 +21,7 @@ This fresh decision is bound to evaluated baseline `845cda4637498363d53bff8d4c5a
 - Task-specific validation independently reports TASK-001 through TASK-013 where present in the canonical set, plus TASK-019 and TASK-020, independently qualified. No qualification is inferred from numbering, source presence, legacy projections, or chat history.
 - TASK-013 binds ordinary Stage08 evidence `.sdd/evidence/20260909T073635.047259Z-T013.json` to checkpoint `1e853399804cd4fe8167b6e9438544486b5e21c9`; finalization is repository-backed at this evaluated baseline.
 - `current_task` and `next_task` remain null. No recovery, remediation, or reconciliation debt remains.
+- The change since prior Stage07 authorization commit `d6d07b816171645dfbce93bbc7a478d3339b582f` adds only the frozen candidate under `docs/sdd-governance/`. Active authority, task contract, implementation state, dependencies, scope, verification, and acceptance criteria are unchanged. The prior envelope is stale and is not reused.
 
 ## 3. Candidate and selection evaluation
 
@@ -44,7 +45,7 @@ This PASS authorizes only normal sealed Stage08 implementation of TASK-014. It d
 
 ```text
 PRE_IMPLEMENTATION_GATE_DECISION = PASS
-BASELINE_BOUND_TO_DECISION = 845cda4637498363d53bff8d4c5a3c6e29818622
+BASELINE_BOUND_TO_DECISION = 6d6d7421027d2fae082aad7557e310824960f446
 AUTHORITY_CONSISTENT = YES
 STATE_SCHEMA_STATUS = VALID_2_0
 TASK001_QUALIFICATION_STATUS = QUALIFIED
@@ -76,7 +77,7 @@ SELECTED_TASK_VERIFICATION_POLICY_VALID = YES
 SEALED_STAGE08_RUNTIME_AVAILABLE = YES
 NORMAL_STAGE08_AUTHORIZED = YES_TASK_014_ONLY
 STAGE08_AUTHORIZATION_BOUND_TASK = TASK-014
-STAGE08_AUTHORIZATION_EVALUATED_BASELINE = 845cda4637498363d53bff8d4c5a3c6e29818622
+STAGE08_AUTHORIZATION_EVALUATED_BASELINE = 6d6d7421027d2fae082aad7557e310824960f446
 IMPLEMENTATION_GRAPH_COMPLETE = NO
 STAGE09_PREREQUISITE_STATUS = NOT_SATISFIED_IMPLEMENTATION_GRAPH_INCOMPLETE
 STAGE09_DECISION = NOT_EVALUATED
