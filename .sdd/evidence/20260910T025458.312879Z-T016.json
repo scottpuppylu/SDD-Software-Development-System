@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "T016",
+  "title": "Governed MVP demonstration manifest",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/evidence_writer.py",
+    "tests/test_v1118_safe_pause_and_evidence.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_v1118_safe_pause_and_evidence.py",
+      "returncode": 0,
+      "stdout": "30 passed, 47 subtests passed in 40.26s",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "{\"acceptance_criteria\": {\"AC-11\": \"PASS\", \"AC-21\": \"PASS\"}, \"authorized_baseline\": \"8507febd610c961eccacef7fcfd8fc137fa288b4\", \"execution_bound_head\": \"c5d3de6b1e8e71800778ab7e3542644be91c7294\", \"implementation_diff_sha256\": \"9b9a7aeeb3e568cdfbff5264a96ba46ff67ab3aa5fc9d98de61d30b2eca823f0\", \"sealed_execution_envelope_id\": \"ecd38db056495008149cfebb4d25662606126c3efc68c861eeca971985d6ee06\", \"stage07_authorization_commit\": \"c5d3de6b1e8e71800778ab7e3542644be91c7294\", \"task_id\": \"T016\", \"verification\": \"PASS\", \"verification_summary\": \"30 passed, 47 subtests passed\"}",
+    "stderr": ""
+  },
+  "recorded_at": "20260910T025458.312879Z"
+}

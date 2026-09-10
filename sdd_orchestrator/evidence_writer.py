@@ -513,6 +513,221 @@ class EvidenceRegistry:
                 temporary_path.unlink(missing_ok=True)
 
 
+DEMONSTRATION_CHAIN = (
+    "IDEA",
+    "REQUIREMENT_CLARIFICATION",
+    "APPROVED_PRODUCT_REQUIREMENTS",
+    "SPECIFICATION",
+    "DESIGN",
+    "TASK_DECOMPOSITION",
+    "HUMAN_DECISION",
+    "AUTHORIZED_AI_CODING",
+    "TESTING_VERIFICATION",
+    "GIT_TRACEABILITY",
+    "TRUTHFUL_STATUS_FAILURE_HANDLING",
+    "MAINTENANCE_CHANGE",
+    "REGRESSION_VERIFICATION",
+)
+
+DEMONSTRATION_GOVERNING_EFFECTS = (
+    "AUTHORITY_NOT_BYPASSED",
+    "AI_DID_NOT_DECIDE_PRODUCT_REQUIREMENTS",
+    "HUMAN_DECISION_GOVERNED_AFFECTED_WORK",
+    "BLOCKERS_STOPPED_AFFECTED_WORK",
+    "UNVERIFIED_WORK_NOT_COMPLETE",
+    "MAINTENANCE_REGRESSION_PROTECTED",
+)
+
+MANIFEST_REFERENCE_STATUSES = frozenset({
+    "QUALIFYING", "MISSING", "STALE", "BROKEN", "AMBIGUOUS", "NON_QUALIFYING",
+})
+
+
+@dataclass(frozen=True)
+class DemonstrationReference:
+    """One minimum-disclosure pointer; never a substitute for its source proof."""
+
+    reference_id: str
+    subject: str
+    owner: str
+    status: str
+    repository_path: str | None = None
+    commit: str | None = None
+    content_sha256: str | None = None
+    forward_links: tuple[str, ...] = ()
+    reverse_links: tuple[str, ...] = ()
+    gap: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("reference_id", "subject", "owner"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise InvalidEvidence(f"demonstration {name} is required")
+        if self.status not in MANIFEST_REFERENCE_STATUSES:
+            raise InvalidEvidence(f"invalid demonstration reference status: {self.status}")
+        for value in (self.reference_id, self.subject, self.owner, self.repository_path,
+                      self.gap, *self.forward_links, *self.reverse_links):
+            _validate_safe_reference(value)
+        if self.repository_path is not None:
+            path = Path(self.repository_path)
+            if path.is_absolute() or ".." in path.parts or path.as_posix() != self.repository_path:
+                raise InvalidEvidence("demonstration reference path must be repository-relative")
+        if self.commit is not None and not re.fullmatch(r"[0-9a-f]{40}", self.commit):
+            raise InvalidEvidence("demonstration reference requires a full Git commit")
+        if self.content_sha256 is not None and not re.fullmatch(r"[0-9a-f]{64}", self.content_sha256):
+            raise InvalidEvidence("demonstration reference content digest is invalid")
+        if self.status == "QUALIFYING":
+            if not all((self.repository_path, self.commit, self.content_sha256)):
+                raise InvalidEvidence("qualifying demonstration reference requires path, commit, and digest")
+            if not self.forward_links or not self.reverse_links:
+                raise InvalidEvidence("qualifying demonstration reference must be bidirectionally navigable")
+            if self.gap is not None:
+                raise InvalidEvidence("qualifying demonstration reference cannot contain a gap")
+        elif not isinstance(self.gap, str) or not self.gap.strip():
+            raise InvalidEvidence("non-qualifying demonstration reference requires an explicit gap")
+
+    @property
+    def qualifies(self) -> bool:
+        return self.status == "QUALIFYING"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self) | {"qualifies": self.qualifies}
+
+
+@dataclass(frozen=True)
+class DemonstrationManifest:
+    snapshot_identity: str
+    chain: tuple[DemonstrationReference, ...]
+    governing_effects: tuple[DemonstrationReference, ...]
+    status: str
+    gaps: tuple[str, ...]
+    verification_decision: None = None
+    release_decision: None = None
+    mvp_qualified: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.snapshot_identity, str) or not self.snapshot_identity.strip():
+            raise InvalidEvidence("demonstration snapshot identity is required")
+        if self.status not in {"REFERENCE_COMPLETE", "INCOMPLETE"}:
+            raise InvalidEvidence("invalid demonstration manifest status")
+        if self.verification_decision is not None or self.release_decision is not None or self.mvp_qualified:
+            raise InvalidEvidence("demonstration manifest cannot create qualification or a gate decision")
+        expected_complete = all(item.qualifies for item in (*self.chain, *self.governing_effects))
+        if (self.status == "REFERENCE_COMPLETE") is not expected_complete:
+            raise InvalidEvidence("demonstration manifest status contradicts its references")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": "1.0",
+            "snapshot_identity": self.snapshot_identity,
+            "status": self.status,
+            "chain": [item.to_dict() for item in self.chain],
+            "governing_effects": [item.to_dict() for item in self.governing_effects],
+            "gaps": list(self.gaps),
+            "verification_decision": None,
+            "release_decision": None,
+            "mvp_qualified": False,
+        }
+
+
+def _manifest_items(
+    supplied: Iterable[DemonstrationReference],
+    required_subjects: tuple[str, ...],
+    category: str,
+) -> tuple[DemonstrationReference, ...]:
+    indexed: dict[str, DemonstrationReference] = {}
+    for item in supplied:
+        if not isinstance(item, DemonstrationReference):
+            raise InvalidEvidence("manifest accepts only validated demonstration references")
+        if item.subject in indexed:
+            raise InvalidEvidence(f"ambiguous duplicate demonstration subject: {item.subject}")
+        if item.subject not in required_subjects:
+            raise InvalidEvidence(f"unexpected demonstration subject: {item.subject}")
+        indexed[item.subject] = item
+    return tuple(
+        indexed.get(subject) or DemonstrationReference(
+            reference_id=f"MISSING-{category}-{subject}", subject=subject,
+            owner="AUTHORITATIVE_OWNER", status="MISSING",
+            gap=f"{category} proof is absent for {subject}",
+        )
+        for subject in required_subjects
+    )
+
+
+def assemble_demonstration_manifest(
+    *,
+    snapshot_identity: str,
+    chain_references: Iterable[DemonstrationReference],
+    governing_effect_references: Iterable[DemonstrationReference],
+) -> DemonstrationManifest:
+    """Build an inspectable index without producing evidence or qualification."""
+
+    chain = _manifest_items(chain_references, DEMONSTRATION_CHAIN, "CHAIN_LINK")
+    effects = _manifest_items(
+        governing_effect_references, DEMONSTRATION_GOVERNING_EFFECTS, "GOVERNING_EFFECT"
+    )
+    gaps = tuple(
+        f"{item.subject}: {item.status}: {item.gap}"
+        for item in (*chain, *effects) if not item.qualifies
+    )
+    return DemonstrationManifest(
+        snapshot_identity=snapshot_identity,
+        chain=chain,
+        governing_effects=effects,
+        status="INCOMPLETE" if gaps else "REFERENCE_COMPLETE",
+        gaps=gaps,
+    )
+
+
+def inspect_demonstration_reference(
+    repo_root: Path,
+    *,
+    reference_id: str,
+    subject: str,
+    owner: str,
+    repository_path: str,
+    commit: str,
+    expected_sha256: str,
+    forward_links: Iterable[str],
+    reverse_links: Iterable[str],
+    declared_qualifying: bool = True,
+) -> DemonstrationReference:
+    """Classify a repository reference against immutable Git content."""
+
+    common = dict(
+        reference_id=reference_id, subject=subject, owner=owner,
+        repository_path=repository_path, commit=commit,
+        content_sha256=expected_sha256,
+        forward_links=tuple(forward_links), reverse_links=tuple(reverse_links),
+    )
+    try:
+        candidate = DemonstrationReference(status="QUALIFYING", **common)
+    except InvalidEvidence as exc:
+        return DemonstrationReference(
+            reference_id=reference_id, subject=subject, owner=owner,
+            status="BROKEN", gap=f"invalid reference metadata: {exc}",
+        )
+    try:
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+            cwd=repo_root, capture_output=True, check=False,
+        )
+        content = subprocess.run(
+            ["git", "show", f"{commit}:{repository_path}"],
+            cwd=repo_root, capture_output=True, check=False,
+        )
+    except OSError:
+        ancestor = content = None
+    if ancestor is None or content is None or ancestor.returncode != 0 or content.returncode != 0:
+        return DemonstrationReference(status="BROKEN", gap="Git reference is missing or unreachable", **common)
+    actual_sha256 = hashlib.sha256(content.stdout).hexdigest()
+    if actual_sha256 != expected_sha256:
+        return DemonstrationReference(status="STALE", gap="referenced content digest no longer matches", **common)
+    if not declared_qualifying:
+        return DemonstrationReference(status="NON_QUALIFYING", gap="source record does not qualify", **common)
+    return candidate
+
+
 _SENSITIVE = re.compile(r"(?i)(token|password|secret|api[_-]?key)\s*[:=]\s*\S+")
 
 

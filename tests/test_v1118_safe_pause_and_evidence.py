@@ -4,6 +4,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+import hashlib
 import shutil
 import subprocess
 import tempfile
@@ -20,17 +21,23 @@ from sdd_orchestrator.codex_adapter import (
 )
 from sdd_orchestrator.system_controller import FullSystemController
 from sdd_orchestrator.evidence_writer import (
+    DEMONSTRATION_CHAIN,
+    DEMONSTRATION_GOVERNING_EFFECTS,
     RECOVERY_CAPABILITY,
     RECOVERY_RECORD_KIND,
     RECOVERY_SCHEMA_VERSION,
+    DemonstrationManifest,
+    DemonstrationReference,
     EvidencePersistenceError,
     EvidenceRecord,
     EvidenceRegistry,
     InvalidEvidence,
     RecoveryAuthorization,
+    assemble_demonstration_manifest,
     canonical_sha256,
     qualify_recovery_attestation,
     qualification_inputs,
+    inspect_demonstration_reference,
     task_contract_sha256,
     write_recovery_attestation,
 )
@@ -348,6 +355,144 @@ class V1118Stage08Tests(unittest.TestCase):
         self.assertIn("T999 still running", buf.getvalue())
 
 
+class T016DemonstrationManifestTests(unittest.TestCase):
+    def reference(self, subject, *, status="QUALIFYING", reference_id=None):
+        qualifying = status == "QUALIFYING"
+        return DemonstrationReference(
+            reference_id=reference_id or f"REF-{subject}",
+            subject=subject,
+            owner="Stage06" if subject == "TASK_DECOMPOSITION" else "AUTHORITATIVE_OWNER",
+            status=status,
+            repository_path=f"proof/{subject}.json" if qualifying else None,
+            commit="a" * 40 if qualifying else None,
+            content_sha256="b" * 64 if qualifying else None,
+            forward_links=("TASK-016",) if qualifying else (),
+            reverse_links=(subject,) if qualifying else (),
+            gap=None if qualifying else f"{subject} proof is {status.lower()}",
+        )
+
+    def complete_manifest(self):
+        return assemble_demonstration_manifest(
+            snapshot_identity="git:current",
+            chain_references=[self.reference(subject) for subject in DEMONSTRATION_CHAIN],
+            governing_effect_references=[
+                self.reference(subject) for subject in DEMONSTRATION_GOVERNING_EFFECTS
+            ],
+        )
+
+    def test_complete_manifest_traverses_chain_and_all_six_governing_effects(self):
+        manifest = self.complete_manifest()
+        self.assertEqual(manifest.status, "REFERENCE_COMPLETE")
+        self.assertEqual(tuple(item.subject for item in manifest.chain), DEMONSTRATION_CHAIN)
+        self.assertEqual(
+            tuple(item.subject for item in manifest.governing_effects),
+            DEMONSTRATION_GOVERNING_EFFECTS,
+        )
+        self.assertEqual(len(manifest.governing_effects), 6)
+        self.assertTrue(all(item.forward_links and item.reverse_links for item in manifest.chain))
+        self.assertEqual(manifest.gaps, ())
+        self.assertIsNone(manifest.verification_decision)
+        self.assertIsNone(manifest.release_decision)
+        self.assertFalse(manifest.mvp_qualified)
+
+    def test_omitted_chain_or_governing_effect_proof_is_explicitly_incomplete(self):
+        for category in ("chain", "effect"):
+            with self.subTest(category=category):
+                chain = [self.reference(subject) for subject in DEMONSTRATION_CHAIN]
+                effects = [self.reference(subject) for subject in DEMONSTRATION_GOVERNING_EFFECTS]
+                (chain if category == "chain" else effects).pop()
+                manifest = assemble_demonstration_manifest(
+                    snapshot_identity="git:current", chain_references=chain,
+                    governing_effect_references=effects,
+                )
+                self.assertEqual(manifest.status, "INCOMPLETE")
+                self.assertEqual(len(manifest.gaps), 1)
+                self.assertIn("MISSING", manifest.gaps[0])
+
+    def test_every_nonqualifying_proof_class_withholds_completion(self):
+        for status in ("MISSING", "STALE", "BROKEN", "AMBIGUOUS", "NON_QUALIFYING"):
+            with self.subTest(status=status):
+                chain = [self.reference(subject) for subject in DEMONSTRATION_CHAIN]
+                chain[0] = self.reference(DEMONSTRATION_CHAIN[0], status=status)
+                manifest = assemble_demonstration_manifest(
+                    snapshot_identity="git:current", chain_references=chain,
+                    governing_effect_references=[
+                        self.reference(subject) for subject in DEMONSTRATION_GOVERNING_EFFECTS
+                    ],
+                )
+                self.assertEqual(manifest.status, "INCOMPLETE")
+                self.assertIn(status, manifest.gaps[0])
+                self.assertFalse(manifest.mvp_qualified)
+
+    def test_manifest_rejects_ambiguous_identity_and_missing_navigation(self):
+        duplicate = self.reference(DEMONSTRATION_CHAIN[0], reference_id="duplicate")
+        with self.assertRaisesRegex(InvalidEvidence, "ambiguous duplicate"):
+            assemble_demonstration_manifest(
+                snapshot_identity="git:current",
+                chain_references=[duplicate, duplicate],
+                governing_effect_references=[],
+            )
+        with self.assertRaisesRegex(InvalidEvidence, "bidirectionally navigable"):
+            DemonstrationReference(
+                reference_id="REF", subject="TASK_DECOMPOSITION", owner="Stage06",
+                status="QUALIFYING", repository_path="tasks.md", commit="a" * 40,
+                content_sha256="b" * 64, forward_links=("TASK-016",), reverse_links=(),
+            )
+
+    def test_manifest_cannot_self_issue_stage09_release_or_mvp_qualification(self):
+        complete = self.complete_manifest()
+        for changes in (
+            {"verification_decision": "PASS"},
+            {"release_decision": "READY"},
+            {"mvp_qualified": True},
+        ):
+            with self.subTest(changes=changes), self.assertRaisesRegex(
+                InvalidEvidence, "cannot create qualification"
+            ):
+                DemonstrationManifest(**{**complete.__dict__, **changes})
+
+    def test_git_reference_inspection_detects_current_stale_broken_and_nonqualifying(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            run_git(repo, "init")
+            run_git(repo, "config", "user.email", "test@example.com")
+            run_git(repo, "config", "user.name", "Test User")
+            (repo / "proof.md").write_text("proof\n", encoding="utf-8")
+            run_git(repo, "add", "proof.md")
+            run_git(repo, "commit", "-m", "proof")
+            commit = run_git(repo, "rev-parse", "HEAD")
+            committed_blob = subprocess.run(
+                ["git", "show", f"{commit}:proof.md"], cwd=repo,
+                capture_output=True, check=True,
+            ).stdout
+            digest = hashlib.sha256(committed_blob).hexdigest()
+            values = dict(
+                repo_root=repo, reference_id="REF-PROOF", subject="IDEA",
+                owner="Stage01", repository_path="proof.md", commit=commit,
+                expected_sha256=digest, forward_links=("AC-11",), reverse_links=("G-01",),
+            )
+            self.assertEqual(inspect_demonstration_reference(**values).status, "QUALIFYING")
+            self.assertEqual(
+                inspect_demonstration_reference(**{**values, "expected_sha256": "0" * 64}).status,
+                "STALE",
+            )
+            self.assertEqual(
+                inspect_demonstration_reference(**{**values, "commit": "f" * 40}).status,
+                "BROKEN",
+            )
+            self.assertEqual(
+                inspect_demonstration_reference(**values, declared_qualifying=False).status,
+                "NON_QUALIFYING",
+            )
+
+    def test_references_use_minimum_disclosure(self):
+        with self.assertRaisesRegex(InvalidEvidence, "sensitive"):
+            DemonstrationReference(
+                reference_id="REF", subject="IDEA", owner="Stage01", status="BROKEN",
+                gap="token=do-not-store",
+            )
+
+
 class T008EvidenceRegistryTests(unittest.TestCase):
     def record(self, **changes):
         values = dict(
@@ -572,3 +717,7 @@ class T011SafetyInterlockTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+    DemonstrationManifest,
+    DemonstrationReference,
+    assemble_demonstration_manifest,
+    inspect_demonstration_reference,
