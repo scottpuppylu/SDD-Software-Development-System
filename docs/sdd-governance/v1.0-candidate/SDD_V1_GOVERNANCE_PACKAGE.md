@@ -1,0 +1,24 @@
+# SDD_V1_GOVERNANCE_PACKAGE.md
+
+## Package
+- Version: v1.0-candidate
+- Governance status: complete for candidate
+- Runtime status: partial
+- Shared Knowledge baseline: v2.3
+
+## Normative Files
+1. SDD_MASTER_SPEC.md
+2. SDD_DECISION_LOG.md
+3. SDD_INITIALIZATION_ENTRY_CONTRACT.md
+4. SDD_AGENT_ADAPTER_CONTRACT.md
+5. SDD_HUMAN_APPROVAL_BOUNDARY_MATRIX.md
+6. SDD_SNAPSHOT_GIT_CONTRACT.md
+7. SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md
+8. SDD_COST_TOKEN_GOVERNANCE_CONTRACT.md
+9. SDD_UPGRADE_PATCH_PROTOCOL.md
+
+## Informative / Implementation Files
+10. SDD_Current_Architecture.md
+11. SDD_V1_IMPLEMENTATION_ROADMAP.md
+12. SDD_V1_ACCEPTANCE_TEST_MATRIX.md
+13. SDD_V1_RC_CONSOLIDATION_REPORT.md
