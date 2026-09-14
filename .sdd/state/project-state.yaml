@@ -4,10 +4,10 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: 08
-  current_stage_name: IMPLEMENTATION_RUNNER
-  last_completed_stage: '07'
-  next_action: RERUN_AUTHORITATIVE_OWNER
+  current_stage: '05'
+  current_stage_name: AGENT_GOVERNANCE
+  last_completed_stage: '04'
+  next_action: RUN_STAGE
 stages:
   '01':
     status: DONE
@@ -20,16 +20,16 @@ stages:
     result: null
   '04':
     status: DONE
-    result: null
+    result: COMPLETED
   '05':
-    status: DONE
+    status: IN_PROGRESS
     result: null
   '06':
-    status: DONE
-    result: success
+    status: TODO
+    result: null
   '07':
-    status: DONE
-    result: PASS
+    status: TODO
+    result: null
   08:
     status: TODO
     result: null
@@ -40,7 +40,7 @@ stages:
     status: TODO
     result: null
 authorizations:
-  implementation: true
+  implementation: false
   release: false
 blocking:
   is_blocked: false

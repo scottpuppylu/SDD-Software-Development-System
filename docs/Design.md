@@ -2,7 +2,7 @@
 
 ## 1. Authority and scope
 
-This document is the approved CURRENT prospective Stage04 `IMPLEMENTATION_DECISION` authority for the SDD Software Development System. It answers: **How should the approved technical contracts be implemented structurally without changing product behavior or technical guarantees?** Its authoritative inputs are the approved current `PRODUCT_INTENT` in `docs/proposal.md`, `PRODUCT_REQUIREMENT` in `docs/PRD.md`, and `TECHNICAL_CONTRACT` in `docs/spec.md`. The lifecycle constraints in `.sdd/system.yaml` and `.sdd/stages.yaml` govern this authority.
+This document is the approved CURRENT prospective Stage04 `IMPLEMENTATION_DECISION` authority for the SDD Software Development System. It answers: **How should the approved technical contracts be implemented structurally without changing product behavior or technical guarantees?** Its authoritative inputs are the approved current `PRODUCT_INTENT` in `docs/proposal.md`, `PRODUCT_REQUIREMENT` in `docs/PRD.md`, and `TECHNICAL_CONTRACT` in `docs/spec.md`. The lifecycle constraints in `.sdd/system.yaml` and `.sdd/stages.yaml` govern this authority. This remediation also applies the Architecture Constitution in `docs/sdd-governance/v1.0-candidate/SDD_MASTER_SPEC.md`, using the canonical `ARCH-AC-*` namespace established by approved durable decision `HD-A2-ARCH-IDENTIFIER-RESOLUTION-001`.
 
 This approved authority owns `IMPLEMENTATION_DECISION` only. It does not redefine requirements or technical contracts, document current implementation conformance, reconstruct historical Phase04 authority, create `AGENT_REPOSITORY_GOVERNANCE` or `EXECUTION_DECOMPOSITION` authority, grant Stage07 `PASS`, authorize Stage08 implementation, evaluate the Recovery Gate or Stage09, create Stage09 `PASS`, or create Stage10, release, or deploy authority. Existing implementation was inspected only to preserve established component terminology; that inspection is evidence, does not establish conformance, and does not adopt implementation or tests as authority. Downstream authority still requires independent approval.
 
@@ -13,6 +13,7 @@ Every `DES-*` below is an approved current implementation-design decision within
 - Goals: `G-01` through `G-05`.
 - Applicable P0 requirements: 34 of 34, with their approved acceptance criteria.
 - Applicable P0 technical contracts: `SPEC-001` through `SPEC-017`.
+- Applicable Architecture Constitution criteria: `ARCH-AC-01` through `ARCH-AC-07`. Architecture criteria do not occupy or reinterpret the PRD acceptance-criterion namespace `AC-01` through `AC-36`.
 - Authority is domain-specific and forms a non-linear graph. No `PRD > Spec > Design` or other linear precedence exists.
 - Repository/Git is the persistent execution-state and traceability basis; chat memory is not authoritative execution state.
 - Stage07 `PASS` is the only normal new-implementation authorization. Tests do not produce Stage09 `PASS`; Stage09 owns the verification decision. Stage09 `PASS` is required for Stage10 entry.
@@ -49,6 +50,51 @@ The intended MVP is a modular local application. Modules are logical responsibil
 | Status/reporting projector | Build plain-language, qualification-separated views from a consistent persisted snapshot. | Does not infer missing facts or upgrade qualification. |
 
 The normal interaction is: adapter submits an operation; orchestrator loads one repository/Git-backed snapshot; authority resolver and lifecycle governor evaluate it; Human Decision, reasoning, or execution capability is invoked only if eligible; the orchestrator validates and persists the resulting transition; status/reporting projects the committed result. Failures follow the same path and are persisted as truthful outcomes.
+
+### DES-019 - Architecture Constitution boundary model
+
+- **Decision:** Classify every runtime capability by its architectural role as Core, Harness, Edge/Spoke, Skill/Module, or Adapter. These roles are logical responsibility and dependency boundaries; they do not require separate processes or services. A component may be both a cohesive Module and an Adapter or Spoke, but it must have one explicit owned responsibility and may not use overlapping labels to bypass a boundary.
+- **Constitution source:** `ARCH-AC-01` through `ARCH-AC-07`, with canonical identity established by `HD-A2-ARCH-IDENTIFIER-RESOLUTION-001`.
+- **Rationale:** Explicit roles keep lifecycle and authority enforcement small, isolate provider and domain capabilities, and let later stages test or replace complex capabilities without changing governance semantics.
+- **Dependency direction:** Harness components wire the Core and ports. The Core depends only on governed contracts and abstract capability ports. Edge/Spoke, Skill/Module, and Adapter components implement those ports and may depend outward on their bounded capability or provider. Provider-specific dependencies must not flow back into the Core or Harness. State and evidence side effects cross only their named persistence interfaces.
+- **Failure behavior:** An unclassified component, an inward provider-specific dependency, business/domain state in the Core or Harness, execution before required policy checks, or an unenforced required limit is an architecture gap. Stage04 records the design requirement but does not claim implementation conformance; Stage06 must assess impact and Stage07 must withhold `PASS` while a required check is failed, missing, or unverifiable.
+- **Preservation boundary:** This decision refines architecture documentation only. It does not modify code or tests, invalidate existing implementation evidence, reopen a task, or claim that observed implementation paths conform.
+
+#### Constitution role boundaries
+
+| Role | Owned design responsibility | Prohibited responsibility | Observed repository evidence, not conformance proof |
+| --- | --- | --- | --- |
+| Core | Lifecycle invariants, authority/gate evaluation, routing policy, governed state-transition decisions, and minimal coordination. | Domain-specific business logic, provider-specific execution, complex transformation, or domain-state management. | `sdd_orchestrator/core.py` exposes the current core candidate; its thinness and import direction require Stage06 impact review. |
+| Harness | Bootstrap, configuration loading, dependency injection, port binding, dispatch wiring, and lifecycle integration. | Substantive authority decisions, domain knowledge, provider branching, or qualification invention. | `cli.py`, `pipeline.py`, `runner.py`, and `system_controller.py` are observed harness candidates; their exact responsibility placement is not verified here. |
+| Edge | A replaceable capability at the system boundary, including external execution, persistence, evidence, reporting, context processing, or telemetry. | Rewriting Core lifecycle or authority semantics. | Provider, Git, evidence, context, and telemetry modules are observed candidates. |
+| Spoke | A cohesive capability reached through a Core-owned port, such as Human Decision, evidence, verification, recovery, or status projection. | Becoming an alternate control plane or self-authorizing its result. | `decisions.py`, `evidence_writer.py`, `git_runtime.py`, and verification modules are observed candidates. |
+| Skill | A bounded stage-specific reasoning or execution capability with explicit inputs, outputs, permission scope, and failure result. | Owning lifecycle authority merely because it performs analysis or execution. | `.sdd/instructions/` and provider-executed stage capabilities are observed candidates; replaceability remains to be evaluated. |
+| Module | A cohesive, independently testable implementation unit within one of the other roles. | Cross-cutting hidden state or undocumented coupling that defeats replacement or isolated verification. | The current `sdd_orchestrator/` files show responsibility-oriented modules, but cohesion and dependency direction are not Stage04 proof. |
+| Adapter | Translation across an interaction, provider, execution, storage, or external-system boundary through a stable contract. | Leaking provider-specific branches into Core/Harness or upgrading provider output into authority/evidence. | `providers.py`, `codex_adapter.py`, `executor.py`, and the interaction boundary are observed candidates. |
+
+#### Architecture Constitution coverage
+
+| Criterion | Stage04 design coverage | Current implementation evidence classification |
+| --- | --- | --- |
+| `ARCH-AC-01` Thin Core / Fat Edge | The Core boundary above limits orchestration to lifecycle, routing, authority, gates, policy, and minimal coordination; complex capabilities are assigned to Edge/Spoke/Module roles. | Relevant modules exist, but thinness and dependency direction are documented, not proven. Stage06 impact evaluation required. |
+| `ARCH-AC-02` Thin Harness / Fat Skills | The Harness is limited to bootstrap, wiring, dependency injection, interface binding, dispatch, and lifecycle integration; capability behavior belongs in cohesive skills/modules. | Candidate harness and capability modules exist, but absence of domain/provider logic in the harness is not proven. Stage06 impact evaluation required. |
+| `ARCH-AC-03` Provider and Capability Independence | `DES-006`, `DES-007`, `DES-016`, and this decision require ports/adapters and prohibit provider-specific dependencies in Core/Harness. | Provider/adapter modules are present. Cross-import and behavioral independence remain unverified. |
+| `ARCH-AC-04` Governance Before Execution | The governed interaction orders fresh identity/snapshot loading, authority and lifecycle evaluation, data/security/cost/sandbox/tool policy preflight, then eligible provider or tool dispatch. Any missing or failed check blocks dispatch. | Existing snapshot, envelope, and safety components are observed; complete pre-dispatch coverage for every listed policy is not proven and is a Stage06 impact candidate. |
+| `ARCH-AC-05` Default Deny / Least Capability | `DES-007`, `DES-013`, and this decision require explicit capability grants and deny unlisted agent, tool, credential, network, filesystem, Git, deployment, and secret operations. | Bounded path and safety policies are observed, but complete capability-class enforcement is not proven. |
+| `ARCH-AC-06` Bounded Autonomous Execution | Every eligible dispatch must carry explicit token, cost, tool-call, duration, filesystem, network, Git, deployment, and secret-access limits; exhaustion or absence fails closed while preserving state/evidence. | Some task, filesystem, Git, and timeout bounds are observed. Complete cost/token, network, deployment, and secret limit enforcement is suspected incomplete and requires Stage06 impact evaluation. |
+| `ARCH-AC-07` Architecture Enforcement | Stage04 supplies this mapping; Stage05 must govern it; Stage06 must evaluate task/implementation impact; Stage07 must evaluate current `ARCH-AC-01` through `ARCH-AC-08` evidence and block on failed, missing, or unverifiable coverage. | No downstream reevaluation is claimed by this Stage04 remediation. |
+
+#### Downstream impact candidates
+
+These are bounded findings for Stage06 impact evaluation, not implementation tasks or Stage09 conclusions:
+
+1. Inspect actual imports and responsibilities to determine whether Core and Harness remain thin and provider-independent.
+2. Determine whether every agent/tool dispatch is preceded by identity, authorization, data classification, security, cost/token, sandbox, and tool-permission checks.
+3. Determine whether every `ARCH-AC-06` limit class is explicit and enforced, especially cost/token, network, deployment, and secret access.
+4. Determine whether Edge/Spoke/Skill/Module components are independently testable and replaceable through stable contracts.
+5. Record the known `tests/test_m7_decision_gateway.py` fixture gap: its copied repository fixture assumes `.sdd/decisions` is empty and fails when the durable A2 decision exists. Stage04 does not modify that test; Stage06 must decide whether a bounded maintenance task is required.
+
+Existing implementation checkpoints and TASK-001 through TASK-020 qualification evidence remain historical implementation facts. This design remediation neither invalidates them nor establishes their conformance to the new Architecture Constitution.
 
 ## 5. Orchestrator and lifecycle design
 
@@ -397,6 +443,21 @@ APPROVED_CURRENT_AUTHORITY
 P0_DESIGN_COVERAGE_COMPLETE =
 YES
 
+ARCHITECTURE_CONSTITUTION_NAMESPACE =
+ARCH-AC-01_THROUGH_ARCH-AC-09
+
+ARCHITECTURE_CONSTITUTION_STAGE04_COVERAGE =
+ARCH-AC-01_THROUGH_ARCH-AC-07_COMPLETE
+
+ARCHITECTURE_IMPLEMENTATION_CONFORMANCE =
+NOT_EVALUATED_BY_STAGE04
+
+STAGE06_ARCHITECTURE_IMPACT_EVALUATION_REQUIRED =
+YES
+
+KNOWN_DECISION_STORE_FIXTURE_GAP =
+RECORDED_FOR_STAGE06_IMPACT_EVALUATION
+
 PRODUCT_REQUIREMENT_CONFLICT =
 NONE_DETECTED
 
@@ -419,5 +480,5 @@ IMPLEMENTATION_DESIGN_PROJECT_AUTHORITY_REVIEW_REQUIRED =
 NO
 
 NEXT_STEP =
-CURRENT_AGENT_REPOSITORY_GOVERNANCE_DEFINITION
+CURRENT_AGENT_REPOSITORY_GOVERNANCE_REMEDIATION
 ```
