@@ -50,7 +50,7 @@ The following architecture principles are normative across the SDD lifecycle.
 They supplement, and do not weaken or replace, the domain-specific authority
 and the existing security, cost, upgrade, and provider governance below.
 
-### AC-01 — Thin Core / Fat Edge
+### ARCH-AC-01 — Thin Core / Fat Edge
 
 The Core Hub / Control Plane is limited to lifecycle, routing, addressing, task
 dispatch, authority, Gate, policy enforcement, and minimal coordination. It
@@ -59,46 +59,46 @@ implementation logic, complex data transformation, or domain-state
 management. Complex capabilities belong in independently replaceable Edge /
 Spoke / Skill / Module components.
 
-### AC-02 — Thin Harness / Fat Skills
+### ARCH-AC-02 — Thin Harness / Fat Skills
 
 The Harness is limited to bootstrap, wiring, dependency injection, interface
 binding, and lifecycle integration. It must not contain domain knowledge or
 business logic. Skills and domain modules must be cohesive, self-contained,
 independently testable, replaceable, and upgradeable.
 
-### AC-03 — Provider and Capability Independence
+### ARCH-AC-03 — Provider and Capability Independence
 
 Codex, Claude Code, Astra, and future LLM, coding-agent, or execution
 providers must integrate through adapter and skill contracts. Provider-specific
 branch logic must not contaminate the Core or Harness.
 
-### AC-04 — Governance Before Execution
+### ARCH-AC-04 — Governance Before Execution
 
 Before any agent or tool execution, identity, authorization, data
 classification, security policy, cost/token budget, sandbox policy, and tool
 permission checks must complete. Failure of any check is fail-closed and
 blocks execution.
 
-### AC-05 — Default Deny / Least Capability
+### ARCH-AC-05 — Default Deny / Least Capability
 
 Agent, tool, credential, network, filesystem, Git, and deployment capabilities
 are deny-by-default and least-privilege / least-capability. Anything not
 explicitly authorized is prohibited.
 
-### AC-06 — Bounded Autonomous Execution
+### ARCH-AC-06 — Bounded Autonomous Execution
 
 Token, cost, tool-call, runtime-duration, filesystem-scope, network-access,
 Git-action, deployment-action, and secret-access limits must be explicit and
 enforced. Exceeding a limit must not silently continue.
 
-### AC-07 — Architecture Enforcement
+### ARCH-AC-07 — Architecture Enforcement
 
 Stage 04 must apply these principles to module boundaries. Stage 05 must define
 the related agent and repository governance. Stage 07 must enforce these
 principles as mandatory Pre-Implementation Gate checks; a violation must not
 yield `PASS`.
 
-### AC-08 — Agent Governance Control Coverage
+### ARCH-AC-08 — Agent Governance Control Coverage
 
 Agent Governance must define or reference controls for data-sensitivity
 classification, identity and capability permissions, encryption in transit and
@@ -107,7 +107,7 @@ detection, blocking malicious or unauthorized tool calls, and token/cost
 budget enforcement. Existing specialized contracts remain authoritative for
 their respective domains.
 
-### AC-09 — Architecture-Conformant Provider Changes
+### ARCH-AC-09 — Architecture-Conformant Provider Changes
 
 Model and provider evaluation must include Architecture Constitution
 conformance. A model or provider must not become the default solely because it
@@ -180,13 +180,13 @@ Owns technical state, schema, API/interface, validation, error, security/privacy
 ### Stage 04 — Software Design
 Output: `docs/Design.md`
 Owns architecture, module boundaries, implementation strategy, dependencies, framework/library, observability and repository mapping.
-Stage 04 must apply AC-01 through AC-07 and record Core, Harness, Edge,
+Stage 04 must apply ARCH-AC-01 through ARCH-AC-07 and record Core, Harness, Edge,
 Spoke, Skill, Module, and adapter boundaries accordingly.
 
 ### Stage 05 — Agent Governance
 Output: `AGENTS.md`
 Owns permissions, prohibitions, authority-conflict behavior, testing, Git checkpoint, start/resume, protected scope and escalation.
-Stage 05 must define or reference the AC-08 controls for data sensitivity,
+Stage 05 must define or reference the ARCH-AC-08 controls for data sensitivity,
 identity/capability permission, encryption in transit and at rest, sandbox
 execution, prompt-injection or malicious-instruction detection, unauthorized
 tool-call blocking, and token/cost enforcement.
@@ -198,7 +198,7 @@ Atomic Tasks must be independently executable, verifiable, traceable and checkpo
 ### Stage 07 — Pre-Implementation Gate
 Result: `PASS | FAIL | INCOMPLETE`
 
-The Gate must check AC-01 through AC-08, including architecture boundaries,
+The Gate must check ARCH-AC-01 through ARCH-AC-08, including architecture boundaries,
 provider independence, governance-before-execution, default-deny/least
 capability, bounded execution, and Stage 05 control coverage. Any failed,
 missing, or unverifiable check blocks `PASS`.
@@ -380,8 +380,8 @@ Key rules:
 
 Remote Sandbox is infrastructure, not Authority.
 
-Remote Sandbox enforcement implements AC-04 through AC-06 and must preserve
-AC-05 deny-by-default / least-capability behavior; the formal contract remains
+Remote Sandbox enforcement implements ARCH-AC-04 through ARCH-AC-06 and must preserve
+ARCH-AC-05 deny-by-default / least-capability behavior; the formal contract remains
 the detailed security authority.
 
 ---
@@ -408,7 +408,7 @@ Budget must never trigger silent truncation of required authority/governance/evi
 
 Cost-aware provider routing may use only SDD-conformant adapters.
 
-Cost and token limits are an enforcement component of AC-04 and AC-06; this
+Cost and token limits are an enforcement component of ARCH-AC-04 and ARCH-AC-06; this
 section's formal contract remains the detailed cost/token authority.
 
 ---
@@ -454,7 +454,7 @@ Evaluate:
 - reproducibility
 - security
 - SDD Gate/evidence compatibility
-- Architecture Constitution conformance, including AC-01 through AC-06 and
+- Architecture Constitution conformance, including ARCH-AC-01 through ARCH-AC-06 and
   provider/capability independence
 
 Possible outcomes:
@@ -465,7 +465,7 @@ Possible outcomes:
 - REJECT
 
 No model or provider may be promoted to default solely because it is newer,
-stronger, or benchmark-leading; AC-09 conformance and the complete evaluation
+stronger, or benchmark-leading; ARCH-AC-09 conformance and the complete evaluation
 remain required.
 
 ---
