@@ -7,7 +7,7 @@ lifecycle:
   current_stage: '05'
   current_stage_name: AGENT_GOVERNANCE
   last_completed_stage: '04'
-  next_action: RUN_STAGE
+  next_action: RERUN_AUTHORITATIVE_OWNER
 stages:
   '01':
     status: DONE
