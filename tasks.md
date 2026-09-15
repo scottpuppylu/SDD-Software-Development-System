@@ -4,16 +4,17 @@
 
 This artifact is the approved CURRENT prospective Stage06 `EXECUTION_DECOMPOSITION` authority. Stage06 owns task decomposition only: atomic work boundaries, dependency order, implementation scope, required outcomes, preservation and failure obligations, future verification, and checkpoint eligibility. It does not create or revise `PRODUCT_INTENT`, `PRODUCT_REQUIREMENT`, `TECHNICAL_CONTRACT`, `IMPLEMENTATION_DECISION`, or `AGENT_REPOSITORY_GOVERNANCE` authority.
 
-This approved whole artifact contains prospective `TASK-001` through `TASK-020`. Its approval does not create Stage07 `PASS`, authorize Stage08 implementation, establish implementation conformance, evaluate the Current Implementation Recovery Gate, create Stage09 `PASS`, or create Stage10, release, or deployment authority. Existing source, tests, implementation evidence, and historical completion claims were not used to derive these tasks and cannot make any task `DONE`.
+This approved whole artifact contains `TASK-001` through `TASK-025`. `TASK-001` through `TASK-020` retain their original prospective contracts and separately preserved historical implementation qualifications. `TASK-021` through `TASK-025` are new bounded remediation contracts created by the current Stage06 impact evaluation. Approval of this artifact does not create Stage07 `PASS`, authorize Stage08 implementation, evaluate the Current Implementation Recovery Gate, create Stage09 `PASS`, or create Stage10, release, or deployment authority.
 
 ## 2. Approved upstream baseline references
 
 - `docs/proposal.md`: CURRENT `PRODUCT_INTENT` authority, `APPROVED_CURRENT_AUTHORITY`; goals `G-01` through `G-05`.
 - `docs/PRD.md`: CURRENT `PRODUCT_REQUIREMENT` authority, `APPROVED_CURRENT_AUTHORITY`; applicable P0 requirements and acceptance criteria.
 - `docs/spec.md`: CURRENT `TECHNICAL_CONTRACT` authority, `APPROVED_CURRENT_AUTHORITY`; `SPEC-001` through `SPEC-018`.
-- `docs/Design.md`: CURRENT `IMPLEMENTATION_DECISION` authority, `APPROVED_CURRENT_AUTHORITY`; `DES-001` through `DES-018`.
+- `docs/Design.md`: CURRENT `IMPLEMENTATION_DECISION` authority, `APPROVED_CURRENT_AUTHORITY`; `DES-001` through `DES-019`.
 - `AGENTS.md`: CURRENT Stage05 `AGENT_REPOSITORY_GOVERNANCE` authority, `APPROVED_CURRENT_AUTHORITY`.
 - `.sdd/system.yaml` and `.sdd/stages.yaml`: configured authority graph, Stage06 contract, lifecycle gates, traceability chain, and checkpoint rules.
+- `.sdd/decisions/HD-A2-ARCH-IDENTIFIER-RESOLUTION-001.yaml` and `.sdd/decisions/HD-A2-PRD-NAMESPACE-CORRECTION-002.yaml`: approved durable authority establishing `ARCH-AC-01` through `ARCH-AC-09` and correcting the separate PRD namespace to `AC-01` through `AC-37` without semantic change.
 
 Authority is domain-specific and non-linear. A discovered cross-domain conflict must follow `DETECT -> REPORT -> BLOCK -> ROUTE_TO_AUTHORITATIVE_OWNER`. No task may silently repair an upstream authority problem.
 
@@ -393,36 +394,166 @@ Authority is domain-specific and non-linear. A discovered cross-domain conflict 
 - **Checkpoint eligibility:** Atomic-checkpoint eligible only when the common conditions in section 3 hold; the exact TASK-020 verification command fully `PASS`es; schema migration, T019 preservation, T019/T012 coexistence, task-specific dependency lookup, idempotency, conflict, atomic persistence/retry, fresh-runner, deterministic serialization, ordinary Stage08, and recovery-regression checks all pass; `git diff --check` passes; and the diff contains only TASK-020 allowed files. No live T012 reconciliation or evidence recovery may occur; no live implementation-state artifact, qualifying evidence, authority artifact, historical checkpoint, Stage07/09/10 artifact, or unrelated task may change. Completion means only that the schema `2.0` capability is implemented and verified; it does not qualify or reconcile T012, select a next task, create Stage07 `PASS`, or create Stage09/Stage10/release authority.
 - **Out-of-scope:** Modifying live `.sdd/state/implementation-state.yaml`; performing T012 reconciliation; performing T012/T019 evidence recovery; modifying or fabricating qualifying evidence; implementing T013 or another task; changing SPEC-018, DES-018, AGENTS.md, or any authority artifact; changing Stage07 authority semantics; selecting or executing a next task; qualification deletion/revocation; historical Git rewrite; Stage09 qualification; Stage10/release; or deployment.
 
-## 4. Whole-artifact dependency graph
+## 4. Stage04/05 Architecture Constitution impact evaluation
+
+This evaluation used the current source tree, import graph, tests, qualified `TASK-001` through `TASK-020` evidence, the Stage04 and Stage05 run artifacts/checkpoints, both approved A2 decisions, and the normative security, cost/token, agent-adapter, and Human Approval contracts. A documentation statement alone was not treated as enforcement. Existing qualifications remain intact because no historical task contract or checkpoint was disproved.
+
+### 4.1 Candidate disposition
+
+| Impact candidate | Classification | Repository finding and governed disposition |
+| --- | --- | --- |
+| `CORE_AND_HARNESS_RESPONSIBILITY_IMPORT_REVIEW` | `ALREADY_IMPLEMENTED_AND_EVIDENCED` | `core.py` has no inward `sdd_orchestrator` imports and owns lifecycle/authority/policy coordination; provider construction remains in CLI bootstrap and capability behavior remains in modules. Qualified T002/T005/T017/T018 evidence plus current architecture-targeted tests support the boundary. |
+| `PROVIDER_CROSS_IMPORT_REVIEW` | `ALREADY_IMPLEMENTED_AND_EVIDENCED` | Provider implementations remain behind `ReasoningProvider`/`ReasoningProviderBoundary`; Core has no provider import and `system_controller.py` receives the reasoning executor by injection. T007 evidence and `tests/test_m4_reasoning_pipeline.py` prove substitute-provider equivalence and non-authoritative provider output. |
+| `IDENTITY_AUTHORIZATION_SECURITY_COST_SANDBOX_TOOL_PREFLIGHT` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Fresh repository identity, authority, sealed Stage08 scope, sandbox, timeout, path safety, and verification-command policy exist, but there is no single mandatory envelope covering authentication, data class, security policy, budget, network/secret/deployment limits, exact tool call, audit output, and approval binding before every material dispatch. `TASK-021` through `TASK-023` close only those missing dimensions. |
+| `CAPABILITY_CLASS_ENFORCEMENT` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | The reasoning boundary has an allowlisted capability vocabulary and denies unknown/empty capabilities; Stage08 write requires a sealed envelope. It does not implement the complete Stage05 capability-class grant schema or default-deny matching for every tool, network, credential, Git, external-side-effect, deployment, and protected-production capability. `TASK-021` owns the delta. |
+| `COST_TOKEN_NETWORK_DEPLOYMENT_SECRET_LIMITS` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Runtime timeout, file/Git scope, token provenance measurement, redaction, and release/deployment authority separation exist. Pre-dispatch hard budgets, call/resource counters, network destination grants, credential/secret grants, and explicit deployment-action limits are absent. `TASK-022` and `TASK-023` own the delta. |
+| `EDGE_SPOKE_SKILL_MODULE_REPLACEABILITY` | `ALREADY_IMPLEMENTED_AND_EVIDENCED` | Provider, Git, decision, evidence, verification, context, telemetry, and execution responsibilities are isolated modules with stable call contracts and focused tests. T001, T006-T010, T013-T017 and current provider-boundary tests evidence independent substitution/failure containment; no inward provider dependency was found. |
+| `tests/test_m7_decision_gateway.py` | `TEST_FIXTURE_GAP` | The fixture copies the repository `.sdd` tree and then asserts `DecisionGateway.list()` is empty. The current run produced 126 passes and one failure only because the two legitimate approved A2 decisions are present. Gateway persistence, collision, scope, history, and authority behavior remained green. `TASK-025` owns fixture isolation only. |
+| `IDENTITY_AUTHENTICATION_PROJECT_ENVIRONMENT_BINDING` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Actor, command, repository, branch, baseline, task, attempt, and provider identities are partially represented. Authentication method/non-secret credential reference and actor-project-environment binding are not uniformly required or validated before dispatch. `TASK-021` owns the delta. |
+| `SENSITIVE_DATA_CLASSIFICATION_ENCRYPTION_AND_REDACTION` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Key/pattern-based output redaction and minimum-disclosure references exist and are tested. No pre-transmission sensitivity classification or enforceable retention/encryption/environment decision is bound to dispatch. `TASK-022` owns the delta while preserving current redaction. |
+| `PROMPT_INJECTION_AND_MALICIOUS_INSTRUCTION_CONTAINMENT` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Authority references, output schemas, output-path checks, and forbidden authority claims constrain provider results, but untrusted embedded instructions are not classified or blocked by a dedicated pre-side-effect policy. `TASK-022` owns the delta. |
+| `TOOL_ALLOW_DENY_ARGUMENT_TARGET_AND_SIDE_EFFECT_VALIDATION` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Verification commands are parsed without a shell and allowlisted; Stage08 paths and post-run diffs are checked. General agent/tool calls do not yet bind exact tool, arguments, target, approval class, and expected side effects to the current envelope. `TASK-021` owns the delta. |
+| `SANDBOX_FILESYSTEM_NETWORK_CREDENTIAL_BOUNDARY_ENFORCEMENT` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Reasoning uses read-only sandbox configuration; Stage08 uses workspace-write plus exact path/diff enforcement. Network destinations, credential classes/references, environment binding, and sandbox-class compatibility are not enforced by one policy boundary. `TASK-022` owns the delta. |
+| `COST_TOKEN_TOOL_CALL_RUNTIME_RESOURCE_LIMIT_ENFORCEMENT` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Timeouts, payload bounds, provider usage provenance, and measurement exist, but hard/soft budget state, provider/tool-call counts, actual-versus-estimated token limits, process/resource limits, retry accounting, and exhaustion stops are incomplete. `TASK-023` owns the delta. |
+| `PROVIDER_CHANGE_FALLBACK_AND_DEFAULT_PROMOTION_CONFORMANCE_GATE` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Providers are replaceable and failures expose alternate-provider routes, but fallback is not executed through a capability/security/budget conformance gate and default promotion has no evidence-bound decision. `TASK-024` owns the delta. |
+| `AUDIT_EVIDENCE_AND_HUMAN_APPROVAL_BINDING_ENFORCEMENT` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK` | Durable Human Decisions, safety authorization, failure records, Stage run artifacts, Stage08 evidence, and qualification separation are implemented and qualified. Material dispatch audit records do not uniformly bind the complete control envelope, actual side effects/limits, approval class/reference, and invalidation conditions. `TASK-021` owns this incremental binding gap. |
+
+### 4.2 Architecture Constitution impact
+
+| Criterion | Stage06 impact result |
+| --- | --- |
+| `ARCH-AC-01` | `ALREADY_IMPLEMENTED_AND_EVIDENCED`: lifecycle/authority/policy coordination remains in Core; complex provider, context, Git, decision, evidence, verification, recovery, and telemetry behavior remains at Edge/Spoke/Module boundaries. |
+| `ARCH-AC-02` | `ALREADY_IMPLEMENTED_AND_EVIDENCED`: CLI/controller/runner provide bootstrap, injection, dispatch, and lifecycle integration while cohesive capability modules remain independently tested. Provider selection branching in CLI is adapter binding, not provider-specific lifecycle or domain behavior. |
+| `ARCH-AC-03` | `ALREADY_IMPLEMENTED_AND_EVIDENCED`: no provider dependency enters Core; substitute-provider tests preserve behavior and provider outputs remain proposed/non-authoritative. |
+| `ARCH-AC-04` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK`: existing preflight is substantial but lacks all mandatory identity/authentication/data/security/budget/network/secret/tool/audit fields. `TASK-021` through `TASK-023`. |
+| `ARCH-AC-05` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK`: reasoning and verification subsets are default-deny, but the complete capability classes and exact tool/network/credential/deployment grants are absent. `TASK-021` and `TASK-022`. |
+| `ARCH-AC-06` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK`: timeout, filesystem, Git, and some provider bounds exist; cost/token/call/resource/network/deployment/secret hard-limit enforcement is incomplete. `TASK-022` and `TASK-023`. |
+| `ARCH-AC-07` | `DOCUMENTATION_ONLY_GAP`: Stage04 and Stage05 now define the architecture requirements and this Stage06 maps every proven gap to bounded tasks. A fresh Stage07 must independently evaluate `ARCH-AC-01` through `ARCH-AC-08` and cannot issue `PASS` for missing/unverifiable coverage; Stage06 does not execute or pre-decide that gate. |
+| `ARCH-AC-08` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK`: governance coverage is complete, while the enforcement deltas are bounded by `TASK-021` through `TASK-023`. |
+| `ARCH-AC-09` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK`: adapter replaceability is evidenced, but provider change/fallback/default-promotion conformance is not enforced. `TASK-024`. |
+
+No prior task is reopened. The new tasks extend current authority without altering `TASK-001` through `TASK-020`, their checkpoints, qualification records, or evidence. The new identifier allocation continues the repository's sequential `TASK-NNN` convention from the existing highest identifier `TASK-020`.
+
+## TASK-021 - Unified pre-dispatch governance envelope and capability enforcement
+
+- **Status:** `TODO`
+- **Purpose:** Enforce one current, fail-closed control envelope before material agent, provider, tool, Git-write, or protected dispatch, while preserving existing sealed Stage08 and safety behavior.
+- **Authority trace:** `ARCH-AC-04, ARCH-AC-05, ARCH-AC-07, ARCH-AC-08 -> DES-019 -> TASK-021`; supporting current contracts are `AGENTS.md` sections 4, 7, 11, and 14, `SDD_AGENT_ADAPTER_CONTRACT.md`, `SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md`, and `SDD_HUMAN_APPROVAL_BOUNDARY_MATRIX.md`.
+- **Dependencies:** `TASK-003`, `TASK-005`, `TASK-006`, `TASK-007`, `TASK-008`, `TASK-010`, `TASK-011`, `TASK-012`, `TASK-017`.
+- **Allowed files:** `sdd_orchestrator/governance_envelope.py`, `sdd_orchestrator/providers.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/system_controller.py`, `sdd_orchestrator/runner.py`, `sdd_orchestrator/evidence_writer.py`, `tests/test_governance_envelope.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_governance_envelope.py tests/test_m4_reasoning_pipeline.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py`.
+- **Allowed implementation scope:** A provider-neutral immutable control-envelope model and validator; current identity/authentication-reference/project/environment binding; explicit capability classes and grants; exact action/tool/arguments/target/scope/side-effect matching; authorization, Stage07, Human Decision/approval, audit/evidence, and expiry bindings; integration immediately before existing reasoning, Stage08, lifecycle-tool, and Git-write dispatch boundaries; and post-dispatch actual-scope/effect reconciliation. Do not implement provider-specific domain behavior or change upstream authority semantics.
+- **Required behavior/outcome:** Every applicable dispatch fails closed before side effect when a required identity, authentication reference, authority/gate/approval, capability, exact call target, scope, expiry, policy, limit reference, or evidence obligation is missing, stale, ambiguous, conflicting, unverified, or out of scope. Unlisted capability classes/actions/tools/arguments/paths/Git actions/external effects are denied. Existing sealed Stage08 envelopes remain necessary and are referenced, not weakened or replaced. Material audit/evidence records bind the non-secret envelope identity, outcome, observed effects, failure route, and exact current approval class/reference.
+- **Preservation obligations:** Preserve provider independence, current lifecycle/authority/Human Decision semantics, existing Stage08 evidence/checkpoint atomicity, qualified task records, minimum disclosure, and all historical A2 decisions. Do not infer authentication or authority from credential possession, provider capability, prior success, or silence.
+- **Error/failure expectations:** Reject malformed, missing, stale, expired, reused, overbroad, mismatched, or unsupported envelopes/grants before dispatch; contain post-dispatch scope/effect mismatch, preserve valid work, record a bounded failure, and route to the exact authority/security/Human Decision owner without fallback or permission enlargement.
+- **Security/safety expectations:** Default deny and least capability are mandatory. Approval binds exact action, target, scope, baseline, environment, risk, provider capability, and validity; security-sensitive values remain references and are never persisted.
+- **Verification requirements:** Prove positive least-capability dispatch and negative cases for every absent/unknown class, actor/project/environment mismatch, unauthenticated or stale reference, missing Stage07/approval binding, tool/argument/target mismatch, scope or side-effect overrun, expired grant, reused approval after material change, provider-output authority claim, missing audit obligation, and unchanged existing Stage08/safety behavior. Use only `PASS`, `FAIL`, or `NOT RUN` outcomes.
+- **Checkpoint eligibility:** Eligible only when the declared command passes, the diff is limited to allowed files, every relevant dispatch path uses the non-bypassable validator, all negative cases prove no side effect, existing Stage08 evidence/checkpoint tests remain green, and no authority/state/evidence artifact is rewritten.
+- **Out-of-scope:** Implementing sensitive-data/prompt/network/credential policy details owned by `TASK-022`; budget/resource enforcement owned by `TASK-023`; provider promotion/fallback owned by `TASK-024`; changing authority documents; running Stage07/08/09/10; deployment; or historical qualification mutation.
+
+## TASK-022 - Security, data, prompt-injection, sandbox, network, and credential containment
+
+- **Status:** `TODO`
+- **Purpose:** Supply the security-policy decisions consumed by the unified envelope for data sensitivity, malicious instructions, sandbox class, filesystem, network, credential, and secret access.
+- **Authority trace:** `ARCH-AC-04, ARCH-AC-05, ARCH-AC-06, ARCH-AC-08 -> DES-013, DES-019 -> TASK-022`; supporting current contracts are `AGENTS.md` sections 6, 11, and 14 and `SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md`.
+- **Dependencies:** `TASK-011`, `TASK-021`.
+- **Allowed files:** `sdd_orchestrator/security_policy.py`, `sdd_orchestrator/governance_envelope.py`, `sdd_orchestrator/providers.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/codex_cli.py`, `sdd_orchestrator/evidence_writer.py`, `sdd_orchestrator/result_serialization.py`, `tests/test_security_policy.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_security_policy.py tests/test_m4_reasoning_pipeline.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py`.
+- **Allowed implementation scope:** Data-class and handling-policy references; pre-transmission classification decision; required redaction/retention/encryption/environment compatibility; untrusted-instruction and malicious/escalating tool-call findings; sandbox-class compatibility; exact filesystem, network destination/purpose, credential-class/reference, secret-access, process, and production-boundary grants; stop-before-side-effect enforcement; and minimum-disclosure security audit integration. Preserve existing redaction and path-scope components as compatible subcontrols.
+- **Required behavior/outcome:** Unknown or prohibited data class, absent required encryption/retention rule, suspected prompt injection or confused-deputy escalation, sandbox mismatch, unlisted path/endpoint/purpose/credential/secret/process, cross-project/session reuse, or proposed production credential in a general Stage08 sandbox denies dispatch. The result identifies only safe categories/references, preserves prior state, and routes to security, authority owner, or Human Decision. Allowed cases expose no secret value and post-dispatch checks catch actual boundary overrun.
+- **Preservation obligations:** Preserve current safety preflight, sealed Stage08 paths, read-only reasoning default, atomic evidence, provider-independent contracts, and existing minimum-disclosure output. Do not add an authentication/IAM, encryption, secrets, cloud, or network product choice.
+- **Error/failure expectations:** Fail closed on missing classification, policy, environment, endpoint, credential reference, sandbox compatibility, or safe audit path; never probe alternate encodings/tools/providers/endpoints or weaken policy to continue.
+- **Security/safety expectations:** Secret values are never accepted as ordinary governance payloads or persisted. Encryption/retention requirements are validated as policy/evidence bindings; the task does not implement a storage or cryptography product.
+- **Verification requirements:** Cover all sandbox classes and environment bindings; default-denied network/credential/secret access; exact allowlisted destination/purpose; path traversal and post-run diff overrun; prompt-injection and malicious tool escalation before side effect; sensitive-data classification/redaction/encryption-policy cases; cross-project/provider-session isolation; suspected exposure handling; and unchanged existing safety/redaction behavior.
+- **Checkpoint eligibility:** Eligible only when every negative test proves no protected dispatch or secret persistence, positive grants are exact and attributable, declared regression tests pass, and only allowed files change.
+- **Out-of-scope:** Selecting security products, live network/secret/production access, budget enforcement, provider promotion, authority changes, test-fixture repair, or Stage07/08/09/10 execution.
+
+## TASK-023 - Cost, token, call, runtime, resource, and deployment-limit enforcement
+
+- **Status:** `TODO`
+- **Purpose:** Enforce explicit pre-dispatch and cumulative resource limits without weakening governance, truncating required authority/evidence, or misrepresenting measurement truth.
+- **Authority trace:** `ARCH-AC-04, ARCH-AC-05, ARCH-AC-06, ARCH-AC-08 -> DES-019 -> TASK-023`; supporting current contracts are `AGENTS.md` sections 6, 11, and 14, `SDD_COST_TOKEN_GOVERNANCE_CONTRACT.md`, and `SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md`.
+- **Dependencies:** `TASK-021`, `TASK-022`.
+- **Allowed files:** `sdd_orchestrator/resource_policy.py`, `sdd_orchestrator/governance_envelope.py`, `sdd_orchestrator/providers.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/codex_cli.py`, `sdd_orchestrator/context_evaluation.py`, `sdd_orchestrator/telemetry/measurement.py`, `sdd_orchestrator/telemetry/models.py`, `tests/test_resource_policy.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_resource_policy.py tests/test_m42_context_evaluation.py tests/test_m42_measurement.py tests/test_m6_codex_adapter.py`.
+- **Allowed implementation scope:** Provider/model/runtime identity; applicable budget lookup and state; trustworthy actual versus estimated/unavailable measurement; provider/tool-call and retry counters; actual/estimated token, cost, duration, process/resource, filesystem, network, Git, deployment, and secret-access hard/soft bounds; pre-dispatch reservation/check; post-dispatch accounting; deterministic exhaustion stop/route; and approval binding for budget/deployment changes. Reuse existing timeout and telemetry primitives without making telemetry lifecycle authority.
+- **Required behavior/outcome:** Required hard limits must be known and sufficient before dispatch; exhausted/unknown-when-required budgets stop new calls without truncating mandatory context/evidence. Actual usage is accepted only from attributable structured provider/runtime evidence; Codex CLI tokens remain unavailable, not zero or estimated actual. Retries consume their declared budget. Deployment remains a separately granted capability even after Stage09/10 and cannot proceed from credential possession alone.
+- **Preservation obligations:** Preserve measurement truth classes, context reconstruction integrity, provider-independent routing, Stage09/10 separation, valid completed work, and current timeouts. Cost optimization cannot downgrade security, authority, evidence, provider conformance, or required context.
+- **Error/failure expectations:** Missing policy, invalid counters, insufficient reservation, hard-limit exhaustion, incomplete actual usage, accounting conflict, or deployment grant mismatch stops the affected dispatch and records truthful bounded state plus valid next routes; no silent continuation or retroactive usage fabrication.
+- **Security/safety expectations:** Cost ledgers contain no prompts, secrets, or raw credentials. Material budget increases and protected deployment actions require their current approval class/reference.
+- **Verification requirements:** Cover actual/estimated/context-size/unavailable truth classes; pre-dispatch hard and soft limits; cumulative provider/tool/retry counts; token/cost/runtime/resource exhaustion; no mid-context truncation; Codex unavailable token semantics; safe conformant cheaper route versus prohibited downgrade; approval-bound budget increase; explicit deployment denial/grant; atomic accounting failure; and telemetry non-authority regression.
+- **Checkpoint eligibility:** Eligible only when declared tests pass, all metered dispatch paths consume the policy, hard-limit negative cases cause no new dispatch, accounting is deterministic and attributable, regression tests remain green, and only allowed files change.
+- **Out-of-scope:** Billing-provider integration, cloud/deployment execution, altering budgets as authority, provider-default selection, authority document changes, or Stage07/08/09/10 execution.
+
+## TASK-024 - Provider change, fallback, and default-promotion conformance gate
+
+- **Status:** `TODO`
+- **Purpose:** Prevent provider/model/adapter addition, switch, fallback, upgrade, or default promotion unless current evidence proves Architecture Constitution and required capability conformance.
+- **Authority trace:** `ARCH-AC-03, ARCH-AC-07, ARCH-AC-09 -> DES-006, DES-019 -> TASK-024`; supporting current contracts are `AGENTS.md` section 14, `SDD_AGENT_ADAPTER_CONTRACT.md`, `SDD_COST_TOKEN_GOVERNANCE_CONTRACT.md`, and `SDD_HUMAN_APPROVAL_BOUNDARY_MATRIX.md`.
+- **Dependencies:** `TASK-007`, `TASK-021`, `TASK-022`, `TASK-023`.
+- **Allowed files:** `sdd_orchestrator/provider_conformance.py`, `sdd_orchestrator/providers.py`, `sdd_orchestrator/cli.py`, `sdd_orchestrator/runner.py`, `sdd_orchestrator/system_controller.py`, `tests/test_provider_conformance.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_provider_conformance.py tests/test_m4_reasoning_pipeline.py tests/test_m41_atomic_executor.py tests/test_v114_provider_schema.py`.
+- **Allowed implementation scope:** Versioned provider/adapter capability manifests; common conformance evidence; required architecture, lifecycle, authority, sandbox, security, budget, capability, evidence, and approval checks; current default-selection identity; explicit change/fallback/promotion decision; and fail-closed integration at provider construction/routing. Existing alternate-provider failure routes remain recommendations until this gate passes.
+- **Required behavior/outcome:** A provider is eligible only when current evidence covers every mandatory capability and control for the requested role. Adding, changing, falling back, or promoting never silently weakens a control. Newer, stronger, cheaper, available, or benchmark-leading status alone is insufficient. A conformant fallback preserves the same request/envelope and records the change; missing/stale/failed evidence blocks with a safe route and no automatic provider dispatch.
+- **Preservation obligations:** Preserve provider-neutral Core/Harness semantics, existing provider-output non-authority, exact context and task envelopes, evidence truth, Human Decision classes, and current OpenAI/Codex adapters until a separately authorized change qualifies.
+- **Error/failure expectations:** Reject absent/ambiguous/stale manifests or evidence; unsupported capability; changed auth/sandbox/security/budget environment; weaker fallback; default mutation without decision; and mismatch between declared and observed adapter identity. Preserve the prior valid default and record affected scope.
+- **Security/safety expectations:** Conformance metadata contains references, not credentials. Provider availability or authentication does not create authority or justify policy downgrade.
+- **Verification requirements:** Use substitute providers to prove equal lifecycle/authority semantics; cover conformant and non-conformant additions, upgrades, switches, fallbacks, default promotions, stale evidence, changed capability/environment, cost-only selection, prior-default preservation, and no provider invocation before gate success.
+- **Checkpoint eligibility:** Eligible only when the common conformance suite and declared regressions pass, every provider construction/routing entry uses the gate, negative cases make no provider call/default change, and only allowed files change.
+- **Out-of-scope:** Adding a new real provider, changing model defaults, external benchmarks, live API calls, product/technical/design changes, deployment, or Stage07/08/09/10 execution.
+
+## TASK-025 - Decision Gateway fixture isolation from durable repository decisions
+
+- **Status:** `TODO`
+- **Purpose:** Make Decision Gateway unit-test initial state explicit so legitimate repository-backed A2 decisions do not violate a test-only empty-store assumption.
+- **Authority trace:** `ARCH-AC-07 -> DES-005, DES-019 -> TASK-025`; this is a test-maintenance task and does not alter decision authority or production behavior.
+- **Dependencies:** `TASK-006`.
+- **Allowed files:** `tests/test_m7_decision_gateway.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_m7_decision_gateway.py`.
+- **Allowed implementation scope:** Fixture setup/isolation and assertions only. Create an explicit empty decision store for tests that require one while retaining separate coverage that existing approved durable decisions load truthfully. Do not change `DecisionGateway` production code or either A2 decision.
+- **Required behavior/outcome:** The independent-scope rejection test proves no new decision was persisted relative to its controlled initial state, without assuming the source repository has no durable decisions. All Decision Gateway tests pass with both current A2 records present in the source repository.
+- **Preservation obligations:** Preserve production gateway semantics, durable decision history/content, collision and path-safety checks, scoped blocking, append-only events, owner routing, and all existing test intent unrelated to fixture state.
+- **Error/failure expectations:** The test must still fail for an unexpected newly persisted decision, mutation of a copied A2 record, or production behavior regression; fixture cleanup must remain isolated to its temporary directory.
+- **Security/safety expectations:** No repository decision may be deleted, rewritten, masked, or treated as non-authoritative to obtain a green test.
+- **Verification requirements:** Run the exact declared test file and confirm every test passes with the repository containing both A2 records; inspect the diff to prove test-only scope.
+- **Checkpoint eligibility:** Eligible only when the declared command passes, only `tests/test_m7_decision_gateway.py` changes, no production/authority/state/evidence file changes, and the fix isolates fixture state rather than weakening an assertion.
+- **Out-of-scope:** Production Decision Gateway changes, decision-store migration, A2 mutation/removal, broader test cleanup, implementation qualification changes, or Stage07/08/09/10 execution.
+
+## 5. Whole-artifact dependency graph
 
 The declared dependency graph is:
 
 ```text
 TASK-001 -> TASK-002, TASK-005, TASK-008, TASK-010, TASK-012, TASK-013, TASK-016, TASK-019, TASK-020
 TASK-002 -> TASK-003, TASK-004, TASK-005, TASK-006, TASK-009, TASK-010, TASK-011, TASK-012
-TASK-003 -> TASK-015, TASK-017
+TASK-003 -> TASK-015, TASK-017, TASK-021
 TASK-004 -> TASK-015, TASK-017
-TASK-005 -> TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-019
-TASK-006 -> TASK-009, TASK-011, TASK-013, TASK-015, TASK-017
-TASK-007 -> TASK-015, TASK-017
-TASK-008 -> TASK-009, TASK-012, TASK-014, TASK-016, TASK-017, TASK-019, TASK-020
+TASK-005 -> TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-019, TASK-021
+TASK-006 -> TASK-009, TASK-011, TASK-013, TASK-015, TASK-017, TASK-021, TASK-025
+TASK-007 -> TASK-015, TASK-017, TASK-021, TASK-024
+TASK-008 -> TASK-009, TASK-012, TASK-014, TASK-016, TASK-017, TASK-019, TASK-020, TASK-021
 TASK-009 -> TASK-015, TASK-017
-TASK-010 -> TASK-007, TASK-011, TASK-012, TASK-015, TASK-017, TASK-019
-TASK-011 -> TASK-012, TASK-015, TASK-017, TASK-019
-TASK-012 -> TASK-015, TASK-017, TASK-019, TASK-020
+TASK-010 -> TASK-007, TASK-011, TASK-012, TASK-015, TASK-017, TASK-019, TASK-021
+TASK-011 -> TASK-012, TASK-015, TASK-017, TASK-019, TASK-021, TASK-022
+TASK-012 -> TASK-015, TASK-017, TASK-019, TASK-020, TASK-021
 TASK-013 -> TASK-014, TASK-016, TASK-017
 TASK-014 -> TASK-015, TASK-016, TASK-017
 TASK-015 -> TASK-016, TASK-017
 TASK-016 -> TASK-017, TASK-018
-TASK-017 -> TASK-018
+TASK-017 -> TASK-018, TASK-021
 TASK-018 -> none
 TASK-019 -> TASK-018, TASK-020
 TASK-020 -> none
+TASK-021 -> TASK-022, TASK-023, TASK-024
+TASK-022 -> TASK-023, TASK-024
+TASK-023 -> TASK-024
+TASK-024 -> none
+TASK-025 -> none
 ```
 
-Analysis of the actual dependency declarations found no cycle, self-dependency, nonexistent task reference, or missing dependency required by the stated task scopes. The former TASK-007 forward reference to TASK-010 is now decomposition-resolved; it remains a real prerequisite and is not implementation-satisfied. The graph preserves parallel work where dependencies permit it.
+Analysis of the actual dependency declarations found no cycle, self-dependency, nonexistent task reference, or missing dependency required by the stated task scopes. `TASK-021` through `TASK-024` form the control-enforcement sequence; test-only `TASK-025` is independent after its already-qualified `TASK-006` dependency. The graph preserves parallel work where dependencies permit it.
 
-## 5. Whole-artifact traceability and P0 coverage
+## 6. Whole-artifact traceability and P0/architecture coverage
 
 Stage06 extends the canonical chain only through `TASK`: `G -> FR/NFR/EC -> AC -> SPEC -> DES -> TASK`. It creates no `CODE` or `TEST_EVIDENCE` link. The approved requirement-to-SPEC and SPEC-to-DES mappings remain unchanged; the task layer extends them as follows:
 
@@ -451,15 +582,16 @@ Coverage analysis confirms:
 
 - All 34 applicable P0 requirements are covered: `FR-01` through `FR-21`, `NFR-01` through `NFR-05`, and `EC-01` through `EC-08`.
 - All applicable P0 acceptance criteria are covered: `AC-01` through `AC-21`, `AC-23` through `AC-27`, and `AC-29` through `AC-36`.
-- `SPEC-001` through `SPEC-018` and `DES-001` through `DES-018` are covered.
-- `TASK-001` through `TASK-020` each have upstream authority; orphan task count is zero.
-- All 20 tasks contain the full task contract, remain `TODO`, and collectively cover the approved P0 implementation scope.
+- `SPEC-001` through `SPEC-018` and `DES-001` through `DES-019` are covered.
+- `TASK-001` through `TASK-025` each have upstream authority; orphan task count is zero.
+- All 25 tasks contain the full task contract. The five current remediation tasks begin `TODO`; historical qualification for `TASK-001` through `TASK-020` remains exclusively in `.sdd/state/implementation-state.yaml` and its bound evidence.
+- `ARCH-AC-01` through `ARCH-AC-09` have explicit Stage06 impact results; every confirmed implementation gap is assigned to `TASK-021` through `TASK-025` without changing the Architecture Constitution semantics.
 - The dependency graph closes with zero unresolved forward references and is a DAG.
 - Approved Design reports no blocking Design TBD; this decomposition introduces no blocking task TBD and detects no cross-domain conflict.
 
 Therefore whole-artifact P0 task coverage is complete for the approved current Stage06 authority. This coverage analysis and Stage06 approval do not constitute Stage07 evaluation, implementation authorization, implementation conformance, or Stage09 qualification.
 
-## 6. Stage07-readiness support
+## 7. Stage07-readiness support
 
 This approved current authority supplies Stage07 with reviewable support for all of the following, without evaluating Stage07 or assigning it a gate result:
 
@@ -471,21 +603,23 @@ This approved current authority supplies Stage07 with reviewable support for all
 - explicit error/failure expectations and recovery routing;
 - task-specific security/safety obligations where applicable;
 - Stage08 scope boundaries, sealed-envelope requirements, and overrun stops; and
-- complete upstream traceability through `TASK` for all P0 requirements, acceptance criteria, SPECs, and DESs.
+- complete upstream traceability through `TASK` for all P0 requirements, acceptance criteria, SPECs, DESs, and Architecture Constitution remediation scope.
+
+Fresh Stage07 evaluation must treat `TASK-021` through `TASK-025` as the only unqualified remediation tasks, validate their exact dependencies and scope, and enforce `ARCH-AC-01` through `ARCH-AC-08`. It must not invalidate the separately repository-qualified `TASK-001` through `TASK-020` or infer that qualification from their unchanged prospective `TODO` labels in this authority artifact.
 
 Stage07 must independently inspect the approved artifact state, repository/Git readiness, testability, conflicts, security blockers, critical TBDs, traceability, and every other configured entry/check condition. Nothing in this section is a Stage07 `PASS` or `FAIL` decision.
 
-## 7. Recovery and authority boundary
+## 8. Recovery and authority boundary
 
 - This `tasks.md` is the approved prospective current `EXECUTION_DECOMPOSITION` authority; it is not historical Phase06 reconstruction.
 - Tasks are prospective work contracts, not historical implementation facts. Existing implementation cannot make a task `DONE` or prove conformance.
-- Stage06 does not inspect or evaluate code, implementation evidence, Recovery Gate eligibility/result, Stage09 conformance, Stage10, release, or deployment.
+- This Stage06 impact evaluation inspected code, tests, imports, and existing evidence as non-authoritative evidence solely to classify the Stage04/05 candidates. It did not modify implementation/tests, execute recovery, issue Stage09 conformance, authorize release/deployment, or turn observed behavior into upstream authority.
 - Approval of this Stage06 authority does not create Stage07 `PASS` or authorize Stage08 implementation. Normal implementation remains unauthorized until Stage07 independently returns a valid `PASS` with implementation authorization.
 - A Current Implementation Recovery Gate `PASS`, if later applicable under its narrow prerequisites, permits Stage09 entry only. It never creates retroactive Stage07 `PASS`, Stage08 authorization, implementation authorization, implementation conformance, task completion, test `PASS`, Stage09 `PASS`, Stage10 authority, or release authority.
 - An implementation gap found after Stage09 returns to valid current authority and the normal `Stage07 -> Stage08` path.
 - Programming language, framework, full module/package/file layout, database, serialization format, test framework, cloud platform, webhook architecture, LINE implementation, authentication/IAM product, and deployment topology remain deferred non-decisions.
 
-## 8. Current Stage06 authority status
+## 9. Current Stage06 authority status
 
 ```text
 CURRENT_EXECUTION_DECOMPOSITION_AUTHORITY =
@@ -510,10 +644,22 @@ AGENT_REPOSITORY_GOVERNANCE_AUTHORITY =
 APPROVED_CURRENT_AUTHORITY
 
 TASK_COUNT =
-19
+25
 
 P0_TASK_COVERAGE_COMPLETE =
 YES
+
+ARCHITECTURE_IMPACT_CANDIDATES_EVALUATED =
+15_OF_15
+
+NEW_BOUNDED_REMEDIATION_TASKS =
+TASK-021_THROUGH_TASK-025
+
+EXISTING_TASKS_REOPENED =
+NONE
+
+IMPLEMENTATION_QUALIFICATION_PRESERVED =
+TASK-001_THROUGH_TASK-020
 
 ORPHAN_TASK_COUNT =
 0
@@ -543,5 +689,5 @@ EXECUTION_DECOMPOSITION_PROJECT_AUTHORITY_REVIEW_REQUIRED =
 NO
 
 NEXT_STEP =
-CURRENT_PRE_IMPLEMENTATION_GATE_EVALUATION
+FRESH_STAGE07_PRE_IMPLEMENTATION_GATE_FOR_TASK-021_THROUGH_TASK-025
 ```
