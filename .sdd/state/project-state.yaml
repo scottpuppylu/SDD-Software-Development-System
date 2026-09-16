@@ -4,9 +4,9 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: '04'
-  current_stage_name: SOFTWARE_DESIGN
-  last_completed_stage: '03'
+  current_stage: '05'
+  current_stage_name: AGENT_GOVERNANCE
+  last_completed_stage: '04'
   next_action: RUN_STAGE
 stages:
   '01':
@@ -19,10 +19,10 @@ stages:
     status: DONE
     result: COMPLETED
   '04':
-    status: IN_PROGRESS
-    result: null
+    status: DONE
+    result: COMPLETED
   '05':
-    status: TODO
+    status: IN_PROGRESS
     result: null
   '06':
     status: TODO

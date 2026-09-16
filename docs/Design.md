@@ -12,8 +12,8 @@ Every `DES-*` below is an approved current implementation-design decision within
 
 - Goals: `G-01` through `G-05`.
 - Applicable P0 requirements: 34 of 34, with their approved acceptance criteria.
-- Applicable P0 technical contracts: `SPEC-001` through `SPEC-018`.
-- Applicable Architecture Constitution criteria: `ARCH-AC-01` through `ARCH-AC-07`. Architecture criteria do not occupy or reinterpret the PRD acceptance-criterion namespace `AC-01` through `AC-37`.
+- Applicable P0 technical contracts: `SPEC-001` through `SPEC-019`.
+- Applicable Architecture Constitution criteria: `ARCH-AC-01` through `ARCH-AC-08`; `ARCH-AC-09` provider-change conformance remains preserved. Architecture criteria do not occupy or reinterpret the PRD acceptance-criterion namespace `AC-01` through `AC-37`.
 - Authority is domain-specific and forms a non-linear graph. No `PRD > Spec > Design` or other linear precedence exists.
 - Repository/Git is the persistent execution-state and traceability basis; chat memory is not authoritative execution state.
 - Stage07 `PASS` is the only normal new-implementation authorization. Tests do not produce Stage09 `PASS`; Stage09 owns the verification decision. Stage09 `PASS` is required for Stage10 entry.
@@ -43,7 +43,7 @@ The intended MVP is a modular local application. Modules are logical responsibil
 | Authority resolver | Resolve domain, scope, source, approval status, freshness, dependencies, and conflicts. | Does not impose linear precedence or resolve a substantive conflict. |
 | Human Decision manager | Create, present, record, revise, reject, or withdraw attributable decisions and calculate affected scope. | Does not substitute a decision for Stage07 `PASS`. |
 | Reasoning-provider adapter | Supply replaceable analysis, questioning, proposal, drafting, and authorized assistance. | Provider output is not authority or evidence merely because it was generated. |
-| Stage08 execution adapter | Invoke a repository-aware execution capability with a sealed authorization envelope and collect results. | Cannot enlarge scope or self-authorize another task. |
+| Stage08 execution adapter | Locally orchestrate precheck, bounded context packaging, coding-worker dispatch, deterministic verification, resume, evidence, checkpoint, state, and telemetry under a sealed authorization envelope. | Cannot enlarge scope, delegate controller/governance work to the coding provider, or self-authorize another task. |
 | Repository/Git state store | Persist governed state, authority references, decisions, checkpoints, execution references, and recovery facts. | Conversation is not a fallback authority store. |
 | Artifact handler | Locate artifacts, identify their domain/status/version, validate required structure and links, and detect affected/stale artifacts. | Artifact existence alone is not approval. |
 | Evidence registry | Record checks, outcomes, evidence references, coverage, gaps, and regression risk. | Does not create requirements or the Stage09 decision. |
@@ -192,6 +192,121 @@ A Human Decision approving an upstream artifact can satisfy that artifact's auth
 - **Failure behavior:** Missing/invalid Stage07 `PASS`, dirty or mismatched baseline as governed later, unexpected diff, authority overrun, or unmet checkpoint condition stops affected execution. Preserve identifiable valid in-scope progress; do not checkpoint or call it complete unless all checkpoint prerequisites pass. Route additional work back through authority/task/gate owners.
 - **Verification implication:** Attempt no-authorization execution, stale authorization, changed authority, scope overrun, partial failure, unexpected diff, and successful authorized atomic execution with evidence.
 - **Downstream constraints for Stage05/06/08:** Stage05 must define repository commands, protected scope, and checkpoint rules; Stage06 must make tasks atomic with scope and verification; Stage08 must report files and evidence and never self-authorize follow-on work.
+
+### DES-020 - Phased local Stage08 controller with bounded coding-worker packages
+
+- **Decision:** Implement `SPEC-019` incrementally around the existing Stage08 execution adapter. The SDD/local runtime remains the controller and governor; a provider such as Codex is invoked only as a bounded coding worker. The local controller owns `PRECHECK`, authorization/dependency/allowed-file and sealed-envelope validation, context construction, FAST/TARGET/authorized-FULL verification, remediation-package construction, diff/worktree validation, evidence, implementation checkpoint, implementation-state update, phase/resume validation, and telemetry. The worker owns only bounded patch analysis, authorized-file edits, a bounded corrective patch, and a structured patch result. Work remains initiated and observed through the Work cockpit; no provider session becomes a lifecycle controller.
+- **Upstream SPEC:** `SPEC-019`, preserving `SPEC-004`, `SPEC-006`, `SPEC-007`, `SPEC-008`, `SPEC-009`, `SPEC-010`, `SPEC-013`, `SPEC-015`, `SPEC-016`, and `SPEC-018`.
+- **Rationale:** Existing Stage08, Git, verification, evidence, recovery, security, and telemetry components already contain the required deterministic capabilities. Extracting two cohesive Stage08 domain modules reduces provider context and coupling without replacing the execution path or moving governance into a provider.
+- **Architecture roles:** The lifecycle/authority Core remains unchanged. The existing Stage08 runner is a thin Harness/Adapter that sequences ports. Work-package construction, phase-state persistence, verification, evidence, Git, security, and telemetry are independently testable Edge/Spoke Modules. `CodexCLI` and future execution providers remain replaceable Adapters behind a provider-neutral work-package/result contract. Provider-specific imports may not enter the Core, phase-state, verification-policy, evidence, or Git modules.
+
+#### Stage08 responsibility and phase flow
+
+The local controller executes this ordered flow:
+
+1. `PRECHECK_COMPLETE`: reload and validate task eligibility, dependencies, branch/baseline/worktree, Stage07 authorization, sealed envelope, allowed files, and runtime.
+2. `CONTEXT_READY`: build, redact, canonicalize, and content-bind the minimum provider-neutral Work Package.
+3. `CODEX_PATCH_COMPLETE`: invoke the selected coding-worker adapter and reconcile actual dirty paths and diff provenance before any later action.
+4. `FAST_VERIFY_COMPLETE`: locally execute the authorized FAST plan.
+5. `TARGET_VERIFY_COMPLETE`: locally execute the task TARGET plan, including every applicable legacy Verification Command.
+6. `REMEDIATION_REQUIRED`: when a qualifying verification failure is remediable within unchanged authority, construct a minimum-disclosure failure package and invoke one bounded corrective patch; otherwise block and route.
+7. `FINAL_VERIFY_COMPLETE`: locally validate all required completion checks and any explicitly authorized FULL check, then validate final diff, evidence inputs, and checkpoint preconditions.
+8. `STAGE8_COMPLETE`: publish qualifying evidence, create the implementation checkpoint, and apply the Stage08-owned implementation-state transition atomically according to existing governance.
+
+Phase state is attempt progress, not a Git implementation checkpoint and not implementation qualification. Qualification remains impossible until every required Stage08 condition passes and the governed checkpoint/evidence path completes.
+
+#### Provider-neutral Codex Work Package
+
+Introduce the cohesive module candidate `sdd_orchestrator/stage08_work_package.py`. Its immutable, provider-neutral model and builder own canonical serialization, content digesting, initial/remediation variants, and minimum-disclosure projection. The historical name “Codex Work Package” describes the current worker use, not a vendor dependency. Canonical serialization is UTF-8 JSON with stable key ordering and normalized repository-relative paths; the package identity is a SHA-256 digest over the complete canonical payload and package kind. The local attempt state binds the package identity to the already-sealed Stage07 envelope before dispatch, without changing or resealing that envelope; the returned patch result must echo the attempt, package, task, and envelope identities.
+
+| Work Package field | Authoritative supplier |
+| --- | --- |
+| `TASK_ID`, `OBJECTIVE`, `EXPECTED_BEHAVIOR`, acceptance constraints | `AtomicTask` parsed from current Stage06 `tasks.md` authority |
+| `AUTHORIZED_FILES` | sealed Stage07 execution envelope after `path_scope_policy` validation |
+| `FORBIDDEN_SCOPE` | envelope prohibitions, protected paths, Stage05 governance, and task exclusions |
+| `RELEVANT_SPEC`, `RELEVANT_DESIGN` | task trace references resolved through the existing context compiler/artifact registry |
+| `CURRENT_STATE` | fresh governed snapshot, implementation-state projection, and Git snapshot, minimized for worker need |
+| `FAILURE_CONTEXT` | explicit empty value for an initial package; bounded, redacted failure facts for remediation |
+| `REQUIRED_OUTPUT` | package-kind contract requiring authorized edits plus a structured patch result, never a commit/evidence/state mutation |
+| `SEALED_ENVELOPE_ID`, `ENTRY_HEAD`, `AUTHORIZED_BASELINE` | validated Stage07 envelope and `GitRuntime` snapshot |
+| `DIFF_PROVENANCE` | attempt identity plus entry/final diff bindings produced and revalidated by `GitRuntime` |
+
+`INITIAL_PATCH_PACKAGE` carries only implementation-relevant authority and context. `REMEDIATION_PACKAGE` additionally carries only failed test/check names, relevant redacted traceback/error excerpts, relevant source/context, relevant diff hunks, expected behavior, authorized files, applicable acceptance criteria, and sealed-authority references. It must not resend full repository context by default. Both package kinds explicitly prohibit unauthorized files, Git commits, evidence/state finalization, FULL verification without explicit authority, unrelated repository inspection, and deterministic governance work. TASK-022 security classification, redaction, credential/secret boundaries, and minimum-disclosure policy run before serialization and again before persistence or reporting.
+
+#### Local verification orchestration
+
+Extend the parsed task contract with a versioned local verification plan while retaining the existing `verification_commands` field. `task_parser.py` parses declared levels; `verification_policy.py` validates command allowlisting, level classification, risk/authority bindings, and whether FULL is permitted; `verification_execution.py` executes commands; `verification_runtime.py` resolves the governed interpreter/environment; and the Stage08 adapter sequences results without executing verification inside the coding-provider session.
+
+- **FAST:** syntax, imports, directly affected tests, and cheap deterministic checks explicitly selected by the plan. FAST may be empty only when the task contract justifies it; absence never removes TARGET obligations.
+- **TARGET:** task-specific verification and affected-subsystem regression. Every legacy Verification Command maps to TARGET unless current authority explicitly assigns a stronger level, and no legacy or task-authorized command may be silently omitted.
+- **FULL:** repository/system regression. Stage08 executes it only when the task contract, Stage07 risk classification, sealed envelope, or another current authority explicitly binds it. Stage09 retains its unchanged system-wide/full-regression responsibility regardless of any Stage08 FULL result.
+
+Verification results are reusable on resume only when command content/order, runtime identity, task/authority/envelope digests, input/diff digest, and prior PASS evidence all match. Any relevant change invalidates that result and every dependent later phase. Local verification must run without an active provider session.
+
+#### Durable attempt phase state and atomicity
+
+Introduce the cohesive module candidate `sdd_orchestrator/stage08_phase_state.py`, owning a versioned attempt journal at `.sdd/state/stage08-attempts/<attempt-id>.yaml`. Schema version `1.0` records immutable attempt/task/authorization/envelope/branch/entry-HEAD/authorized-baseline/task-authority/allowed-files bindings and an ordered, hash-chained event sequence. Each event records the previous digest, phase, sequence, safe timestamp, diff paths/digest and provenance where applicable, provider invocation/result identity, verification command/result/output digests, scope result, resume/remediation counters, and evidence/checkpoint pending status. A derived current-phase projection is reconstructable from the journal and is never the source of qualification.
+
+Writes use a same-directory temporary file, flush/fsync where supported, atomic replacement, reload, schema validation, and digest verification. A missing required event, invalid transition, duplicate/reordered sequence, corrupt/unknown schema, broken digest chain, or mismatch with Git/current authority fails closed to `BLOCK`; it must not fall back to chat, optimistic restart, or a weaker legacy interpretation. `RecoveryManager` continues to own implementation qualification and `pending_evidence_write`; its atomic persistence conventions and pending-evidence facts are reused rather than duplicated. `GitRuntime` remains the source of branch/HEAD/diff/checkpoint facts.
+
+#### Safe pause, resume, and remediation
+
+`CodexCLI`/provider result normalization distinguishes `CODEX_QUOTA_EXHAUSTED`, `CODEX_INTERRUPTED`, and `CODEX_TIMEOUT`. The adapter may persist `SAFE_PAUSE` only after `path_scope_policy`, `GitRuntime`, phase state, current authority, and sealed-envelope checks prove that all dirty/untracked paths are authorized, the diff belongs to the same attempt, no unknown side effect exists, and the task/baseline/authorization/scope remain unchanged. Otherwise it persists the truthful interruption facts and blocks.
+
+Resume reloads and revalidates attempt/task identity, Stage07 authorization, envelope, branch, entry HEAD, authorized baseline, task/authority digests, allowed-files digest, dirty paths, current diff digest/provenance, and completed verification state. A valid `CODEX_PATCH_COMPLETE` prevents repeating the initial provider invocation; a valid successful verification fingerprint prevents repeating that deterministic level unless governing authority explicitly demands revalidation. Remediation is a distinct invocation with a new invocation identity under the same unchanged task/envelope and never expands files or behavior. Stale authority, unexplained dirtiness, unknown side effects, or a required context expansion causes `BLOCK -> REPORT -> ROUTE`, not restart or scope inference.
+
+#### Evidence and telemetry compatibility
+
+Ordinary Stage08 evidence evolves additively: a new optional, versioned `stage08_attempt` section binds attempt ID, final phase-journal path/digest, ordered phase/result digests, invocation identities, resume/remediation counts, and final diff/verification/checkpoint identities. New-feature executions require this section; existing evidence readers must continue accepting the historical schema, and historical evidence is never rewritten. The evidence writer validates the final journal digest before publication. The existing `pending_evidence_write` path remains available for the persistence-only recovery boundary and is referenced by the phase journal rather than replaced.
+
+Extend the existing telemetry framework with a versioned `STAGE08_PHASE` event rather than changing the frozen `STAGE08_TASK` event or creating another store. Phase events carry non-sensitive attempt correlation, phase/outcome, duration, and bounded counters sufficient to derive `codex_invocation_count`, `codex_active_duration`, `local_verification_duration`, `fast_verify_duration`, `target_verify_duration`, `full_verify_duration`, `remediation_count`, `resume_count`, and `CODEX_ACTIVE_TIME / TOTAL_STAGE8_TIME`. Provider-call events remain the provider-duration source and must not be double-counted. Unavailable token use remains unavailable, never zero or estimated. This design owns observation only; TASK-023 resource-limit, exhaustion, and budget enforcement is explicitly excluded and remains for Stage06 ownership resolution.
+
+#### Existing-component ownership map
+
+| Component | DES-020 responsibility |
+| --- | --- |
+| `codex_adapter.py` | Thin Stage08 sequencing adapter; coordinates ports and phases without owning their domain data or delegating governance to Codex. |
+| `codex_cli.py` / provider-result boundary | Provider transport and normalized interruption/result categories only. |
+| `task_parser.py` | Parse the versioned verification plan and backward-compatible legacy commands. |
+| `verification_policy.py` | Validate command/level policy and explicit FULL authority. |
+| `verification_execution.py`, `verification_runtime.py` | Execute local checks and resolve the governed runtime/environment. |
+| `git_runtime.py` / `RecoveryManager` | Supply Git provenance/checkpoints and retain implementation-state/pending-evidence ownership. |
+| `path_scope_policy.py` | Enforce authorized dirty/untracked paths and fail-closed provenance prerequisites. |
+| `evidence_writer.py`, `result_serialization.py` | Validate additive attempt bindings and emit minimum-disclosure evidence/status projections. |
+| `system_controller.py` | Route lifecycle start/resume only; it does not own Work Packages, verification, or phase internals. |
+| `telemetry/*` | Record versioned observational phase events in the existing recorder/sinks. |
+| `stage08_work_package.py` (new) | Work-package model, canonical binding, initial/remediation builders, and safe projection. |
+| `stage08_phase_state.py` (new) | Versioned phase journal, transition validation, atomic persistence, reconstruction, and resume fingerprints. |
+
+#### Stage06 handoff: bounded proposals, dependencies, and verification
+
+Stage06 must allocate identifiers using its own task authority; the labels below are design slices, not tasks or implementation authorization.
+
+**Proposal A — Structured Work Package and local verification levels.** Candidate files: `sdd_orchestrator/stage08_work_package.py`, `sdd_orchestrator/task_parser.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/verification_policy.py`, `sdd_orchestrator/verification_execution.py`, `sdd_orchestrator/verification_runtime.py`, `tests/test_stage08_work_package.py`, `tests/test_stage08_verification_levels.py`, `tests/test_m6_codex_adapter.py`, `tests/test_v1113_codex_stdin_prompt.py`, and `tests/test_v1118_safe_pause_and_evidence.py`. It depends on the qualified governance/security/runtime foundations represented by TASK-007, TASK-011, TASK-012, TASK-014, TASK-017, TASK-021, and TASK-022. Acceptance requires: every package field and digest is attributable; initial/remediation packages remain provider-neutral and minimum-disclosure; Codex cannot commit/finalize governance; local FAST/TARGET execution is independent of the provider; legacy commands execute as TARGET; FULL requires explicit authority; Stage09 behavior is unchanged; and unauthorized files/side effects fail closed. Candidate verification: `.\.venv\Scripts\python.exe -m pytest -q tests/test_stage08_work_package.py tests/test_stage08_verification_levels.py tests/test_m6_codex_adapter.py tests/test_v1113_codex_stdin_prompt.py tests/test_v1118_safe_pause_and_evidence.py`.
+
+**Proposal B — Durable phase state, SAFE_PAUSE, and precise resume.** Candidate files: `sdd_orchestrator/stage08_phase_state.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/codex_cli.py`, `sdd_orchestrator/codex_results.py`, `sdd_orchestrator/git_runtime.py`, `sdd_orchestrator/path_scope_policy.py`, `sdd_orchestrator/evidence_writer.py`, `sdd_orchestrator/result_serialization.py`, `sdd_orchestrator/system_controller.py`, `tests/test_stage08_phase_resume.py`, `tests/test_m5_git_recovery.py`, `tests/test_m6_codex_adapter.py`, and `tests/test_v1118_safe_pause_and_evidence.py`. It depends on Proposal A and the qualified state/Git/recovery/security foundations represented by TASK-001, TASK-002, TASK-010, TASK-011, TASK-012, TASK-017, TASK-021, and TASK-022. Acceptance requires: atomic reconstructable phase transitions; corruption fails closed; qualified SAFE_PAUSE for all three interruption classes; minimum resume evidence; no repeated completed provider invocation or still-valid successful verification; no scope/authority expansion; unchanged pending-evidence behavior; and evidence binds the final phase digest. Candidate verification: `.\.venv\Scripts\python.exe -m pytest -q tests/test_stage08_phase_resume.py tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py`.
+
+**Proposal C — Stage08 phase-consumption telemetry.** Candidate files: `sdd_orchestrator/telemetry/models.py`, `sdd_orchestrator/telemetry/measurement.py`, `sdd_orchestrator/telemetry/recorder.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/codex_cli.py`, `tests/test_telemetry_models.py`, `tests/test_telemetry_measurement.py`, `tests/test_telemetry_stage08_task.py`, `tests/test_telemetry_application_wiring.py`, and `tests/test_telemetry_storage_contract.py`. It depends on Proposals A and B for stable package/attempt/phase identities. Acceptance requires: versioned phase events use existing recorder/sinks; frozen `STAGE08_TASK` compatibility; every required duration/count metric and the effectiveness ratio are derivable without double-counting; unavailable tokens remain unavailable; sensitive package/diff/error content is absent; telemetry cannot control lifecycle; and legacy readers/tests remain valid. Candidate verification: `.\.venv\Scripts\python.exe -m pytest -q tests/test_telemetry_models.py tests/test_telemetry_measurement.py tests/test_telemetry_stage08_task.py tests/test_telemetry_application_wiring.py tests/test_telemetry_storage_contract.py`.
+
+Proposal C can be sliced independently of TASK-023 only as observational phase measurement after A/B identities exist. Any use of these measurements to deny work, enforce quota/budget/resource limits, or decide exhaustion belongs to TASK-023 or a Stage06-authorized successor and must not be silently absorbed. Stage06 must resolve that ownership overlap before authorizing either overlapping scope. No proposal reopens TASK-001 through TASK-022 or changes their evidence.
+
+#### Architecture Constitution traceability for DES-020
+
+| Criterion | Design result |
+| --- | --- |
+| `ARCH-AC-01` | `DOCUMENTED_BUT_NOT_YET_PROVEN`: lifecycle/authority Core remains unchanged while work-package, verification, phase, evidence, Git, and telemetry capabilities remain Edge/Spoke Modules. |
+| `ARCH-AC-02` | `DOCUMENTED_BUT_NOT_YET_PROVEN`: `Stage08CodexRunner` is constrained to thin sequencing; cohesive skills/modules own transformation, execution, and persistence. |
+| `ARCH-AC-03` | `DOCUMENTED_BUT_NOT_YET_PROVEN`: Work Package/result and verification contracts are provider-neutral; provider-specific transport stays in adapters. |
+| `ARCH-AC-04` | `DOCUMENTED_BUT_NOT_YET_PROVEN`: PRECHECK and every resume revalidate authority, envelope, dependency, scope, baseline, and provenance before dispatch. |
+| `ARCH-AC-05` | `DOCUMENTED_BUT_NOT_YET_PROVEN`: packages and phase transitions carry exact capabilities/allowed files; unlisted scope, FULL checks, and side effects deny by default. |
+| `ARCH-AC-06` | `DOCUMENTED_BUT_NOT_YET_PROVEN`: provider calls remain bounded; timeout/quota/interruption pause or block without removing limits. Measurement does not absorb TASK-023 enforcement. |
+| `ARCH-AC-07` | `DOCUMENTED_BUT_NOT_YET_PROVEN`: phase/evidence/checkpoint ordering and explicit Stage06/07/08/09 boundaries make conformance testable and gateable. |
+| `ARCH-AC-08` | `DOCUMENTED_BUT_NOT_YET_PROVEN`: TASK-021 pre-dispatch identity/authorization/audit/approval and TASK-022 minimum-disclosure/security controls are reused at package, dispatch, remediation, resume, and evidence boundaries. |
+| `ARCH-AC-09` | `PRESERVED`: the provider-neutral contract and unchanged conformance gate prevent a provider change/fallback from weakening governance or verification. |
+
+#### Compatibility and migration
+
+This is an additive forward migration. Existing qualified TASK-001 through TASK-022 state, historical evidence, Stage07 authorization semantics, sealed envelopes, allowed-file enforcement, TASK-021 pre-dispatch governance, TASK-022 security/minimum disclosure, Stage09 full verification, and Stage10 finalization remain unchanged. Historical evidence and attempt state are never rewritten. Evidence readers accept both the historical schema and the additive attempt section; telemetry readers accept existing `STAGE08_TASK` events plus versioned `STAGE08_PHASE` events. A task/envelope authorized before activation may use legacy Stage08 behavior, with its complete legacy Verification Commands mapped to TARGET. A task newly authorized for SPEC-019 behavior must have the phase journal and package binding; missing new state fails closed rather than silently downgrading. No database or bulk state migration is required.
 
 ## 8. Persistence and traceability design
 
@@ -400,12 +515,13 @@ The approved upstream `G -> FR/NFR/EC -> AC -> SPEC` links remain unchanged. Thi
 | `SPEC-016` | `DES-001`, `DES-004`, `DES-007`, `DES-009` |
 | `SPEC-017` | `DES-017` |
 | `SPEC-018` | `DES-018` |
+| `SPEC-019` | `DES-020` |
 
-Coverage is 18 of 18 applicable P0 technical contracts. Stage06 must extend each applicable chain from `DES -> TASK`; Stage08 must extend `TASK -> CODE -> TEST_EVIDENCE`; Stage09 must verify bidirectional navigation and cannot infer missing links.
+Coverage is 19 of 19 applicable P0 technical contracts. Stage06 must extend each applicable chain from `DES -> TASK`; Stage08 must extend `TASK -> CODE -> TEST_EVIDENCE`; Stage09 must verify bidirectional navigation and cannot infer missing links.
 
 ## 14. Deferred implementation choices / TBDs
 
-The following choices are deliberately deferred because no approved SPEC requires them now: programming language; framework; package/class names; concrete file layout beyond authoritative artifact and evidence-namespace paths; database product; cache/index technology; API or webhook schema; local UI technology; test framework and commands; Git branch/commit convention beyond governed checkpoint semantics; cloud/hosting/network provider; LINE integration details; authentication/IAM product; secrets product; deployment topology; and additional AI vendors.
+The following choices are deliberately deferred because no approved SPEC requires them now: programming language; framework; package/class names and concrete file layout other than the explicit DES-020 module candidates and governed artifact/evidence/state paths; database product; cache/index technology; API or webhook schema; local UI technology; test framework and commands outside the Stage06 candidate verification strategies; Git branch/commit convention beyond governed checkpoint semantics; cloud/hosting/network provider; LINE integration details; authentication/IAM product; secrets product; deployment topology; and additional AI vendors.
 
 These are non-blocking Design TBDs. Stage05 may decide repository-governance details in its own domain; Stage06 may decompose only approved implementation scope. Any future choice that changes approved product behavior or a technical guarantee must be detected as a cross-domain conflict and routed upstream, not decided as implementation detail.
 
@@ -415,7 +531,7 @@ These are non-blocking Design TBDs. Stage05 may decide repository-governance det
 - It does not create or modify `PRODUCT_INTENT`, `PRODUCT_REQUIREMENT`, or `TECHNICAL_CONTRACT` authority.
 - It does not define `AGENT_REPOSITORY_GOVERNANCE`, `EXECUTION_DECOMPOSITION`, implementation evidence, gate results, verification decisions, or release decisions.
 - Artifact existence, this authority's completeness, and its approval do not authorize implementation.
-- Normal implementation remains `Stage05 -> Stage06 -> Stage07 PASS -> Stage08`.
+- Normal implementation remains `Stage05 -> Stage06 -> Stage07 PASS -> Stage08`. Because SPEC-019 and DES-020 affect the prospective agent boundary, the repository lifecycle must first perform the Stage05 affected-scope revalidation required by rerun rules; the prepared Stage06 handoff does not itself skip or complete Stage05.
 - Stage07, Stage09, and Stage10 retain their distinct owning semantics.
 - Tests and code are evidence, not requirement/design authority. Limited implementation inspection supplied terminology only and did not establish conformance or adopt implementation as authority; tests were not evaluated.
 - Telemetry remains observational and outside control paths.
@@ -447,13 +563,22 @@ ARCHITECTURE_CONSTITUTION_NAMESPACE =
 ARCH-AC-01_THROUGH_ARCH-AC-09
 
 ARCHITECTURE_CONSTITUTION_STAGE04_COVERAGE =
-ARCH-AC-01_THROUGH_ARCH-AC-07_COMPLETE
+ARCH-AC-01_THROUGH_ARCH-AC-08_COMPLETE_ARCH-AC-09_PRESERVED
 
 ARCHITECTURE_IMPLEMENTATION_CONFORMANCE =
 NOT_EVALUATED_BY_STAGE04
 
 STAGE06_ARCHITECTURE_IMPACT_EVALUATION_REQUIRED =
 YES
+
+SPEC019_DESIGN_DECISION =
+DES-020
+
+STAGE08_OPTIMIZATION_IMPLEMENTATION =
+NOT_STARTED
+
+TASK023_RESOURCE_ENFORCEMENT_OVERLAP =
+DEFERRED_TO_STAGE06
 
 KNOWN_DECISION_STORE_FIXTURE_GAP =
 RECORDED_FOR_STAGE06_IMPACT_EVALUATION
@@ -480,5 +605,5 @@ IMPLEMENTATION_DESIGN_PROJECT_AUTHORITY_REVIEW_REQUIRED =
 NO
 
 NEXT_STEP =
-CURRENT_AGENT_REPOSITORY_GOVERNANCE_REMEDIATION
+STAGE05_AFFECTED_SCOPE_REVALIDATION_THEN_STAGE06_REDECOMPOSITION
 ```
