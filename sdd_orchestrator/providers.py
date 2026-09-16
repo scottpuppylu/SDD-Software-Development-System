@@ -28,6 +28,14 @@ from .telemetry.models import (
     UsageSource,
 )
 from .task_parser import SealedExecutionEnvelope
+from .governance_envelope import (
+    DispatchObservation,
+    DispatchRequest,
+    GovernanceEnvelope,
+    GovernanceEnvelopeError,
+    GovernanceEnvelopeValidator,
+    IdentityBinding,
+)
 
 
 class ReasoningProviderError(RuntimeError):
@@ -82,6 +90,9 @@ class ReasoningInvocation:
     expected_result: str = "STAGE_EXECUTION_RESULT"
     validation_inputs: Mapping[str, Any] = field(default_factory=dict)
     authorization_envelope: SealedExecutionEnvelope | None = None
+    governance_envelope: GovernanceEnvelope | None = None
+    governance_request: DispatchRequest | None = None
+    current_identity: IdentityBinding | None = None
 
 
 @dataclass(frozen=True)
@@ -136,9 +147,13 @@ class ReasoningProviderBoundary:
         provider: ReasoningProvider,
         *,
         authorization_validator: Callable[[SealedExecutionEnvelope], bool] | None = None,
+        governance_validator: GovernanceEnvelopeValidator | None = None,
+        require_governance: bool = False,
     ):
         self.provider = provider
         self.authorization_validator = authorization_validator
+        self.governance_validator = governance_validator or GovernanceEnvelopeValidator()
+        self.require_governance = require_governance
 
     @staticmethod
     def _safe_detail(detail: str) -> str:
@@ -207,6 +222,30 @@ class ReasoningProviderBoundary:
                 "NO_AUTHORIZATION",
                 "write-capable invocation requires a sealed Stage08 envelope covering affected scope",
             )
+        governance_fields = (
+            invocation.governance_envelope,
+            invocation.governance_request,
+            invocation.current_identity,
+        )
+        if self.require_governance or any(item is not None for item in governance_fields):
+            if any(item is None for item in governance_fields):
+                return self._failure(
+                    invocation, "NO_AUTHORIZATION",
+                    "complete unified governance envelope bindings are required",
+                )
+            try:
+                self.governance_validator.validate_pre_dispatch(
+                    invocation.governance_envelope,
+                    invocation.governance_request,
+                    current_identity=invocation.current_identity,
+                )
+            except GovernanceEnvelopeError as exc:
+                category = (
+                    "AUTHORITY_CROSSING"
+                    if exc.code in {"PROVIDER_AUTHORITY_CLAIM", "APPROVAL_MISMATCH"}
+                    else "POLICY_VIOLATION"
+                )
+                return self._failure(invocation, category, f"{exc.code}: {exc.detail}")
         return None
 
     def _validate_output(
@@ -283,6 +322,21 @@ class ReasoningProviderBoundary:
             )
         if blocked is not None:
             return blocked
+        if invocation.governance_envelope is not None:
+            assert invocation.governance_request is not None
+            try:
+                self.governance_validator.reconcile_post_dispatch(
+                    invocation.governance_envelope,
+                    invocation.governance_request,
+                    DispatchObservation(
+                        outcome="PASS",
+                        actual_scope=tuple(sorted(output.artifacts)),
+                        actual_side_effects=invocation.governance_request.side_effects,
+                        evidence_references=(f"provider-attempt:{invocation.attempt_id}",),
+                    ),
+                )
+            except GovernanceEnvelopeError as exc:
+                return self._failure(invocation, "OUT_OF_SCOPE", f"{exc.code}: {exc.detail}")
         metadata = dict(output.metadata)
         metadata.update(
             {

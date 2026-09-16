@@ -22,6 +22,14 @@ from .codex_adapter import Stage08CodexRunner
 from .decisions import DecisionGateway
 from .git_runtime import GitRepository
 from .context_compiler import CompilationMode
+from .governance_envelope import (
+    CapabilityClass,
+    DispatchObservation,
+    DispatchRequest,
+    GovernanceEnvelopeValidator,
+    IdentityBinding,
+    create_dispatch_envelope,
+)
 
 
 @dataclass
@@ -92,6 +100,7 @@ class ChannelNeutralOperationPort:
         self.repo_root = orchestrator.repo_root
         self.journal_path = self.repo_root / ".sdd" / "state" / "local-mvp-operations.json"
         self.decisions = DecisionGateway(orchestrator)
+        self.governance_validator = GovernanceEnvelopeValidator()
 
     @staticmethod
     def _canonical(value: Any) -> str:
@@ -190,6 +199,44 @@ class ChannelNeutralOperationPort:
                 f"stale operation snapshot: {request.expected_snapshot_identity} != {before_identity}"
             )
 
+        approval_class = "A2" if operation in {"APPROVE", "REJECT", "REQUEST_REVISION"} else "A0"
+        approval_reference = (
+            str(request.payload.get("reference") or request.payload.get("decision_id") or request.target_identity)
+            if approval_class == "A2"
+            else f"approval-matrix:A0:{operation}"
+        )
+        scope = tuple(str(item) for item in request.payload.get("affected_scope", []) or []) or (request.target_identity,)
+        baseline = before_identity
+        identity = IdentityBinding(
+            actor_id="local-mvp-channel", project_id=request.journey_identity,
+            environment="local", repository=str(self.repo_root.resolve()),
+            branch="local-operation", baseline=baseline, stage_id="LIFECYCLE",
+            attempt_id=request.command_identity, adapter_id="local-mvp-adapter",
+            session_id=f"process:{os.getpid()}",
+        )
+        dispatch = DispatchRequest(
+            action=operation, tool="channel-neutral-operation-port",
+            arguments={"command_identity": request.command_identity},
+            target=request.target_identity, scope=scope,
+            side_effects=("GOVERNED_STATE_WRITE",),
+            required_capabilities=(CapabilityClass.TOOL_EXECUTION,),
+            approval_class=approval_class, approval_reference=approval_reference,
+        )
+        envelope = create_dispatch_envelope(
+            identity=identity, request=dispatch,
+            authentication_reference=f"local-process:{os.getpid()}",
+            authentication_method="local_process",
+            authority_references=(".sdd/state/project-state.yaml", request.target_identity),
+            gate_references=(f"lifecycle-snapshot:{before_identity}",),
+            policy_references=("AGENTS.md:14", "SDD_HUMAN_APPROVAL_BOUNDARY_MATRIX.md"),
+            limit_references=(f"payload-bytes:{len(self._canonical(request.payload))}/{self.MAX_TEXT}",),
+            provider_capability="lifecycle-command",
+            risk="HUMAN_DECISION_APPLICATION" if approval_class == "A2" else "ROUTINE_LIFECYCLE_OPERATION",
+        )
+        pre_dispatch = self.governance_validator.validate_pre_dispatch(
+            envelope, dispatch, current_identity=identity
+        )
+
         working = copy.deepcopy(journal)
         situation, consequence, action, route, data = self._apply(
             operation, request, working
@@ -204,6 +251,23 @@ class ChannelNeutralOperationPort:
             "fingerprint": fingerprint,
             "result": asdict(result),
         }
+        self._write(working)
+        post_dispatch = self.governance_validator.reconcile_post_dispatch(
+            envelope, dispatch,
+            DispatchObservation(
+                outcome="PASS", actual_scope=scope,
+                actual_side_effects=("GOVERNED_STATE_WRITE",),
+                evidence_references=(str(self.journal_path.relative_to(self.repo_root)).replace("\\", "/"),),
+            ),
+        )
+        result.data["governance"] = {
+            "envelope_id": envelope.envelope_id,
+            "approval_class": approval_class,
+            "approval_reference": approval_reference,
+            "pre_dispatch": dict(pre_dispatch.audit_record),
+            "post_dispatch": dict(post_dispatch.audit_record),
+        }
+        working["commands"][request.command_identity]["result"] = asdict(result)
         self._write(working)
         return result
 
@@ -638,6 +702,7 @@ class FullSystemController:
         self.codex_runner = codex_runner
         self.decisions = DecisionGateway(orchestrator)
         self.git = GitRepository(orchestrator.repo_root)
+        self.governance_validator = GovernanceEnvelopeValidator()
 
     def governed_snapshot(self) -> GovernedRepositorySnapshot:
         """Return the fresh, common routing snapshot for every component."""
@@ -815,7 +880,37 @@ class FullSystemController:
             paths.append(runs_rel)
         if not paths or not self.git.is_repository():
             return None
-        return self.git.checkpoint(
+        paths = sorted(set(paths))
+        snapshot = self.git.snapshot(recent_limit=5)
+        identity = IdentityBinding(
+            actor_id="sdd-orchestrator", project_id=str(self.orchestrator.repo_root.resolve()),
+            environment="local", repository=str(self.orchestrator.repo_root.resolve()),
+            branch=snapshot.branch, baseline=snapshot.head_commit, stage_id=sid,
+            attempt_id=f"stage-{sid}-checkpoint-{snapshot.head_commit}",
+            adapter_id="git-repository", session_id=f"process:{os.getpid()}",
+        )
+        dispatch = DispatchRequest(
+            action="GIT_CHECKPOINT", tool="git-repository",
+            arguments={"stage_id": sid, "paths": paths},
+            target=str(self.orchestrator.repo_root.resolve()), scope=tuple(paths),
+            side_effects=("GIT_WRITE",),
+            required_capabilities=(CapabilityClass.GIT_WRITE,),
+            approval_class="A1", approval_reference=f"approval-matrix:A1:stage-{sid}-checkpoint",
+        )
+        envelope = create_dispatch_envelope(
+            identity=identity, request=dispatch,
+            authentication_reference=f"local-process:{os.getpid()}",
+            authentication_method="local_process",
+            authority_references=tuple(event.get("written_artifacts", []) or []) or (f"stage:{sid}",),
+            gate_references=(f"stage:{sid}:completed",),
+            policy_references=("AGENTS.md:5", "SDD_HUMAN_APPROVAL_BOUNDARY_MATRIX.md"),
+            limit_references=(f"checkpoint-paths:{len(paths)}",),
+            provider_capability="git-write",
+        )
+        pre_dispatch = self.governance_validator.validate_pre_dispatch(
+            envelope, dispatch, current_identity=identity
+        )
+        commit = self.git.checkpoint(
             task_id=f"S{sid}",
             summary=f"complete Stage {sid} artifacts",
             paths=paths,
@@ -823,6 +918,21 @@ class FullSystemController:
             scope="sdd",
             allow_unrelated_dirty=True,
         )
+        post_dispatch = self.governance_validator.reconcile_post_dispatch(
+            envelope, dispatch,
+            DispatchObservation(
+                outcome="PASS", actual_scope=tuple(paths),
+                actual_side_effects=("GIT_WRITE",), evidence_references=(commit,),
+            ),
+        )
+        event["governance_git_write"] = {
+            "envelope_id": envelope.envelope_id,
+            "approval_class": "A1",
+            "approval_reference": dispatch.approval_reference,
+            "pre_dispatch": dict(pre_dispatch.audit_record),
+            "post_dispatch": dict(post_dispatch.audit_record),
+        }
+        return commit
 
     def run(self, *, max_steps: int = 100, semantic_by_stage: dict[str, dict[str, Any]] | None = None) -> SystemRunSummary:
         semantic_by_stage = semantic_by_stage or {}

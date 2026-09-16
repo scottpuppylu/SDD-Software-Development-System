@@ -49,6 +49,14 @@ from .telemetry.measurement import (
     measure_stage08_task,
     measure_stage08_task_exception,
 )
+from .governance_envelope import (
+    CapabilityClass,
+    DispatchObservation,
+    DispatchRequest,
+    GovernanceEnvelopeValidator,
+    IdentityBinding,
+    create_dispatch_envelope,
+)
 
 
 
@@ -97,6 +105,9 @@ class Stage08CodexRunner:
         self.telemetry_recorder = telemetry_recorder
         self._telemetry_attempt_task: AtomicTask | None = None
         self._evidence_write_resume: tuple[str, str | None, list[str], Any] | None = None
+        self.governance_validator = GovernanceEnvelopeValidator()
+        self._governance_audit: dict[str, Any] | None = None
+        self._active_stage08_envelope: SealedExecutionEnvelope | None = None
 
     def tasks(self) -> list[AtomicTask]:
         path = self.repo_root / "tasks.md"
@@ -641,6 +652,46 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
 
         envelope = self.assemble_execution_envelope(task, before)
         self.validate_execution_envelope(envelope, task)
+        self._active_stage08_envelope = envelope
+
+        provider_id = f"{type(self.codex).__module__}.{type(self.codex).__qualname__}"
+        governance_identity = IdentityBinding(
+            actor_id="sdd-stage08", project_id=str(self.repo_root.resolve()),
+            environment="workspace", repository=str(self.repo_root.resolve()),
+            branch=before.branch, baseline=before.head_commit, stage_id="08",
+            task_id=task.task_id, attempt_id=envelope.envelope_id,
+            provider_id=provider_id, adapter_id="codex-stage08",
+            session_id=f"process:{os.getpid()}",
+        )
+        governance_request = DispatchRequest(
+            action="EXECUTE_STAGE08_TASK", tool=provider_id,
+            arguments={"task_id": task.task_id, "sealed_envelope_id": envelope.envelope_id},
+            target=str(self.repo_root.resolve()), scope=tuple(task.allowed_paths),
+            side_effects=("WORKSPACE_WRITE",),
+            required_capabilities=(
+                CapabilityClass.TOOL_EXECUTION,
+                CapabilityClass.WORKSPACE_IMPLEMENTATION_WRITE,
+            ),
+            approval_class="A0",
+            approval_reference=f"stage07:{envelope.stage07_report_sha256}",
+        )
+        governance_envelope = create_dispatch_envelope(
+            identity=governance_identity, request=governance_request,
+            authentication_reference=f"codex-session:process-{os.getpid()}",
+            authentication_method="saved_session",
+            authority_references=tuple(f"{path}@sha256:{digest}" for path, digest in envelope.authority_versions),
+            gate_references=(f"stage07@sha256:{envelope.stage07_report_sha256}",),
+            policy_references=("AGENTS.md:7", "AGENTS.md:14", "SDD_AGENT_ADAPTER_CONTRACT.md"),
+            limit_references=(
+                f"codex-timeout:{getattr(self.codex, 'timeout_seconds', 'adapter-bounded')}",
+                f"verification-commands:{len(task.verification_commands)}",
+            ),
+            provider_capability="workspace-write",
+            sealed_stage08_envelope_id=envelope.envelope_id,
+        )
+        pre_governance = self.governance_validator.validate_pre_dispatch(
+            governance_envelope, governance_request, current_identity=governance_identity
+        )
 
         resume = self._evidence_write_resume
         durable_resume = self.recovery.load_pending_evidence_write()
@@ -723,6 +774,24 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             )
         changed = sorted(post_nonruntime_dirty)
 
+        post_governance = self.governance_validator.reconcile_post_dispatch(
+            governance_envelope, governance_request,
+            DispatchObservation(
+                outcome="PASS" if proc.returncode == 0 else "FAIL",
+                actual_scope=tuple(changed),
+                actual_side_effects=("WORKSPACE_WRITE",) if changed else (),
+                evidence_references=(f"pending-stage08-evidence:{task.task_id}",),
+                failure_route=("STAGE08_OR_AUTHORITY_OWNER" if proc.returncode != 0 else None),
+            ),
+        )
+        self._governance_audit = {
+            "envelope_id": governance_envelope.envelope_id,
+            "approval_class": governance_envelope.approval.approval_class,
+            "approval_reference": governance_envelope.approval.reference,
+            "pre_dispatch": dict(pre_governance.audit_record),
+            "post_dispatch": dict(post_governance.audit_record),
+        }
+
         # Refuse authority, task, Git identity, scope, or verification changes
         # made after sealing and before verification/checkpoint eligibility.
         self.validate_execution_envelope(envelope, task)
@@ -802,6 +871,39 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 raise
         self._evidence_write_resume = None
         checkpoint_paths = changed + [evidence]
+        checkpoint_identity = IdentityBinding(
+            actor_id="sdd-stage08", project_id=str(self.repo_root.resolve()),
+            environment="workspace", repository=str(self.repo_root.resolve()),
+            branch=envelope.branch, baseline=envelope.baseline_commit, stage_id="08",
+            task_id=task.task_id, attempt_id=f"{envelope.envelope_id}:checkpoint",
+            adapter_id="git-repository", session_id=f"process:{os.getpid()}",
+        )
+        checkpoint_dispatch = DispatchRequest(
+            action="GIT_TASK_CHECKPOINT", tool="git-repository",
+            arguments={"task_id": task.task_id, "paths": checkpoint_paths},
+            target=str(self.repo_root.resolve()), scope=tuple(checkpoint_paths),
+            side_effects=("GIT_WRITE",),
+            required_capabilities=(CapabilityClass.GIT_WRITE,),
+            approval_class="A1",
+            approval_reference=f"stage07:{envelope.stage07_report_sha256}:checkpoint",
+        )
+        checkpoint_envelope = create_dispatch_envelope(
+            identity=checkpoint_identity, request=checkpoint_dispatch,
+            authentication_reference=f"local-process:{os.getpid()}",
+            authentication_method="local_process",
+            authority_references=tuple(
+                f"{path}@sha256:{digest}" for path, digest in envelope.authority_versions
+            ),
+            gate_references=(f"stage07@sha256:{envelope.stage07_report_sha256}",),
+            policy_references=("AGENTS.md:5", "AGENTS.md:7"),
+            limit_references=(f"checkpoint-paths:{len(checkpoint_paths)}",),
+            provider_capability="git-write",
+            sealed_stage08_envelope_id=envelope.envelope_id,
+        )
+        checkpoint_pre = self.governance_validator.validate_pre_dispatch(
+            checkpoint_envelope, checkpoint_dispatch,
+            current_identity=checkpoint_identity,
+        )
         commit = self.git.checkpoint(
             task_id=task.task_id,
             summary=task.title,
@@ -810,6 +912,21 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             scope="implementation",
             allow_unrelated_dirty=True,  # runtime state files are orchestrator-managed
         )
+        checkpoint_post = self.governance_validator.reconcile_post_dispatch(
+            checkpoint_envelope, checkpoint_dispatch,
+            DispatchObservation(
+                outcome="PASS", actual_scope=tuple(checkpoint_paths),
+                actual_side_effects=("GIT_WRITE",), evidence_references=(commit,),
+            ),
+        )
+        if self._governance_audit is not None:
+            self._governance_audit["git_write"] = {
+                "envelope_id": checkpoint_envelope.envelope_id,
+                "approval_class": checkpoint_envelope.approval.approval_class,
+                "approval_reference": checkpoint_envelope.approval.reference,
+                "pre_dispatch": dict(checkpoint_pre.audit_record),
+                "post_dispatch": dict(checkpoint_post.audit_record),
+            }
         self.recovery.clear_pending_evidence_write()
         next_task = self._next_task_id(task.task_id)
         self.recovery.record_checkpoint(
@@ -1112,11 +1229,48 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         results: list[VerificationResult] = []
         project_python = self._resolve_project_python()
         verify_env = self._verification_env(project_python)
-        for command in task.verification_commands:
+        sealed = self._active_stage08_envelope
+        if sealed is None:
+            raise CodexAdapterError("verification dispatch requires the current sealed Stage08 envelope")
+        verification_audit: list[dict[str, Any]] = []
+        for index, command in enumerate(task.verification_commands):
             self._progress(f"{task.task_id} verify: {command}")
             argv = VerificationCommandPolicy.argv(command)
             argv = resolve_verification_argv(
                 argv, project_python, verify_env, resolver=shutil.which
+            )
+            identity = IdentityBinding(
+                actor_id="sdd-stage08", project_id=str(self.repo_root.resolve()),
+                environment="workspace", repository=str(self.repo_root.resolve()),
+                branch=sealed.branch, baseline=sealed.baseline_commit, stage_id="08",
+                task_id=task.task_id,
+                attempt_id=f"{sealed.envelope_id}:verify:{index}",
+                adapter_id="verification-execution", session_id=f"process:{os.getpid()}",
+            )
+            dispatch = DispatchRequest(
+                action="EXECUTE_VERIFICATION_TOOL", tool=str(argv[0]),
+                arguments={"command": command, "argv": list(argv)},
+                target=str(self.repo_root.resolve()), scope=tuple(task.allowed_paths),
+                side_effects=("TOOL_EXECUTION",),
+                required_capabilities=(CapabilityClass.TOOL_EXECUTION,),
+                approval_class="A0",
+                approval_reference=f"stage07:{sealed.stage07_report_sha256}",
+            )
+            governance = create_dispatch_envelope(
+                identity=identity, request=dispatch,
+                authentication_reference=f"local-process:{os.getpid()}",
+                authentication_method="local_process",
+                authority_references=tuple(
+                    f"{path}@sha256:{digest}" for path, digest in sealed.authority_versions
+                ),
+                gate_references=(f"stage07@sha256:{sealed.stage07_report_sha256}",),
+                policy_references=("AGENTS.md:8", "tasks.md:verification-command"),
+                limit_references=("verification-runtime:adapter-bounded",),
+                provider_capability="tool-execution",
+                sealed_stage08_envelope_id=sealed.envelope_id,
+            )
+            pre = self.governance_validator.validate_pre_dispatch(
+                governance, dispatch, current_identity=identity
             )
             result = execute_verification_command(
                 command,
@@ -1127,6 +1281,24 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 call_with_heartbeat=self._call_with_heartbeat,
                 heartbeat_label=f"{task.task_id} verification still running",
             )
+            post = self.governance_validator.reconcile_post_dispatch(
+                governance, dispatch,
+                DispatchObservation(
+                    outcome="PASS" if result.passed else "FAIL",
+                    actual_scope=(), actual_side_effects=("TOOL_EXECUTION",),
+                    evidence_references=(f"verification-result:{task.task_id}:{index}",),
+                    failure_route=(None if result.passed else "STAGE08_TASK_OWNER"),
+                ),
+            )
+            verification_audit.append({
+                "envelope_id": governance.envelope_id,
+                "approval_class": governance.approval.approval_class,
+                "approval_reference": governance.approval.reference,
+                "pre_dispatch": dict(pre.audit_record),
+                "post_dispatch": dict(post.audit_record),
+            })
+            if self._governance_audit is not None:
+                self._governance_audit["verification_dispatches"] = verification_audit
             results.append(result)
             self._progress(f"{task.task_id} verify {'PASS' if result.passed else 'FAIL'}: {command}")
             if not result.passed:
@@ -1214,6 +1386,7 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
             changed,
             verification,
             status=status,
+            governance_audit=self._governance_audit,
         )
 
     def _finish_without_checkpoint(

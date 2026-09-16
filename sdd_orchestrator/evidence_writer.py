@@ -752,6 +752,7 @@ def write_stage08_evidence(
     verification: list[VerificationResult],
     *,
     status: str,
+    governance_audit: Mapping[str, Any] | None = None,
 ) -> str:
     evidence_dir = repo_root / ".sdd" / "evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -775,6 +776,11 @@ def write_stage08_evidence(
         },
         "recorded_at": stamp,
     }
+    if governance_audit is not None:
+        required = {"envelope_id", "approval_class", "approval_reference", "pre_dispatch", "post_dispatch"}
+        if not required.issubset(governance_audit):
+            raise InvalidEvidence("governance audit is missing required envelope bindings")
+        payload["governance"] = dict(governance_audit)
     evidence_path = repo_root / rel
     temporary_file = tempfile.NamedTemporaryFile(
         dir=evidence_dir,

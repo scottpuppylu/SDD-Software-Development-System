@@ -21,6 +21,14 @@ from .context_dispatch import ContextDispatchCoordinator
 from .executor import StageExecutionRequest, StageExecutionResult, StageExecutor
 from .telemetry.measurement import measure_stage_request
 from .errors import FailureJournal, RecoveryRoute, new_failure
+from .governance_envelope import (
+    CapabilityClass,
+    DispatchObservation,
+    DispatchRequest,
+    GovernanceEnvelopeValidator,
+    IdentityBinding,
+    create_dispatch_envelope,
+)
 
 
 class StageExecutionValidationError(SDDOrchestratorError):
@@ -101,6 +109,7 @@ class StageRunner:
         self.telemetry_recorder = telemetry_recorder
         self.compilation_mode = compilation_mode
         self.failure_journal = failure_journal
+        self.governance_validator = GovernanceEnvelopeValidator()
 
     def governed_snapshot(
         self, *, pending_decisions: tuple[str, ...] = ()
@@ -660,6 +669,47 @@ class StageRunner:
             semantic_inputs=semantic_inputs,
             stage_instructions=stage_instructions,
         )
+        head = self._git(["rev-parse", "HEAD"], allow_failure=True) or "UNAVAILABLE"
+        branch = self._git(["branch", "--show-current"], allow_failure=True) or "DETACHED"
+        provider_id = f"{type(executor).__module__}.{type(executor).__qualname__}"
+        output_scope = tuple(
+            str(item) for item in request.contract.get("outputs", {}).get("files", []) or []
+        ) or (f"stage:{request.stage_id}",)
+        attempt_id = hashlib.sha256(
+            f"{head}:{request.stage_id}:{provider_id}".encode("utf-8")
+        ).hexdigest()[:24]
+        identity = IdentityBinding(
+            actor_id="sdd-orchestrator", project_id=str(self.repo_root.resolve()),
+            environment="local", repository=str(self.repo_root.resolve()),
+            branch=branch, baseline=head, stage_id=request.stage_id,
+            attempt_id=attempt_id, provider_id=provider_id,
+            adapter_id=provider_id, session_id=f"process:{os.getpid()}",
+        )
+        governance_request = DispatchRequest(
+            action="REASONING_STAGE_DISPATCH", tool=provider_id,
+            arguments={"stage_id": request.stage_id, "stage_type": request.stage_type},
+            target=str(self.repo_root.resolve()), scope=output_scope,
+            side_effects=("PROPOSED_OUTPUT",),
+            required_capabilities=(CapabilityClass.TOOL_EXECUTION,),
+            approval_class="A0",
+            approval_reference=f"approval-matrix:A0:stage-{request.stage_id}",
+        )
+        governance_envelope = create_dispatch_envelope(
+            identity=identity, request=governance_request,
+            authentication_reference=f"local-process:{os.getpid()}",
+            authentication_method="local_process",
+            authority_references=tuple(sorted(request.artifacts)) or (".sdd/state/project-state.yaml",),
+            gate_references=(f"stage:{request.stage_id}:entry-eligible",),
+            policy_references=(
+                "AGENTS.md:14", "SDD_AGENT_ADAPTER_CONTRACT.md",
+                "SDD_HUMAN_APPROVAL_BOUNDARY_MATRIX.md",
+            ),
+            limit_references=(f"executor-timeout:{getattr(executor, 'timeout_seconds', 'bounded-by-adapter')}",),
+            provider_capability="reasoning",
+        )
+        pre_dispatch = self.governance_validator.validate_pre_dispatch(
+            governance_envelope, governance_request, current_identity=identity
+        )
         if self.telemetry_recorder is not None:
             try:
                 self.telemetry_recorder.record(measure_stage_request(request))
@@ -683,6 +733,22 @@ class StageRunner:
             result = ContextDispatchCoordinator().execute(
                 executor, baseline_package, optimized_package
             )
+        post_dispatch = self.governance_validator.reconcile_post_dispatch(
+            governance_envelope, governance_request,
+            DispatchObservation(
+                outcome="PASS" if result.status in {"COMPLETED", "BLOCKED"} else "FAIL",
+                actual_scope=tuple(sorted(result.artifacts)),
+                actual_side_effects=("PROPOSED_OUTPUT",),
+                evidence_references=(f"pending-run-record:{attempt_id}",),
+                failure_route=("REMEDIATION_ROUTER" if result.status == "BLOCKED" else None),
+            ),
+        )
+        result.metadata.setdefault("governance", {})
+        result.metadata["governance"].update({
+            "envelope_id": governance_envelope.envelope_id,
+            "pre_dispatch": dict(pre_dispatch.audit_record),
+            "post_dispatch": dict(post_dispatch.audit_record),
+        })
         self._validate_result(request, result)
         written = self._write_outputs_atomically(result.artifacts)
         convergence_written = self._persist_convergence_tasks(request, result)
