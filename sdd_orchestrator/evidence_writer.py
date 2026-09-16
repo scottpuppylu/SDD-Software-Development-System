@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 from typing import Any, Iterable, Mapping
 
+from .security_policy import redact_security_value
+
 from .codex_results import VerificationResult
 from .result_serialization import serialize_verification_result
 from .task_parser import AtomicTask
@@ -780,7 +782,7 @@ def write_stage08_evidence(
         required = {"envelope_id", "approval_class", "approval_reference", "pre_dispatch", "post_dispatch"}
         if not required.issubset(governance_audit):
             raise InvalidEvidence("governance audit is missing required envelope bindings")
-        payload["governance"] = dict(governance_audit)
+        payload["governance"] = redact_security_value(dict(governance_audit))
     evidence_path = repo_root / rel
     temporary_file = tempfile.NamedTemporaryFile(
         dir=evidence_dir,

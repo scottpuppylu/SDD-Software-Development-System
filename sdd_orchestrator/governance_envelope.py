@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 import hashlib
@@ -8,6 +8,14 @@ import json
 import re
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
+
+from .security_policy import (
+    SecurityEnvelope,
+    SecurityObservation,
+    SecurityPolicyError,
+    SecurityPolicyValidator,
+    SecurityRequest,
+)
 
 
 class GovernanceEnvelopeError(PermissionError):
@@ -66,11 +74,25 @@ def _tuple(value: Iterable[str]) -> tuple[str, ...]:
 def _canonical(value: Any) -> str:
     if isinstance(value, Enum):
         value = value.value
+    elif is_dataclass(value):
+        value = asdict(value)
     if isinstance(value, Mapping):
-        value = {str(key): value[key] for key in sorted(value, key=str)}
+        value = {str(key): _canonical_value(value[key]) for key in sorted(value, key=str)}
     elif isinstance(value, (tuple, list, set, frozenset)):
-        value = list(value)
+        value = [_canonical_value(item) for item in value]
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _canonical_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if is_dataclass(value):
+        return _canonical_value(asdict(value))
+    if isinstance(value, Mapping):
+        return {str(key): _canonical_value(value[key]) for key in sorted(value, key=str)}
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return [_canonical_value(item) for item in value]
+    return value
 
 
 def argument_digest(arguments: Mapping[str, Any]) -> str:
@@ -167,6 +189,7 @@ class GovernanceEnvelope:
     issued_at: str
     expires_at: str
     sealed_stage08_envelope_id: str | None = None
+    security_envelope: SecurityEnvelope | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -189,6 +212,7 @@ class DispatchRequest:
     approval_class: str
     approval_reference: str
     provider_authority_claims: tuple[str, ...] = ()
+    security_request: SecurityRequest | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "arguments", MappingProxyType(dict(self.arguments)))
@@ -205,6 +229,7 @@ class DispatchObservation:
     actual_side_effects: tuple[str, ...]
     evidence_references: tuple[str, ...]
     failure_route: str | None = None
+    security_observation: SecurityObservation | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "actual_scope", _tuple(self.actual_scope))
@@ -244,6 +269,7 @@ def _envelope_payload(envelope: GovernanceEnvelope) -> dict[str, Any]:
         "issued_at": envelope.issued_at,
         "expires_at": envelope.expires_at,
         "sealed_stage08_envelope_id": envelope.sealed_stage08_envelope_id,
+        "security_envelope": envelope.security_envelope,
     }
 
 
@@ -257,12 +283,20 @@ class GovernanceEnvelopeValidator:
     """Fail-closed exact-match validator with post-dispatch effect reconciliation."""
 
     REQUIRED_AUDIT = frozenset({"ENVELOPE_ID", "OUTCOME", "OBSERVED_EFFECTS", "FAILURE_ROUTE", "APPROVAL_BINDING"})
+    REQUIRED_SECURITY_AUDIT = frozenset({"SECURITY_DECISION"})
     REQUIRED_EVIDENCE = frozenset({"DISPATCH_RESULT"})
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        require_security: bool = False,
+        security_validator: SecurityPolicyValidator | None = None,
+    ) -> None:
         self._consumed_protected_approvals: set[str] = set()
         self._pending_envelopes: set[str] = set()
         self._completed_envelopes: set[str] = set()
+        self.require_security = require_security
+        self.security_validator = security_validator or SecurityPolicyValidator()
 
     @staticmethod
     def _deny(code: str, route: str, detail: str) -> None:
@@ -321,6 +355,14 @@ class GovernanceEnvelopeValidator:
             self._deny("INVALID_AUTHORITY_BINDING", "AUTHORITATIVE_OWNER", "authority or gate reference is not current and unambiguous")
         if not self.REQUIRED_AUDIT.issubset(envelope.audit_obligations):
             self._deny("MISSING_AUDIT_OBLIGATION", "EVIDENCE_OWNER", "material audit fields are incomplete")
+        if (
+            self.require_security or envelope.security_envelope is not None or request.security_request is not None
+        ) and not self.REQUIRED_SECURITY_AUDIT.issubset(envelope.audit_obligations):
+            self._deny(
+                "MISSING_SECURITY_AUDIT_OBLIGATION",
+                "EVIDENCE_OWNER",
+                "minimum-disclosure security decision audit is required",
+            )
         if not self.REQUIRED_EVIDENCE.issubset(envelope.evidence_obligations):
             self._deny("MISSING_EVIDENCE_OBLIGATION", "EVIDENCE_OWNER", "dispatch evidence obligation is absent")
         if request.approval_class not in APPROVAL_CLASSES:
@@ -383,6 +425,15 @@ class GovernanceEnvelopeValidator:
             self._deny("APPROVAL_REUSED", "HUMAN_DECISION_OWNER", "protected approval was already consumed")
         if envelope.envelope_id in self._pending_envelopes or envelope.envelope_id in self._completed_envelopes:
             self._deny("ENVELOPE_REUSED", "AUTHORIZATION_OWNER", "dispatch envelope is single-use")
+        security_audit: Mapping[str, Any] | None = None
+        if self.require_security or envelope.security_envelope is not None or request.security_request is not None:
+            try:
+                security_decision = self.security_validator.validate_pre_dispatch(
+                    envelope.security_envelope, request.security_request, now=instant
+                )
+            except SecurityPolicyError as exc:
+                self._deny(exc.code, exc.route, exc.detail)
+            security_audit = security_decision.audit_record
         self._pending_envelopes.add(envelope.envelope_id)
         return GovernanceDecision(
             "PASS", envelope.envelope_id,
@@ -392,6 +443,7 @@ class GovernanceEnvelopeValidator:
                 "approval_reference": approval.reference,
                 "action": request.action, "target": request.target,
                 "scope": request.scope, "failure_route": None,
+                "security": security_audit,
             }),
         )
 
@@ -420,6 +472,17 @@ class GovernanceEnvelopeValidator:
             grant.capability_class in _PROTECTED_CAPABILITIES for grant in envelope.grants
         ):
             self._consumed_protected_approvals.add(envelope.approval.reference)
+        security_audit: Mapping[str, Any] | None = None
+        if self.require_security or envelope.security_envelope is not None or request.security_request is not None:
+            try:
+                security_decision = self.security_validator.reconcile_post_dispatch(
+                    envelope.security_envelope,
+                    request.security_request,
+                    observation.security_observation,
+                )
+            except SecurityPolicyError as exc:
+                self._deny(exc.code, exc.route, exc.detail)
+            security_audit = security_decision.audit_record
         return GovernanceDecision(
             "PASS", envelope.envelope_id,
             MappingProxyType({
@@ -430,6 +493,7 @@ class GovernanceEnvelopeValidator:
                 "failure_route": observation.failure_route,
                 "approval_class": envelope.approval.approval_class,
                 "approval_reference": envelope.approval.reference,
+                "security": security_audit,
             }),
         )
 
@@ -448,6 +512,7 @@ def create_dispatch_envelope(
     risk: str = "ROUTINE_GOVERNED_OPERATION",
     provider_capability: str = "declared-adapter-capability",
     sealed_stage08_envelope_id: str | None = None,
+    security_envelope: SecurityEnvelope | None = None,
     lifetime_seconds: int = 300,
     now: datetime | None = None,
 ) -> GovernanceEnvelope:
@@ -493,9 +558,15 @@ def create_dispatch_envelope(
         ),
         policy_references=tuple(policy_references),
         limit_references=tuple(limit_references),
-        audit_obligations=tuple(sorted(GovernanceEnvelopeValidator.REQUIRED_AUDIT)),
+        audit_obligations=tuple(
+            sorted(
+                GovernanceEnvelopeValidator.REQUIRED_AUDIT
+                | GovernanceEnvelopeValidator.REQUIRED_SECURITY_AUDIT
+            )
+        ),
         evidence_obligations=tuple(sorted(GovernanceEnvelopeValidator.REQUIRED_EVIDENCE)),
         prohibited_operations=("AUTHORITY_OVERRIDE", "PERMISSION_ENLARGEMENT"),
         issued_at=issued_at, expires_at=expires_at,
         sealed_stage08_envelope_id=sealed_stage08_envelope_id,
+        security_envelope=security_envelope,
     )

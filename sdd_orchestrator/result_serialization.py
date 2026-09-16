@@ -5,6 +5,7 @@ from dataclasses import asdict
 from typing import Any, Mapping
 
 from .codex_results import CodexTaskRunResult, VerificationResult
+from .security_policy import redact_security_value
 
 
 def serialize_verification_result(result: VerificationResult) -> dict[str, Any]:
@@ -69,7 +70,7 @@ def _redact(value: Any, *, key: str = "") -> Any:
         return [_redact(item) for item in value]
     if isinstance(value, tuple):
         return [_redact(item) for item in value]
-    return deepcopy(value)
+    return deepcopy(redact_security_value(value))
 
 
 def _verification_projection(raw_checks: list[Any]) -> tuple[list[dict[str, Any]], list[str]]:

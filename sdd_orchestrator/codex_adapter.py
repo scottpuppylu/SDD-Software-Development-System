@@ -57,6 +57,15 @@ from .governance_envelope import (
     IdentityBinding,
     create_dispatch_envelope,
 )
+from .security_policy import (
+    DataClass,
+    FilesystemAccess,
+    FilesystemGrant,
+    SandboxClass,
+    SecurityObservation,
+    SecurityRequest,
+    create_security_envelope,
+)
 
 
 
@@ -105,9 +114,43 @@ class Stage08CodexRunner:
         self.telemetry_recorder = telemetry_recorder
         self._telemetry_attempt_task: AtomicTask | None = None
         self._evidence_write_resume: tuple[str, str | None, list[str], Any] | None = None
-        self.governance_validator = GovernanceEnvelopeValidator()
+        self.governance_validator = GovernanceEnvelopeValidator(require_security=True)
         self._governance_audit: dict[str, Any] | None = None
         self._active_stage08_envelope: SealedExecutionEnvelope | None = None
+
+    @staticmethod
+    def _security_request(
+        identity: IdentityBinding,
+        *,
+        filesystem_paths: tuple[str, ...],
+        filesystem_access: FilesystemAccess,
+        process: str,
+        transmit_data: bool,
+        audit_suffix: str,
+    ) -> tuple[SecurityRequest, Any]:
+        request = SecurityRequest(
+            data_class=DataClass.INTERNAL,
+            transmit_data=transmit_data,
+            sandbox_class=SandboxClass.S1_WORKSPACE_WRITE,
+            project_id=identity.project_id,
+            environment=identity.environment,
+            session_id=identity.session_id or identity.attempt_id,
+            provider_session_id=identity.session_id,
+            filesystem=tuple(
+                FilesystemGrant(path, filesystem_access) for path in filesystem_paths
+            ),
+            processes=(process,),
+        )
+        envelope = create_security_envelope(
+            request=request,
+            classification_reference="AGENTS.md:14.4:data-classification",
+            policy_reference="SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            redaction_reference="AGENTS.md:14.4:redaction",
+            retention_reference="AGENTS.md:14.4:persistence-policy",
+            encryption_reference="AGENTS.md:14.4:encryption-policy",
+            audit_reference=f"security-audit:{identity.attempt_id}:{audit_suffix}",
+        )
+        return request, envelope
 
     def tasks(self) -> list[AtomicTask]:
         path = self.repo_root / "tasks.md"
@@ -663,6 +706,20 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             provider_id=provider_id, adapter_id="codex-stage08",
             session_id=f"process:{os.getpid()}",
         )
+        configured_sandbox = getattr(self.codex, "sandbox", "workspace-write")
+        if configured_sandbox != "workspace-write":
+            raise CodexAdapterError(
+                "Stage08 security policy requires the S1 workspace-write sandbox; "
+                f"configured sandbox={configured_sandbox!r}"
+            )
+        security_request, security_envelope = self._security_request(
+            governance_identity,
+            filesystem_paths=tuple(task.allowed_paths),
+            filesystem_access=FilesystemAccess.WRITE,
+            process=provider_id,
+            transmit_data=True,
+            audit_suffix="stage08-dispatch",
+        )
         governance_request = DispatchRequest(
             action="EXECUTE_STAGE08_TASK", tool=provider_id,
             arguments={"task_id": task.task_id, "sealed_envelope_id": envelope.envelope_id},
@@ -674,6 +731,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             ),
             approval_class="A0",
             approval_reference=f"stage07:{envelope.stage07_report_sha256}",
+            security_request=security_request,
         )
         governance_envelope = create_dispatch_envelope(
             identity=governance_identity, request=governance_request,
@@ -688,6 +746,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             ),
             provider_capability="workspace-write",
             sealed_stage08_envelope_id=envelope.envelope_id,
+            security_envelope=security_envelope,
         )
         pre_governance = self.governance_validator.validate_pre_dispatch(
             governance_envelope, governance_request, current_identity=governance_identity
@@ -782,6 +841,13 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 actual_side_effects=("WORKSPACE_WRITE",) if changed else (),
                 evidence_references=(f"pending-stage08-evidence:{task.task_id}",),
                 failure_route=("STAGE08_OR_AUTHORITY_OWNER" if proc.returncode != 0 else None),
+                security_observation=SecurityObservation(
+                    filesystem=tuple(
+                        FilesystemGrant(path, FilesystemAccess.WRITE) for path in changed
+                    ),
+                    processes=(provider_id,),
+                    evidence_reference=f"pending-stage08-evidence:{task.task_id}",
+                ),
             ),
         )
         self._governance_audit = {
@@ -878,6 +944,14 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             task_id=task.task_id, attempt_id=f"{envelope.envelope_id}:checkpoint",
             adapter_id="git-repository", session_id=f"process:{os.getpid()}",
         )
+        checkpoint_security_request, checkpoint_security_envelope = self._security_request(
+            checkpoint_identity,
+            filesystem_paths=tuple(checkpoint_paths),
+            filesystem_access=FilesystemAccess.WRITE,
+            process="git-repository",
+            transmit_data=False,
+            audit_suffix="checkpoint",
+        )
         checkpoint_dispatch = DispatchRequest(
             action="GIT_TASK_CHECKPOINT", tool="git-repository",
             arguments={"task_id": task.task_id, "paths": checkpoint_paths},
@@ -886,6 +960,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             required_capabilities=(CapabilityClass.GIT_WRITE,),
             approval_class="A1",
             approval_reference=f"stage07:{envelope.stage07_report_sha256}:checkpoint",
+            security_request=checkpoint_security_request,
         )
         checkpoint_envelope = create_dispatch_envelope(
             identity=checkpoint_identity, request=checkpoint_dispatch,
@@ -899,6 +974,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             limit_references=(f"checkpoint-paths:{len(checkpoint_paths)}",),
             provider_capability="git-write",
             sealed_stage08_envelope_id=envelope.envelope_id,
+            security_envelope=checkpoint_security_envelope,
         )
         checkpoint_pre = self.governance_validator.validate_pre_dispatch(
             checkpoint_envelope, checkpoint_dispatch,
@@ -917,6 +993,13 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             DispatchObservation(
                 outcome="PASS", actual_scope=tuple(checkpoint_paths),
                 actual_side_effects=("GIT_WRITE",), evidence_references=(commit,),
+                security_observation=SecurityObservation(
+                    filesystem=tuple(
+                        FilesystemGrant(path, FilesystemAccess.WRITE) for path in checkpoint_paths
+                    ),
+                    processes=("git-repository",),
+                    evidence_reference=commit,
+                ),
             ),
         )
         if self._governance_audit is not None:
@@ -1247,6 +1330,14 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 attempt_id=f"{sealed.envelope_id}:verify:{index}",
                 adapter_id="verification-execution", session_id=f"process:{os.getpid()}",
             )
+            verification_security_request, verification_security_envelope = self._security_request(
+                identity,
+                filesystem_paths=tuple(task.allowed_paths),
+                filesystem_access=FilesystemAccess.READ,
+                process="verification-execution",
+                transmit_data=False,
+                audit_suffix=f"verification-{index}",
+            )
             dispatch = DispatchRequest(
                 action="EXECUTE_VERIFICATION_TOOL", tool=str(argv[0]),
                 arguments={"command": command, "argv": list(argv)},
@@ -1255,6 +1346,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 required_capabilities=(CapabilityClass.TOOL_EXECUTION,),
                 approval_class="A0",
                 approval_reference=f"stage07:{sealed.stage07_report_sha256}",
+                security_request=verification_security_request,
             )
             governance = create_dispatch_envelope(
                 identity=identity, request=dispatch,
@@ -1268,6 +1360,7 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 limit_references=("verification-runtime:adapter-bounded",),
                 provider_capability="tool-execution",
                 sealed_stage08_envelope_id=sealed.envelope_id,
+                security_envelope=verification_security_envelope,
             )
             pre = self.governance_validator.validate_pre_dispatch(
                 governance, dispatch, current_identity=identity
@@ -1288,6 +1381,10 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                     actual_scope=(), actual_side_effects=("TOOL_EXECUTION",),
                     evidence_references=(f"verification-result:{task.task_id}:{index}",),
                     failure_route=(None if result.passed else "STAGE08_TASK_OWNER"),
+                    security_observation=SecurityObservation(
+                        processes=("verification-execution",),
+                        evidence_reference=f"verification-result:{task.task_id}:{index}",
+                    ),
                 ),
             )
             verification_audit.append({

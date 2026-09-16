@@ -36,6 +36,7 @@ from .governance_envelope import (
     GovernanceEnvelopeValidator,
     IdentityBinding,
 )
+from .security_policy import redact_security_value
 
 
 class ReasoningProviderError(RuntimeError):
@@ -158,11 +159,12 @@ class ReasoningProviderBoundary:
     @staticmethod
     def _safe_detail(detail: str) -> str:
         bounded = detail[:1000]
-        return re.sub(
+        legacy_redacted = re.sub(
             r"(?i)(authorization\s*[:=]\s*bearer|api[_-]?key\s*[:=])\s*[^\s,;]+",
             r"\1 [REDACTED]",
             bounded,
         )
+        return str(redact_security_value(legacy_redacted))
 
     @staticmethod
     def _failure(invocation: ReasoningInvocation, category: str, detail: str) -> ReasoningBoundaryResult:
