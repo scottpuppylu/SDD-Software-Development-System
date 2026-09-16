@@ -4,9 +4,9 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: 08
-  current_stage_name: IMPLEMENTATION_RUNNER
-  last_completed_stage: '07'
+  current_stage: '04'
+  current_stage_name: SOFTWARE_DESIGN
+  last_completed_stage: '03'
   next_action: RUN_STAGE
 stages:
   '01':
@@ -14,24 +14,24 @@ stages:
     result: null
   '02':
     status: DONE
-    result: null
+    result: COMPLETED
   '03':
     status: DONE
-    result: null
+    result: COMPLETED
   '04':
-    status: DONE
-    result: COMPLETED
-  '05':
-    status: DONE
-    result: COMPLETED
-  '06':
-    status: DONE
-    result: COMPLETED
-  '07':
-    status: DONE
-    result: PASS
-  08:
     status: IN_PROGRESS
+    result: null
+  '05':
+    status: TODO
+    result: null
+  '06':
+    status: TODO
+    result: null
+  '07':
+    status: TODO
+    result: null
+  08:
+    status: TODO
     result: null
   09:
     status: TODO
@@ -40,7 +40,7 @@ stages:
     status: TODO
     result: null
 authorizations:
-  implementation: true
+  implementation: false
   release: false
 blocking:
   is_blocked: false
