@@ -1,4 +1,4 @@
-# Stage 07 Pre-Implementation Gate Report — TASK-021
+# Stage 07 Pre-Implementation Gate Report — TASK-022
 
 ## 1. Decision
 
@@ -8,111 +8,111 @@ STAGE_NAME = PRE_IMPLEMENTATION_GATE
 RESULT = PASS
 CLASSIFICATION = null
 IMPLEMENTATION_AUTHORIZATION = GRANTED
-AUTHORIZED_TASK = TASK-021
-UNAUTHORIZED_TASKS = TASK-022,TASK-023,TASK-024,TASK-025
-AUTHORIZED_NEXT_OPERATION = SEALED_STAGE08_TASK_021_IMPLEMENTATION
+AUTHORIZED_TASK = TASK-022
+UNAUTHORIZED_TASKS = TASK-023,TASK-024,TASK-025
+AUTHORIZED_NEXT_OPERATION = SEALED_STAGE08_TASK_022_IMPLEMENTATION
 NEXT_STAGE = 08
 ```
 
-This fresh Stage07 decision is evaluated against authoritative entry baseline `f10a357210d417c30884758800c8ca0986b156a4` on branch `telemetry-measurement-v2`. It authorizes only TASK-021 under its exact repository-stored Stage06 contract. It does not implement TASK-021, prove the remediation complete, authorize another task, or execute Stage08, Stage09, Stage10, deployment, or release.
+This fresh Stage07 decision is evaluated against authoritative entry baseline `5acc6e33c617707e361c43d2e94d9e75a39ff764` on branch `telemetry-measurement-v2`. It authorizes only TASK-022 under its exact repository-stored Stage06 contract. It does not reuse TASK-021 authorization or its sealed envelope, implement TASK-022, authorize another task, or execute Stage08, Stage09, Stage10, deployment, live network access, or secret access.
 
 ## 2. Runtime, baseline, and governance readiness
 
-- Entry HEAD exactly matched `f10a357210d417c30884758800c8ca0986b156a4`; the entry worktree was clean.
+- Entry HEAD exactly matched `5acc6e33c617707e361c43d2e94d9e75a39ff764`; the entry worktree was clean.
 - Repository-local `.\.venv\Scripts\python.exe` reported Python `3.14.7`; `python -m pytest --version` reported pytest `9.1.1`.
-- `tests/test_v117_machine_task_contract.py` returned `PASS`: 10 tests passed. `VerificationCommandPolicy` accepted TASK-021's exact stored command without transcription or substitution.
-- Stage06 checkpoint `f10a357210d417c30884758800c8ca0986b156a4` and run `.sdd/runs/20260915T031557.503468Z-stage-06.json` report `COMPLETED` and transition to Stage07. The run's embedded `tasks.md` matched the committed artifact.
-- Authority state has no unresolved conflict or blocking TBD. Both A2 records remain approved at record version 2. Project state entered Stage07 with implementation authorization false, as required before this decision.
-- The canonical namespaces remain PRD `AC-01` through `AC-37`, Spec `SPEC-001` through `SPEC-018`, and Architecture Constitution `ARCH-AC-01` through `ARCH-AC-09`.
+- `tests/test_v117_machine_task_contract.py` returned `PASS`: 10 tests passed. `VerificationCommandPolicy` accepted TASK-022's exact stored command without transcription or substitution.
+- Stage06 checkpoint `f10a357210d417c30884758800c8ca0986b156a4` and run `.sdd/runs/20260915T031557.503468Z-stage-06.json` remain the task-decomposition authority. The run's embedded TASK-022 contract matches `tasks.md`.
+- Authority state has no unresolved conflict or blocking TBD. Both durable A2 records remain approved. The canonical namespaces remain PRD `AC-01` through `AC-37`, Spec `SPEC-001` through `SPEC-018`, and Architecture Constitution `ARCH-AC-01` through `ARCH-AC-09`.
+- TASK-021 implementation checkpoint `6588ef148d44070ee71c03158fa9f5fe6dae85ae` and state-finalization commit `5acc6e33c617707e361c43d2e94d9e75a39ff764` are current and reachable. Its qualification and evidence are preserved.
 
-## 3. TASK-021 authority, eligibility, and dependencies
+## 3. TASK-022 authority, eligibility, and dependencies
 
-The authoritative contract is `tasks.md`, section `TASK-021 - Unified pre-dispatch governance envelope and capability enforcement`, created by Stage06. Its gap mapping is limited to the Stage06-confirmed pre-dispatch governance, identity/authentication-reference and authorization binding, capability-class/default-deny enforcement, exact tool-call validation, and audit/Human Approval binding deltas.
+The authoritative contract is `tasks.md`, section `TASK-022 - Security, data, prompt-injection, sandbox, network, and credential containment`, created by Stage06. The Stage06 gap mapping assigns only:
+
+- sensitive-data classification plus redaction, retention, encryption-policy, and environment-compatibility decisions;
+- prompt-injection, malicious-instruction, confused-deputy, and escalating tool-call containment;
+- sandbox-class and exact filesystem boundary enforcement;
+- exact network destination/purpose, credential-class/reference, secret-access, process, and production-boundary grants;
+- stop-before-side-effect enforcement and minimum-disclosure security audit integration.
 
 The repository qualification validator returned true for every declared dependency:
 
-| Dependency | Checkpoint | Evidence | Result |
+| Dependency | Checkpoint | Evidence | State-finalized result |
 | --- | --- | --- | --- |
-| `T003` | `0d4881c6f34db1d12fb04cea3cb79c3f6689e632` | `.sdd/evidence/20260908T025919.554389Z-T003.json` | `PASS` |
-| `T005` | `31ed68ac07133bdc67461a85496bee4de63a803c` | `.sdd/evidence/20260909T000608.793975Z-T005.json` | `PASS` |
-| `T006` | `0f3449d62ec301a41e8fd3a58edd824ef84a19a9` | `.sdd/evidence/20260909T004005.844815Z-T006.json` | `PASS` |
-| `T007` | `a9a2dbfbbf6d694875872cbbf074b004ac1d7ef6` | `.sdd/evidence/20260909T062037.317488Z-T007.json` | `PASS` |
-| `T008` | `d50b1b18a5b992140b460776109d933ecc03306d` | `.sdd/evidence/20260909T012917.398860Z-T008.json` | `PASS` |
-| `T010` | `d5bca6588033ecf89e1caa685fd5a0846c660696` | `.sdd/evidence/20260909T054649.203279Z-T010.json` | `PASS` |
-| `T011` | `000afb265a811cf4a8aee8030d08fe189a44592c` | `.sdd/evidence/20260909T071007.112397Z-T011.json` | `PASS` |
-| `T012` | `ccffccef435481d82d748e2235df1c53d20f7127` | `.sdd/evidence/20260907T023726.044768Z-T012-recovery-T012-EVIDENCE-RECOVERY-001.json` | `PASS` |
-| `T017` | `b58e79883b41904e710801191997c9729f26e8bf` | `.sdd/evidence/20260910T051318.814896Z-T017.json` | `PASS` |
+| `T011` | `000afb265a811cf4a8aee8030d08fe189a44592c` | `.sdd/evidence/20260909T071007.112397Z-T011.json` | `IMPLEMENTATION_QUALIFIED` |
+| `T021` | `6588ef148d44070ee71c03158fa9f5fe6dae85ae` | `.sdd/evidence/20260916T000708.940197Z-T021.json` | `IMPLEMENTATION_QUALIFIED` |
 
-TASK-001 through TASK-020 remain repository-qualified. Their task contracts, checkpoints, evidence, and implementation-state records are unchanged. TASK-021 is the first selected unqualified remediation task; no prior task is reopened.
+TASK-021 is an explicit dependency. Its unified pre-dispatch governance remains mandatory and is extended only by TASK-022 security-policy decisions; it is not bypassed, replaced, or weakened. TASK-001 through TASK-021 remain repository-qualified. The historical `.sdd/evidence/20260915T040620.071193Z-T021.json` remains `CODEX_FAILED`, nonqualifying, and irrelevant to TASK-022 authority.
 
 ## 4. Authorized bounded contract
 
 Exact allowed files:
 
+- `sdd_orchestrator/security_policy.py`
 - `sdd_orchestrator/governance_envelope.py`
 - `sdd_orchestrator/providers.py`
 - `sdd_orchestrator/codex_adapter.py`
-- `sdd_orchestrator/system_controller.py`
-- `sdd_orchestrator/runner.py`
+- `sdd_orchestrator/codex_cli.py`
 - `sdd_orchestrator/evidence_writer.py`
-- `tests/test_governance_envelope.py`
+- `sdd_orchestrator/result_serialization.py`
+- `tests/test_security_policy.py`
 
 Exact authoritative verification command:
 
 ```text
-.\.venv\Scripts\python.exe -m pytest -q tests/test_governance_envelope.py tests/test_m4_reasoning_pipeline.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py
+.\.venv\Scripts\python.exe -m pytest -q tests/test_security_policy.py tests/test_m4_reasoning_pipeline.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py
 ```
 
-The accepted implementation behavior is limited to a provider-neutral immutable governance envelope and non-bypassable validator; current actor/authentication-reference/project/environment identity; explicit capability grants; exact action/tool/argument/target/scope/side-effect matching; authority, Stage07, approval, expiry, audit, and evidence bindings; integration immediately before the existing reasoning, Stage08, lifecycle-tool, and Git-write dispatch boundaries; and post-dispatch actual-scope/effect reconciliation.
+The resolved acceptance conditions are the complete TASK-022 `Required behavior/outcome`, `Preservation obligations`, `Error/failure expectations`, `Security/safety expectations`, `Verification requirements`, `Checkpoint eligibility`, and `Out-of-scope` clauses. In particular:
 
-The resolved acceptance conditions are the complete TASK-021 `Required behavior/outcome`, `Preservation obligations`, `Error/failure expectations`, `Security/safety expectations`, `Verification requirements`, `Checkpoint eligibility`, and `Out-of-scope` clauses. In particular:
+1. Missing, unknown, prohibited, stale, conflicting, or incompatible classification, policy, encryption/retention binding, environment, sandbox, endpoint, filesystem, credential, secret, process, or production-boundary authority fails closed before dispatch or side effect.
+2. Suspected prompt injection, malicious embedded instruction, confused-deputy behavior, or escalating tool request denies dispatch and routes safely without trying alternate tools, encodings, providers, endpoints, or weaker policy.
+3. Network, credential, secret, filesystem, process, sandbox, and production capabilities remain default-deny; an allowed request must match an exact attributable least-capability grant.
+4. Secret values are neither accepted as ordinary governance payloads nor persisted. Encryption and retention remain policy/evidence references; TASK-022 does not choose or implement a cryptography, IAM, secrets, cloud, or network product.
+5. Post-dispatch reconciliation contains actual scope/effect overruns, preserves valid prior state, and emits minimum-disclosure audit references without leaking protected values.
+6. Positive and negative tests cover the complete declared security boundary and prove no protected dispatch or secret persistence on denial while preserving existing redaction, path-scope, sealed Stage08, TASK-021 governance, and atomic evidence/checkpoint behavior.
 
-1. Every applicable dispatch fails closed before side effect when a required current binding is absent, stale, ambiguous, conflicting, expired, unverifiable, or out of scope.
-2. Unlisted capabilities, actions, tools, arguments, paths, Git operations, and external effects are denied; exact least-capability grants may proceed.
-3. Existing sealed Stage08 authorization remains necessary and is referenced rather than weakened or replaced.
-4. Material audit/evidence binds the non-secret envelope identity, actual outcome/effect, failure route, and current approval class/reference.
-5. Negative tests prove no dispatch or side effect for actor/project/environment, authentication, Stage07/approval, capability, tool/argument/target, scope/effect, expiry, authority-claim, and audit-obligation failures.
-6. Existing Stage08 atomic evidence/checkpoint and safety behavior remains green; no authority, historical evidence, qualification state, or A2 record is rewritten.
+TASK-023 budget/resource enforcement, TASK-024 provider promotion/fallback conformance, TASK-025 fixture repair, live network/secret/production access, authority changes, deployment, and product selection are expressly outside this authorization.
 
 ## 5. Architecture Constitution evaluation
 
-The checks below evaluate whether the proposed bounded remediation contract is architecture-conformant and safely executable. `PASS` does not claim TASK-021 is already implemented.
-
 | Criterion | Gate result | Basis |
 | --- | --- | --- |
-| `ARCH-AC-04` | `PASS` | TASK-021 expressly creates the single fail-closed pre-dispatch envelope and integrates it at the named dispatch boundaries. Data/security/budget policy details remain explicit dependencies/references and cannot be silently invented in this task. |
-| `ARCH-AC-05` | `PASS` | The contract requires explicit capability classes, exact grants, default deny, least capability, and no side effect for every missing/mismatched grant. |
-| `ARCH-AC-07` | `PASS` | Stage04 defined the boundary, Stage05 defined agent governance, Stage06 mapped the concrete gap, and this fresh Stage07 decision checks the applicable constitution criteria before authorization. |
-| `ARCH-AC-08` | `PASS` | TASK-021 covers only its assigned identity, capability, tool authorization, audit, and Human Approval controls. Data classification, encryption, prompt containment, network/credential policy, and cost/token enforcement remain separately bounded to TASK-022 and TASK-023 and are not silently absorbed or claimed complete here. |
+| `ARCH-AC-04` | `PASS` | TASK-022 supplies the data/security/sandbox policy decisions that the already-qualified TASK-021 envelope must validate before dispatch. Every missing or failed security decision blocks execution. Cost/token enforcement remains separately bounded to TASK-023 and is not claimed here. |
+| `ARCH-AC-05` | `PASS` | Filesystem, network, credential, secret, process, sandbox, and production capabilities are exact-grant, default-deny, and least-capability. Negative cases require no protected side effect. |
+| `ARCH-AC-06` | `PASS` | TASK-022 explicitly bounds filesystem scope, network destination/purpose, sandbox class, credential/secret access, process, environment, and production boundaries. Token/cost/call/runtime/resource/deployment limits remain TASK-023 scope, so this task neither omits nor absorbs them. |
+| `ARCH-AC-08` | `PASS` | The contract covers data sensitivity, encryption/retention references, sandbox execution, malicious-instruction containment, unauthorized tool escalation, credential/secret safety, and minimum-disclosure audit behavior without inventing product choices. |
 
-`ARCH-AC-06` and `ARCH-AC-09` are not assigned implementation scope for TASK-021: resource/security limit details and provider-change conformance remain TASK-022 through TASK-024. Their exclusion is a scope boundary, not a waiver. No applicable Architecture Constitution check is missing, failed, or unverifiable for authorizing this exact remediation task.
+The mandatory global Stage07 checks for `ARCH-AC-01`, `ARCH-AC-02`, `ARCH-AC-03`, and `ARCH-AC-07` also pass: TASK-022 adds a replaceable security-policy module at the established governance boundary, leaves Core/Harness and provider independence intact, and is evaluated by this fresh gate. No applicable criterion is missing, contradictory, failed, or unverifiable.
 
 ## 6. Authorization and exclusion boundary
 
-This PASS authorizes a brand-new sealed Stage08 envelope for TASK-021 only. The envelope must bind the post-checkpoint execution HEAD, current authority artifact hashes including this report and `tasks.md`, the raw TASK-021 contract digest, exact allowed paths, exact verification command, behavior scope, and checkpoint conditions. Through this report hash and task-contract digest it also binds the dependency findings, resolved acceptance conditions, runtime validation, and applicable `ARCH-AC-04`, `ARCH-AC-05`, `ARCH-AC-07`, and `ARCH-AC-08` checks.
+This PASS authorizes creation of a brand-new sealed Stage08 envelope for TASK-022 only. The envelope must bind the post-checkpoint execution HEAD, current authority hashes including this report and `tasks.md`, the raw TASK-022 contract digest, finalized T011/T021 dependency state, exact allowed paths, exact verification command, behavior scope, checkpoint conditions, runtime validation, applicable Architecture Constitution checks, and current Human Approval/agent-governance references.
 
-TASK-022 security/data/prompt/network/credential work, TASK-023 budget/resource/deployment limits, TASK-024 provider conformance, and TASK-025 fixture repair are expressly unauthorized. Discovery of work in those scopes requires `STOP -> REPORT -> ROUTE`; it must not be implemented under TASK-021.
+The prior TASK-021 Stage07 authorization and envelope `8baf7ce8a3b04387168f52e92485e8c7938c4d4f9d6ff321f653e645f7401b3f` are historical and must not be reused. TASK-023 through TASK-025 remain unauthorized. Discovery of work in those scopes requires `STOP -> REPORT -> ROUTE`.
 
 ## 7. Final state
 
 ```text
 PRE_IMPLEMENTATION_GATE_DECISION = PASS
-EVALUATED_BASELINE = f10a357210d417c30884758800c8ca0986b156a4
-TARGET_TASK = TASK-021
-TASK_DEPENDENCIES = T003,T005,T006,T007,T008,T010,T011,T012,T017
-TASK_DEPENDENCY_STATUS = ALL_REPOSITORY_QUALIFIED
+EVALUATED_BASELINE = 5acc6e33c617707e361c43d2e94d9e75a39ff764
+TARGET_TASK = TASK-022
+TASK_DEPENDENCIES = T011,T021
+TASK_DEPENDENCY_STATUS = ALL_REPOSITORY_QUALIFIED_AND_STATE_FINALIZED
 TASK_CONTRACT_STATUS = VALID_COMPLETE_BOUNDED
 VERIFICATION_POLICY_VALID = YES
-APPLICABLE_ARCHITECTURE_CONSTITUTION = ARCH-AC-04,ARCH-AC-05,ARCH-AC-07,ARCH-AC-08
+APPLICABLE_ARCHITECTURE_CONSTITUTION = ARCH-AC-04,ARCH-AC-05,ARCH-AC-06,ARCH-AC-08
+GLOBAL_ARCHITECTURE_GATE = ARCH-AC-01_THROUGH_ARCH-AC-08_PASS
 ARCHITECTURE_CONSTITUTION_GATE_RESULT = PASS
-NORMAL_STAGE08_AUTHORIZED = YES_TASK_021_ONLY
-STAGE08_AUTHORIZATION_BOUND_TASK = TASK-021
-TASK-022_THROUGH_TASK-025_AUTHORIZED = NO
-TASK-001_THROUGH_TASK-020_QUALIFICATION = PRESERVED
+NORMAL_STAGE08_AUTHORIZED = YES_TASK_022_ONLY
+STAGE08_AUTHORIZATION_BOUND_TASK = TASK-022
+TASK-023_THROUGH_TASK-025_AUTHORIZED = NO
+TASK-001_THROUGH_TASK-021_QUALIFICATION = PRESERVED
 IMPLEMENTATION_EXECUTED = NO
+IMPLEMENTATION_EVIDENCE_CREATED = NO
 STAGE09_DECISION = NOT_EVALUATED
 STAGE10_DECISION = NOT_EVALUATED
 RELEASE_AUTHORIZED = NO
-NEXT_STEP = CREATE_AND_VALIDATE_POST_CHECKPOINT_SEALED_ENVELOPE_THEN_EXECUTE_TASK_021_THROUGH_STAGE08
+NEXT_STEP = CREATE_AND_VALIDATE_POST_CHECKPOINT_SEALED_ENVELOPE_THEN_EXECUTE_TASK_022_THROUGH_STAGE08
 BLOCKER = NONE
 ```

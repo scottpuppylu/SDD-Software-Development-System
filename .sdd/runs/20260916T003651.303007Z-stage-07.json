@@ -1,0 +1,92 @@
+{
+  "request_summary": {
+    "stage_id": "07",
+    "stage_name": "PRE_IMPLEMENTATION_GATE",
+    "artifact_paths": [
+      ".sdd/state/authority-state.yaml",
+      ".sdd/state/project-state.yaml",
+      "AGENTS.md",
+      "docs/Design.md",
+      "docs/PRD.md",
+      "docs/spec.md",
+      "tasks.md"
+    ],
+    "semantic_input_keys": [
+      "GIT_READINESS",
+      "REPOSITORY_STRUCTURE"
+    ],
+    "has_stage_instructions": true
+  },
+  "result": {
+    "status": "COMPLETED",
+    "artifacts": {
+      "docs/handoff/pre-implementation-gate-report.md": "# Stage 07 Pre-Implementation Gate Report — TASK-022\n\n## 1. Decision\n\n```text\nSTAGE_ID = 07\nSTAGE_NAME = PRE_IMPLEMENTATION_GATE\nRESULT = PASS\nCLASSIFICATION = null\nIMPLEMENTATION_AUTHORIZATION = GRANTED\nAUTHORIZED_TASK = TASK-022\nUNAUTHORIZED_TASKS = TASK-023,TASK-024,TASK-025\nAUTHORIZED_NEXT_OPERATION = SEALED_STAGE08_TASK_022_IMPLEMENTATION\nNEXT_STAGE = 08\n```\n\nThis fresh Stage07 decision is evaluated against authoritative entry baseline `5acc6e33c617707e361c43d2e94d9e75a39ff764` on branch `telemetry-measurement-v2`. It authorizes only TASK-022 under its exact repository-stored Stage06 contract. It does not reuse TASK-021 authorization or its sealed envelope, implement TASK-022, authorize another task, or execute Stage08, Stage09, Stage10, deployment, live network access, or secret access.\n\n## 2. Runtime, baseline, and governance readiness\n\n- Entry HEAD exactly matched `5acc6e33c617707e361c43d2e94d9e75a39ff764`; the entry worktree was clean.\n- Repository-local `.\\.venv\\Scripts\\python.exe` reported Python `3.14.7`; `python -m pytest --version` reported pytest `9.1.1`.\n- `tests/test_v117_machine_task_contract.py` returned `PASS`: 10 tests passed. `VerificationCommandPolicy` accepted TASK-022's exact stored command without transcription or substitution.\n- Stage06 checkpoint `f10a357210d417c30884758800c8ca0986b156a4` and run `.sdd/runs/20260915T031557.503468Z-stage-06.json` remain the task-decomposition authority. The run's embedded TASK-022 contract matches `tasks.md`.\n- Authority state has no unresolved conflict or blocking TBD. Both durable A2 records remain approved. The canonical namespaces remain PRD `AC-01` through `AC-37`, Spec `SPEC-001` through `SPEC-018`, and Architecture Constitution `ARCH-AC-01` through `ARCH-AC-09`.\n- TASK-021 implementation checkpoint `6588ef148d44070ee71c03158fa9f5fe6dae85ae` and state-finalization commit `5acc6e33c617707e361c43d2e94d9e75a39ff764` are current and reachable. Its qualification and evidence are preserved.\n\n## 3. TASK-022 authority, eligibility, and dependencies\n\nThe authoritative contract is `tasks.md`, section `TASK-022 - Security, data, prompt-injection, sandbox, network, and credential containment`, created by Stage06. The Stage06 gap mapping assigns only:\n\n- sensitive-data classification plus redaction, retention, encryption-policy, and environment-compatibility decisions;\n- prompt-injection, malicious-instruction, confused-deputy, and escalating tool-call containment;\n- sandbox-class and exact filesystem boundary enforcement;\n- exact network destination/purpose, credential-class/reference, secret-access, process, and production-boundary grants;\n- stop-before-side-effect enforcement and minimum-disclosure security audit integration.\n\nThe repository qualification validator returned true for every declared dependency:\n\n| Dependency | Checkpoint | Evidence | State-finalized result |\n| --- | --- | --- | --- |\n| `T011` | `000afb265a811cf4a8aee8030d08fe189a44592c` | `.sdd/evidence/20260909T071007.112397Z-T011.json` | `IMPLEMENTATION_QUALIFIED` |\n| `T021` | `6588ef148d44070ee71c03158fa9f5fe6dae85ae` | `.sdd/evidence/20260916T000708.940197Z-T021.json` | `IMPLEMENTATION_QUALIFIED` |\n\nTASK-021 is an explicit dependency. Its unified pre-dispatch governance remains mandatory and is extended only by TASK-022 security-policy decisions; it is not bypassed, replaced, or weakened. TASK-001 through TASK-021 remain repository-qualified. The historical `.sdd/evidence/20260915T040620.071193Z-T021.json` remains `CODEX_FAILED`, nonqualifying, and irrelevant to TASK-022 authority.\n\n## 4. Authorized bounded contract\n\nExact allowed files:\n\n- `sdd_orchestrator/security_policy.py`\n- `sdd_orchestrator/governance_envelope.py`\n- `sdd_orchestrator/providers.py`\n- `sdd_orchestrator/codex_adapter.py`\n- `sdd_orchestrator/codex_cli.py`\n- `sdd_orchestrator/evidence_writer.py`\n- `sdd_orchestrator/result_serialization.py`\n- `tests/test_security_policy.py`\n\nExact authoritative verification command:\n\n```text\n.\\.venv\\Scripts\\python.exe -m pytest -q tests/test_security_policy.py tests/test_m4_reasoning_pipeline.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py\n```\n\nThe resolved acceptance conditions are the complete TASK-022 `Required behavior/outcome`, `Preservation obligations`, `Error/failure expectations`, `Security/safety expectations`, `Verification requirements`, `Checkpoint eligibility`, and `Out-of-scope` clauses. In particular:\n\n1. Missing, unknown, prohibited, stale, conflicting, or incompatible classification, policy, encryption/retention binding, environment, sandbox, endpoint, filesystem, credential, secret, process, or production-boundary authority fails closed before dispatch or side effect.\n2. Suspected prompt injection, malicious embedded instruction, confused-deputy behavior, or escalating tool request denies dispatch and routes safely without trying alternate tools, encodings, providers, endpoints, or weaker policy.\n3. Network, credential, secret, filesystem, process, sandbox, and production capabilities remain default-deny; an allowed request must match an exact attributable least-capability grant.\n4. Secret values are neither accepted as ordinary governance payloads nor persisted. Encryption and retention remain policy/evidence references; TASK-022 does not choose or implement a cryptography, IAM, secrets, cloud, or network product.\n5. Post-dispatch reconciliation contains actual scope/effect overruns, preserves valid prior state, and emits minimum-disclosure audit references without leaking protected values.\n6. Positive and negative tests cover the complete declared security boundary and prove no protected dispatch or secret persistence on denial while preserving existing redaction, path-scope, sealed Stage08, TASK-021 governance, and atomic evidence/checkpoint behavior.\n\nTASK-023 budget/resource enforcement, TASK-024 provider promotion/fallback conformance, TASK-025 fixture repair, live network/secret/production access, authority changes, deployment, and product selection are expressly outside this authorization.\n\n## 5. Architecture Constitution evaluation\n\n| Criterion | Gate result | Basis |\n| --- | --- | --- |\n| `ARCH-AC-04` | `PASS` | TASK-022 supplies the data/security/sandbox policy decisions that the already-qualified TASK-021 envelope must validate before dispatch. Every missing or failed security decision blocks execution. Cost/token enforcement remains separately bounded to TASK-023 and is not claimed here. |\n| `ARCH-AC-05` | `PASS` | Filesystem, network, credential, secret, process, sandbox, and production capabilities are exact-grant, default-deny, and least-capability. Negative cases require no protected side effect. |\n| `ARCH-AC-06` | `PASS` | TASK-022 explicitly bounds filesystem scope, network destination/purpose, sandbox class, credential/secret access, process, environment, and production boundaries. Token/cost/call/runtime/resource/deployment limits remain TASK-023 scope, so this task neither omits nor absorbs them. |\n| `ARCH-AC-08` | `PASS` | The contract covers data sensitivity, encryption/retention references, sandbox execution, malicious-instruction containment, unauthorized tool escalation, credential/secret safety, and minimum-disclosure audit behavior without inventing product choices. |\n\nThe mandatory global Stage07 checks for `ARCH-AC-01`, `ARCH-AC-02`, `ARCH-AC-03`, and `ARCH-AC-07` also pass: TASK-022 adds a replaceable security-policy module at the established governance boundary, leaves Core/Harness and provider independence intact, and is evaluated by this fresh gate. No applicable criterion is missing, contradictory, failed, or unverifiable.\n\n## 6. Authorization and exclusion boundary\n\nThis PASS authorizes creation of a brand-new sealed Stage08 envelope for TASK-022 only. The envelope must bind the post-checkpoint execution HEAD, current authority hashes including this report and `tasks.md`, the raw TASK-022 contract digest, finalized T011/T021 dependency state, exact allowed paths, exact verification command, behavior scope, checkpoint conditions, runtime validation, applicable Architecture Constitution checks, and current Human Approval/agent-governance references.\n\nThe prior TASK-021 Stage07 authorization and envelope `8baf7ce8a3b04387168f52e92485e8c7938c4d4f9d6ff321f653e645f7401b3f` are historical and must not be reused. TASK-023 through TASK-025 remain unauthorized. Discovery of work in those scopes requires `STOP -> REPORT -> ROUTE`.\n\n## 7. Final state\n\n```text\nPRE_IMPLEMENTATION_GATE_DECISION = PASS\nEVALUATED_BASELINE = 5acc6e33c617707e361c43d2e94d9e75a39ff764\nTARGET_TASK = TASK-022\nTASK_DEPENDENCIES = T011,T021\nTASK_DEPENDENCY_STATUS = ALL_REPOSITORY_QUALIFIED_AND_STATE_FINALIZED\nTASK_CONTRACT_STATUS = VALID_COMPLETE_BOUNDED\nVERIFICATION_POLICY_VALID = YES\nAPPLICABLE_ARCHITECTURE_CONSTITUTION = ARCH-AC-04,ARCH-AC-05,ARCH-AC-06,ARCH-AC-08\nGLOBAL_ARCHITECTURE_GATE = ARCH-AC-01_THROUGH_ARCH-AC-08_PASS\nARCHITECTURE_CONSTITUTION_GATE_RESULT = PASS\nNORMAL_STAGE08_AUTHORIZED = YES_TASK_022_ONLY\nSTAGE08_AUTHORIZATION_BOUND_TASK = TASK-022\nTASK-023_THROUGH_TASK-025_AUTHORIZED = NO\nTASK-001_THROUGH_TASK-021_QUALIFICATION = PRESERVED\nIMPLEMENTATION_EXECUTED = NO\nIMPLEMENTATION_EVIDENCE_CREATED = NO\nSTAGE09_DECISION = NOT_EVALUATED\nSTAGE10_DECISION = NOT_EVALUATED\nRELEASE_AUTHORIZED = NO\nNEXT_STEP = CREATE_AND_VALIDATE_POST_CHECKPOINT_SEALED_ENVELOPE_THEN_EXECUTE_TASK_022_THROUGH_STAGE08\nBLOCKER = NONE\n```\n"
+    },
+    "result": "PASS",
+    "classification": null,
+    "remediation_reasons": [],
+    "convergence_tasks": [],
+    "metadata": {
+      "target_task": "TASK-022",
+      "evaluated_baseline": "5acc6e33c617707e361c43d2e94d9e75a39ff764",
+      "dependencies": [
+        "T011",
+        "T021"
+      ],
+      "dependencies_satisfied": true,
+      "applicable_arch_acs": [
+        "ARCH-AC-04",
+        "ARCH-AC-05",
+        "ARCH-AC-06",
+        "ARCH-AC-08"
+      ],
+      "global_architecture_gate": "ARCH-AC-01_THROUGH_ARCH-AC-08_PASS",
+      "architecture_evaluation": "PASS",
+      "unauthorized_tasks": [
+        "TASK-023",
+        "TASK-024",
+        "TASK-025"
+      ],
+      "stage08_executed": false,
+      "governance": {
+        "envelope_id": "d316b8df9d43e9b8e9a4b7917bddb4198356f43f0069b57e86ea66c3b4326faa",
+        "pre_dispatch": {
+          "envelope_id": "d316b8df9d43e9b8e9a4b7917bddb4198356f43f0069b57e86ea66c3b4326faa",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "approval-matrix:A0:stage-07",
+          "action": "REASONING_STAGE_DISPATCH",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "docs/handoff/pre-implementation-gate-report.md"
+          ],
+          "failure_route": null
+        },
+        "post_dispatch": {
+          "envelope_id": "d316b8df9d43e9b8e9a4b7917bddb4198356f43f0069b57e86ea66c3b4326faa",
+          "outcome": "PASS",
+          "observed_scope": [
+            "docs/handoff/pre-implementation-gate-report.md"
+          ],
+          "observed_effects": [
+            "PROPOSED_OUTPUT"
+          ],
+          "evidence_references": [
+            "pending-run-record:37e4c7efd0dccad344e53d7c"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "approval-matrix:A0:stage-07"
+        }
+      }
+    }
+  },
+  "transition": {
+    "stage_id": "07",
+    "result": "PASS",
+    "classification": null,
+    "next": "08",
+    "implementation_authorization": true,
+    "release_authorization": false
+  }
+}
