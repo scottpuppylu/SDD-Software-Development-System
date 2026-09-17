@@ -1,0 +1,330 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "T026",
+  "title": "Structured coding-worker Work Package and local verification levels",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/codex_adapter.py",
+    "sdd_orchestrator/stage08_work_package.py",
+    "sdd_orchestrator/task_parser.py",
+    "sdd_orchestrator/verification_execution.py",
+    "sdd_orchestrator/verification_policy.py",
+    "sdd_orchestrator/verification_runtime.py",
+    "tests/test_m6_codex_adapter.py",
+    "tests/test_stage08_verification_levels.py",
+    "tests/test_stage08_work_package.py",
+    "tests/test_v1113_codex_stdin_prompt.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_stage08_work_package.py tests/test_stage08_verification_levels.py tests/test_m6_codex_adapter.py tests/test_v1113_codex_stdin_prompt.py tests/test_v1118_safe_pause_and_evidence.py",
+      "returncode": 0,
+      "stdout": "................................................................. [ 52%]\n........................................... [ 87%]\n................                                [100%]\n124 passed, 61 subtests passed in 614.47s (0:10:14)\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "{\"authoritative_verification_owned_by\": \"SDD_LOCAL_CONTROLLER\", \"package_id\": \"7bb2a7c26fe3254f817a617759cf066b5f122db17072c7dea8b98d6a72bcb3ca\", \"result\": \"AUTHORIZED_DIFF_ALREADY_PRODUCED_BY_CURRENT_CODEX_SESSION\", \"sealed_envelope_id\": \"9174f3c30c3a51dd9868fa2d608b754f6c046169fd06490fc2ad9946b8ebdcc2\", \"status\": \"PATCH_COMPLETE\", \"task_id\": \"T026\"}",
+    "stderr": ""
+  },
+  "recorded_at": "20260917T054409.914726Z",
+  "governance": {
+    "envelope_id": "b220fc2a19ae022ae526b2bc3797bc7cbe0123b8874d0a00328d5fc37c240450",
+    "approval_class": "A0",
+    "approval_reference": "stage07:f0140be4f58544451c46fbfc9ac28de60ea157c33341057dd4a0a3142162c8f6",
+    "pre_dispatch": {
+      "envelope_id": "b220fc2a19ae022ae526b2bc3797bc7cbe0123b8874d0a00328d5fc37c240450",
+      "outcome": "AUTHORIZED",
+      "approval_class": "A0",
+      "approval_reference": "stage07:f0140be4f58544451c46fbfc9ac28de60ea157c33341057dd4a0a3142162c8f6",
+      "action": "EXECUTE_STAGE08_TASK",
+      "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+      "scope": [
+        "sdd_orchestrator/stage08_work_package.py",
+        "sdd_orchestrator/task_parser.py",
+        "sdd_orchestrator/codex_adapter.py",
+        "sdd_orchestrator/verification_policy.py",
+        "sdd_orchestrator/verification_execution.py",
+        "sdd_orchestrator/verification_runtime.py",
+        "tests/test_stage08_work_package.py",
+        "tests/test_stage08_verification_levels.py",
+        "tests/test_m6_codex_adapter.py",
+        "tests/test_v1113_codex_stdin_prompt.py",
+        "tests/test_v1118_safe_pause_and_evidence.py"
+      ],
+      "failure_route": null,
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "sdd_orchestrator/stage08_work_package.py",
+          "sdd_orchestrator/task_parser.py",
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/verification_policy.py",
+          "sdd_orchestrator/verification_execution.py",
+          "sdd_orchestrator/verification_runtime.py",
+          "tests/test_stage08_work_package.py",
+          "tests/test_stage08_verification_levels.py",
+          "tests/test_m6_codex_adapter.py",
+          "tests/test_v1113_codex_stdin_prompt.py",
+          "tests/test_v1118_safe_pause_and_evidence.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.CodexCLI"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:9174f3c30c3a51dd9868fa2d608b754f6c046169fd06490fc2ad9946b8ebdcc2:stage08-dispatch"
+      }
+    },
+    "post_dispatch": {
+      "envelope_id": "b220fc2a19ae022ae526b2bc3797bc7cbe0123b8874d0a00328d5fc37c240450",
+      "outcome": "PASS",
+      "observed_scope": [
+        "sdd_orchestrator/codex_adapter.py",
+        "sdd_orchestrator/stage08_work_package.py",
+        "sdd_orchestrator/task_parser.py",
+        "sdd_orchestrator/verification_execution.py",
+        "sdd_orchestrator/verification_policy.py",
+        "sdd_orchestrator/verification_runtime.py",
+        "tests/test_m6_codex_adapter.py",
+        "tests/test_stage08_verification_levels.py",
+        "tests/test_stage08_work_package.py",
+        "tests/test_v1113_codex_stdin_prompt.py"
+      ],
+      "observed_effects": [
+        "WORKSPACE_WRITE"
+      ],
+      "evidence_references": [
+        "pending-stage08-evidence:T026"
+      ],
+      "failure_route": null,
+      "approval_class": "A0",
+      "approval_reference": "stage07:f0140be4f58544451c46fbfc9ac28de60ea157c33341057dd4a0a3142162c8f6",
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "sdd_orchestrator/stage08_work_package.py",
+          "sdd_orchestrator/task_parser.py",
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/verification_policy.py",
+          "sdd_orchestrator/verification_execution.py",
+          "sdd_orchestrator/verification_runtime.py",
+          "tests/test_stage08_work_package.py",
+          "tests/test_stage08_verification_levels.py",
+          "tests/test_m6_codex_adapter.py",
+          "tests/test_v1113_codex_stdin_prompt.py",
+          "tests/test_v1118_safe_pause_and_evidence.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.CodexCLI"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:9174f3c30c3a51dd9868fa2d608b754f6c046169fd06490fc2ad9946b8ebdcc2:stage08-dispatch",
+        "outcome": "RECONCILED",
+        "actual_filesystem_paths": [
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/stage08_work_package.py",
+          "sdd_orchestrator/task_parser.py",
+          "sdd_orchestrator/verification_execution.py",
+          "sdd_orchestrator/verification_policy.py",
+          "sdd_orchestrator/verification_runtime.py",
+          "tests/test_m6_codex_adapter.py",
+          "tests/test_stage08_verification_levels.py",
+          "tests/test_stage08_work_package.py",
+          "tests/test_v1113_codex_stdin_prompt.py"
+        ],
+        "actual_network_destinations": [],
+        "actual_credential_references": [],
+        "actual_secret_references": [],
+        "actual_processes": [
+          "sdd_orchestrator.codex_cli.CodexCLI"
+        ],
+        "evidence_reference": "pending-stage08-evidence:T026"
+      }
+    },
+    "work_package": {
+      "schema_version": "1.0",
+      "package_id": "7bb2a7c26fe3254f817a617759cf066b5f122db17072c7dea8b98d6a72bcb3ca",
+      "package_kind": "REMEDIATION_PACKAGE",
+      "task_id": "T026",
+      "sealed_envelope_id": "9174f3c30c3a51dd9868fa2d608b754f6c046169fd06490fc2ad9946b8ebdcc2",
+      "diff_provenance_sha256": "a7ff5a1abb7343fabb58d8608a8cfd6cfd3ca42cdda973a921f8df44b5035e22",
+      "authorized_file_count": 11,
+      "minimum_disclosure": true,
+      "provider_neutral": true
+    },
+    "verification_dispatches": [
+      {
+        "level": "TARGET",
+        "legacy_required": true,
+        "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+        "envelope_id": "9d23be2df2a5cc1a05f31049fe531d6dc9b455bed2db87f33e47c212363f5650",
+        "approval_class": "A0",
+        "approval_reference": "stage07:f0140be4f58544451c46fbfc9ac28de60ea157c33341057dd4a0a3142162c8f6",
+        "pre_dispatch": {
+          "envelope_id": "9d23be2df2a5cc1a05f31049fe531d6dc9b455bed2db87f33e47c212363f5650",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "stage07:f0140be4f58544451c46fbfc9ac28de60ea157c33341057dd4a0a3142162c8f6",
+          "action": "EXECUTE_VERIFICATION_TOOL",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "sdd_orchestrator/stage08_work_package.py",
+            "sdd_orchestrator/task_parser.py",
+            "sdd_orchestrator/codex_adapter.py",
+            "sdd_orchestrator/verification_policy.py",
+            "sdd_orchestrator/verification_execution.py",
+            "sdd_orchestrator/verification_runtime.py",
+            "tests/test_stage08_work_package.py",
+            "tests/test_stage08_verification_levels.py",
+            "tests/test_m6_codex_adapter.py",
+            "tests/test_v1113_codex_stdin_prompt.py",
+            "tests/test_v1118_safe_pause_and_evidence.py"
+          ],
+          "failure_route": null,
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "sdd_orchestrator/stage08_work_package.py",
+              "sdd_orchestrator/task_parser.py",
+              "sdd_orchestrator/codex_adapter.py",
+              "sdd_orchestrator/verification_policy.py",
+              "sdd_orchestrator/verification_execution.py",
+              "sdd_orchestrator/verification_runtime.py",
+              "tests/test_stage08_work_package.py",
+              "tests/test_stage08_verification_levels.py",
+              "tests/test_m6_codex_adapter.py",
+              "tests/test_v1113_codex_stdin_prompt.py",
+              "tests/test_v1118_safe_pause_and_evidence.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:9174f3c30c3a51dd9868fa2d608b754f6c046169fd06490fc2ad9946b8ebdcc2:verify:0:verification-0"
+          }
+        },
+        "post_dispatch": {
+          "envelope_id": "9d23be2df2a5cc1a05f31049fe531d6dc9b455bed2db87f33e47c212363f5650",
+          "outcome": "PASS",
+          "observed_scope": [],
+          "observed_effects": [
+            "TOOL_EXECUTION"
+          ],
+          "evidence_references": [
+            "verification-result:T026:TARGET:0"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "stage07:f0140be4f58544451c46fbfc9ac28de60ea157c33341057dd4a0a3142162c8f6",
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "sdd_orchestrator/stage08_work_package.py",
+              "sdd_orchestrator/task_parser.py",
+              "sdd_orchestrator/codex_adapter.py",
+              "sdd_orchestrator/verification_policy.py",
+              "sdd_orchestrator/verification_execution.py",
+              "sdd_orchestrator/verification_runtime.py",
+              "tests/test_stage08_work_package.py",
+              "tests/test_stage08_verification_levels.py",
+              "tests/test_m6_codex_adapter.py",
+              "tests/test_v1113_codex_stdin_prompt.py",
+              "tests/test_v1118_safe_pause_and_evidence.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:9174f3c30c3a51dd9868fa2d608b754f6c046169fd06490fc2ad9946b8ebdcc2:verify:0:verification-0",
+            "outcome": "RECONCILED",
+            "actual_filesystem_paths": [],
+            "actual_network_destinations": [],
+            "actual_credential_references": [],
+            "actual_secret_references": [],
+            "actual_processes": [
+              "verification-execution"
+            ],
+            "evidence_reference": "verification-result:T026:TARGET:0"
+          }
+        }
+      }
+    ],
+    "verification_plan": {
+      "schema_version": "1.0",
+      "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+      "provider_session_required": false,
+      "fast_count": 0,
+      "target_count": 1,
+      "full_count": 0,
+      "full_authorized": false,
+      "stage09_full_verification_preserved": true
+    },
+    "task_contract_evaluation": {
+      "acceptance_criteria": {
+        "CODEX_WORKER_ONLY_BOUNDARY": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "MINIMAL_STRUCTURED_WORK_PACKAGE": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "LOCAL_VERIFICATION_INDEPENDENT_OF_CODEX_SESSION": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "FAST_TARGET_FULL_POLICY_ENFORCED": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "NO_IMPLICIT_FULL_REGRESSION": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "TASK_CONTRACT_REQUIRED_COMMANDS_NEVER_SKIPPED": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "MINIMAL_FAILURE_PACKAGE": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "NO_FULL_CONTEXT_REBUILD_ON_REMEDIATION": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "TASK021_AND_TASK022_GOVERNANCE_PRESERVED": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "STAGE09_FULL_REGRESSION_UNCHANGED": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "LEGACY_STAGE08_TASKS_REMAIN_COMPATIBLE": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION"
+      },
+      "architecture_constitution": {
+        "ARCH-AC-01": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-02": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-03": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-04": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-05": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-06": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-07": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-08": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION"
+      },
+      "ARCH-AC-09": "PRESERVED_NOT_MODIFIED_BY_TASK",
+      "stage09_decision_created": false,
+      "stage10_decision_created": false
+    }
+  }
+}

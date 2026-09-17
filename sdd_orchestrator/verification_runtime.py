@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+import hashlib
+import json
 import os
 import shutil
 import sys
@@ -13,6 +16,32 @@ from .verification_execution import (
     RegressionEvidence,
     build_regression_coverage_view,
 )
+
+
+@dataclass(frozen=True)
+class LocalVerificationRuntime:
+    """Resolved deterministic runtime; deliberately has no provider session."""
+
+    project_python: str
+    environment: dict[str, str]
+    identity: str
+    provider_session_required: bool = False
+
+
+def build_local_verification_runtime(
+    repo_root: Path, explicit_project_python: str | None = None
+) -> LocalVerificationRuntime:
+    project_python = resolve_project_python(repo_root, explicit_project_python)
+    environment = build_verification_env(project_python)
+    identity_payload = {
+        "project_python": str(Path(project_python).resolve()),
+        "platform": os.name,
+        "python_version": tuple(sys.version_info[:3]),
+    }
+    identity = hashlib.sha256(
+        json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return LocalVerificationRuntime(project_python, environment, identity)
 
 
 def evaluate_regression_completion(

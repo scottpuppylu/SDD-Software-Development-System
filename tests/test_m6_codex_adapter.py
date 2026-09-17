@@ -352,6 +352,59 @@ class M6CodexAdapterTests(unittest.TestCase):
         ).execute_one("T001")
         self.assertEqual(result.status, "DONE")
 
+    def test_spec019_task_receives_structured_worker_package_and_local_verification(self):
+        (self.repo / "docs/spec.md").write_text(
+            "### SPEC-019 - Worker contract\nController verifies locally.\n",
+            encoding="utf-8",
+        )
+        (self.repo / "docs/Design.md").write_text(
+            "### DES-020 - Work package\nUse a provider-neutral bounded package.\n",
+            encoding="utf-8",
+        )
+        run_git(self.repo, "add", "docs/spec.md", "docs/Design.md")
+        run_git(self.repo, "commit", "-m", "docs: authorize spec019 fixture")
+        self._write_tasks('''
+## TASK-026 - bounded worker package
+- **Status:** TODO
+- **Authority trace:** `SPEC-019 -> DES-020 -> TASK-026`; `ARCH-AC-01`, `ARCH-AC-08`.
+- **Allowed files:** `src/worker.py`.
+- **Allowed implementation scope:** Produce the bounded worker patch.
+- **Purpose / objective:** Keep the provider limited to authorized edits.
+- **Required behavior/outcome:** Controller executes deterministic verification locally.
+- **Acceptance criteria:** `CODEX_WORKER_ONLY_BOUNDARY`; `LOCAL_VERIFICATION_INDEPENDENT_OF_CODEX_SESSION`.
+- **Forbidden scope / out-of-scope:** `GIT_COMMIT`; `STATE_MUTATION`; `FULL_WITHOUT_AUTHORITY`.
+- **Verification Commands:** `python -c "import sys"`.
+''')
+        observed = {}
+
+        def callback(repo, prompt):
+            observed["prompt"] = prompt
+            (repo / "src").mkdir(exist_ok=True)
+            (repo / "src/worker.py").write_text("VALUE = 1\n", encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout="bounded patch", stderr="")
+
+        runner = Stage08CodexRunner(
+            Orchestrator(self.repo),
+            codex=FakeCodex(callback),
+            project_python=sys.executable,
+            heartbeat_seconds=0,
+        )
+        result = runner.execute_one("T026")
+
+        self.assertEqual(result.status, "DONE")
+        self.assertTrue(all(item.passed for item in result.verification))
+        self.assertIn("PROVIDER-NEUTRAL STRUCTURED WORK PACKAGE", observed["prompt"])
+        self.assertIn("INITIAL_PATCH_PACKAGE", observed["prompt"])
+        self.assertIn("Do not run authoritative FAST, TARGET, or FULL", observed["prompt"])
+        evidence = json.loads((self.repo / result.evidence_file).read_text(encoding="utf-8"))
+        governance = evidence["governance"]
+        self.assertTrue(governance["work_package"]["provider_neutral"])
+        self.assertFalse(
+            governance["verification_plan"]["provider_session_required"]
+        )
+        self.assertEqual(governance["verification_plan"]["target_count"], 1)
+        self.assertFalse(governance["verification_plan"]["full_authorized"])
+
     def test_codex_scope_violation_is_rejected(self):
         self._write_tasks('''\n### T001 — Add calculator\n- **Status:** TODO\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n''')
         def callback(repo, prompt):

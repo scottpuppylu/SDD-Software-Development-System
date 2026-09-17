@@ -7,12 +7,41 @@ from typing import Any, Callable, Iterable
 
 from .codex_results import VerificationResult
 from .governed_state import ImpactRisk, ModificationImpactLedger
+from .verification_policy import VerificationLevel, VerificationPlan, VerificationStep
 
 
 VERIFICATION_OUTCOMES = frozenset({"PASS", "FAIL", "NOT RUN"})
 COVERAGE_STATES = frozenset(
     {"FULL", "PARTIAL", "ABSENT", "STALE", "IRRELEVANT", "NEW_FEATURE_ONLY"}
 )
+
+
+@dataclass(frozen=True)
+class LeveledVerificationResult:
+    level: VerificationLevel
+    result: VerificationResult
+    legacy_required: bool = False
+
+    @property
+    def passed(self) -> bool:
+        return self.result.passed
+
+
+def execute_local_verification_plan(
+    plan: VerificationPlan,
+    execute_step: Callable[[VerificationStep], VerificationResult],
+) -> tuple[LeveledVerificationResult, ...]:
+    """Execute the current local plan without any provider/session dependency."""
+
+    results: list[LeveledVerificationResult] = []
+    for step in plan.ordered_steps():
+        result = execute_step(step)
+        if result.command != step.command:
+            raise ValueError("verification result command does not match the authorized step")
+        results.append(LeveledVerificationResult(step.level, result, step.legacy_required))
+        if not result.passed:
+            break
+    return tuple(results)
 
 
 @dataclass(frozen=True)

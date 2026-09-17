@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 
 @dataclass
@@ -13,6 +13,14 @@ class AtomicTask:
     allowed_paths: list[str]
     verification_commands: list[str]
     behavior_scope: str = ""
+    objective: str = ""
+    forbidden_scope: str = ""
+    expected_behavior: str = ""
+    acceptance_criteria: list[str] = field(default_factory=list)
+    relevant_spec: list[str] = field(default_factory=list)
+    relevant_design: list[str] = field(default_factory=list)
+    verification_levels: dict[str, list[str]] = field(default_factory=dict)
+    full_verification_authorized: bool = False
 
 
 @dataclass(frozen=True)
@@ -61,10 +69,38 @@ class TaskFileParser:
             trace = self._extract_traceability(block)
             paths = self._extract_allowed_paths(block)
             commands = self._extract_verification_commands(block)
+            levels = self._extract_verification_levels(block)
             behavior_scope = (
                 self._field(block, "Allowed implementation scope")
                 or self._field(block, "Implementation Scope")
                 or ""
+            )
+            objective = (
+                self._field(block, "Purpose / objective")
+                or self._field(block, "Objective")
+                or title
+            )
+            expected_behavior = (
+                self._field(block, "Required behavior/outcome")
+                or self._field(block, "Expected behavior")
+                or behavior_scope
+            )
+            acceptance = self._extract_acceptance_criteria(block)
+            authority_text = (
+                self._field(block, "Authority trace")
+                or self._field(block, "Traceability")
+                or self._field(block, "Trace")
+                or ""
+            )
+            relevant_spec = list(dict.fromkeys(re.findall(r"\bSPEC-\d+\b", authority_text)))
+            relevant_design = list(dict.fromkeys(re.findall(r"\bDES-\d+\b", authority_text)))
+            full_authority = self._boolean_field(
+                block,
+                (
+                    "FULL Verification Authorized",
+                    "Stage08 FULL Verification Authorized",
+                    "FULL Verification Authority",
+                ),
             )
             tasks.append(
                 AtomicTask(
@@ -76,6 +112,18 @@ class TaskFileParser:
                     allowed_paths=paths,
                     verification_commands=commands,
                     behavior_scope=behavior_scope,
+                    objective=objective,
+                    forbidden_scope=(
+                        self._field(block, "Forbidden scope / out-of-scope")
+                        or self._field(block, "Forbidden scope")
+                        or ""
+                    ),
+                    expected_behavior=expected_behavior,
+                    acceptance_criteria=acceptance,
+                    relevant_spec=relevant_spec,
+                    relevant_design=relevant_design,
+                    verification_levels=levels,
+                    full_verification_authorized=full_authority,
                 )
             )
         return tasks
@@ -104,9 +152,61 @@ class TaskFileParser:
         return None
 
     def _extract_traceability(self, block: str) -> list[str]:
-        raw = self._field(block, "Traceability") or self._field(block, "Trace") or ""
-        ids = re.findall(r"\b(?:G|FR|NFR|EC|AC|SPEC|DES|T|TC)-?[A-Za-z0-9_.]+\b", raw, re.IGNORECASE)
+        raw = (
+            self._field(block, "Authority trace")
+            or self._field(block, "Traceability")
+            or self._field(block, "Trace")
+            or ""
+        )
+        ids = re.findall(
+            r"\b(?:ARCH-AC|G|FR|NFR|EC|AC|SPEC|DES|TASK|T|TC)-?[A-Za-z0-9_.]+\b",
+            raw,
+            re.IGNORECASE,
+        )
         return list(dict.fromkeys(ids))
+
+    def _extract_acceptance_criteria(self, block: str) -> list[str]:
+        raw = self._field(block, "Acceptance criteria") or ""
+        values = re.findall(r"`([^`]+)`", raw)
+        if not values:
+            values = [item.strip() for item in re.split(r"[;,]", raw) if item.strip()]
+        return list(dict.fromkeys(values))
+
+    def _extract_verification_levels(self, block: str) -> dict[str, list[str]]:
+        levels: dict[str, list[str]] = {}
+        for level in ("FAST", "TARGET", "FULL"):
+            commands: list[str] = []
+            for name in (
+                f"{level} Verification Commands",
+                f"Verification Commands ({level})",
+            ):
+                raw = self._field(block, name)
+                if raw:
+                    commands.extend(re.findall(r"`([^`]+)`", raw))
+                    if not re.findall(r"`([^`]+)`", raw) and self._looks_like_command(raw):
+                        commands.append(raw)
+                section = self._section(block, (name,))
+                commands.extend(re.findall(r"`([^`]+)`", section))
+                for line in section.splitlines():
+                    candidate = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
+                    if self._looks_like_command(candidate):
+                        commands.append(candidate.strip("`"))
+            cleaned = list(dict.fromkeys(item.strip() for item in commands if item.strip()))
+            if cleaned:
+                levels[level] = cleaned
+        return levels
+
+    def _boolean_field(self, block: str, names: tuple[str, ...]) -> bool:
+        for name in names:
+            raw = self._field(block, name)
+            if raw is None:
+                continue
+            normalized = raw.strip().strip("`").upper()
+            if normalized in {"YES", "TRUE", "AUTHORIZED", "REQUIRED"}:
+                return True
+            if normalized in {"NO", "FALSE", "UNAUTHORIZED", "NOT_AUTHORIZED"}:
+                return False
+        return False
 
     ALLOWED_PATH_FIELDS = (
         "Allowed Paths",
