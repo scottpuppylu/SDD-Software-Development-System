@@ -26,6 +26,20 @@ class EventType(str, Enum):
     STAGE_REQUEST = "stage_request"
     PROVIDER_CALL = "provider_call"
     STAGE08_TASK = "stage08_task"
+    STAGE08_PHASE = "stage08_phase"
+
+
+STAGE08_PHASE_SCHEMA_VERSION = "1.0"
+STAGE08_PHASES = frozenset({
+    "PRECHECK_COMPLETE",
+    "CONTEXT_READY",
+    "CODEX_PATCH_COMPLETE",
+    "FAST_VERIFY_COMPLETE",
+    "TARGET_VERIFY_COMPLETE",
+    "REMEDIATION_REQUIRED",
+    "FINAL_VERIFY_COMPLETE",
+    "STAGE8_COMPLETE",
+})
 
 
 class Component(str, Enum):
@@ -306,6 +320,70 @@ class MeasurementEvent:
             )
             if not isinstance(self.metadata["checkpoint_created"], bool):
                 raise TypeError("checkpoint_created must be a boolean")
+        elif event_type is EventType.STAGE08_PHASE:
+            self._validate_stage08_phase_metadata()
+
+    def _validate_stage08_phase_metadata(self) -> None:
+        expected_metadata = {
+            "phase_schema_version",
+            "attempt_id",
+            "task_id",
+            "event_kind",
+            "phase",
+            "sequence",
+            "phase_event_digest",
+            "codex_invocation_count",
+            "codex_active_duration_ms",
+            "local_verification_duration_ms",
+            "fast_verify_duration_ms",
+            "target_verify_duration_ms",
+            "full_verify_duration_ms",
+            "remediation_count",
+            "resume_count",
+            "total_stage8_duration_ms",
+            "codex_active_time_ratio",
+            "verification_reused",
+        }
+        if self.stage_id != "08":
+            raise ValueError('stage08_phase requires stage_id="08"')
+        if self.usage is not None or self.metrics:
+            raise ValueError("stage08_phase is metadata-only and requires usage=None")
+        if set(self.metadata) != expected_metadata:
+            raise ValueError("stage08_phase metadata must contain exactly the versioned members")
+        if self.metadata["phase_schema_version"] != STAGE08_PHASE_SCHEMA_VERSION:
+            raise ValueError("unsupported stage08_phase schema version")
+        for name in ("attempt_id", "task_id", "event_kind"):
+            value = self.metadata[name]
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"stage08_phase {name} must be a non-empty string")
+        phase = self.metadata["phase"]
+        if phase is not None and phase not in STAGE08_PHASES:
+            raise ValueError("stage08_phase phase is invalid")
+        digest = self.metadata["phase_event_digest"]
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError("stage08_phase event digest must be lowercase sha256")
+        for name in (
+            "sequence", "codex_invocation_count", "remediation_count", "resume_count",
+        ):
+            _non_negative_integer(self.metadata[name], name)
+        for name in (
+            "codex_active_duration_ms", "local_verification_duration_ms",
+            "fast_verify_duration_ms", "target_verify_duration_ms",
+            "full_verify_duration_ms", "total_stage8_duration_ms",
+        ):
+            value = self.metadata[name]
+            if value is not None:
+                _non_negative_integer(value, name)
+        ratio = self.metadata["codex_active_time_ratio"]
+        if ratio is not None and (
+            isinstance(ratio, bool)
+            or not isinstance(ratio, (int, float))
+            or ratio < 0
+            or ratio > 1
+        ):
+            raise ValueError("codex_active_time_ratio must be between zero and one")
+        if not isinstance(self.metadata["verification_reused"], bool):
+            raise TypeError("verification_reused must be a boolean")
 
     def to_dict(self) -> dict[str, Any]:
         return {

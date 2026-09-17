@@ -1,0 +1,334 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "T028",
+  "title": "Observational Stage08 phase-consumption telemetry",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/codex_adapter.py",
+    "sdd_orchestrator/telemetry/measurement.py",
+    "sdd_orchestrator/telemetry/models.py",
+    "sdd_orchestrator/telemetry/recorder.py",
+    "tests/test_telemetry_models.py",
+    "tests/test_telemetry_stage08_phase.py",
+    "tests/test_telemetry_stage08_task.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_telemetry_stage08_phase.py tests/test_telemetry_models.py tests/test_telemetry_measurement.py tests/test_telemetry_stage08_task.py tests/test_telemetry_application_wiring.py tests/test_telemetry_storage_contract.py",
+      "returncode": 0,
+      "stdout": "........... [ 15%]\n..............................................................                                                         [100%]\n73 passed, 159 subtests passed in 41.36s\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "TASK-028 bounded observational telemetry patch completed within sealed Work Package.",
+    "stderr": ""
+  },
+  "recorded_at": "20260917T082229.103537Z",
+  "governance": {
+    "envelope_id": "2733820f333f1deb2481b9256d455672f089b62eedbce0bce6d69058eedde688",
+    "approval_class": "A0",
+    "approval_reference": "stage07:bdeecac38b8b5e1277bf22e95688dd7d8a8b788b1938eeb8069683e54cc85414",
+    "pre_dispatch": {
+      "envelope_id": "2733820f333f1deb2481b9256d455672f089b62eedbce0bce6d69058eedde688",
+      "outcome": "AUTHORIZED",
+      "approval_class": "A0",
+      "approval_reference": "stage07:bdeecac38b8b5e1277bf22e95688dd7d8a8b788b1938eeb8069683e54cc85414",
+      "action": "EXECUTE_STAGE08_TASK",
+      "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+      "scope": [
+        "sdd_orchestrator/telemetry/models.py",
+        "sdd_orchestrator/telemetry/measurement.py",
+        "sdd_orchestrator/telemetry/recorder.py",
+        "sdd_orchestrator/codex_adapter.py",
+        "sdd_orchestrator/codex_cli.py",
+        "tests/test_telemetry_stage08_phase.py",
+        "tests/test_telemetry_models.py",
+        "tests/test_telemetry_measurement.py",
+        "tests/test_telemetry_stage08_task.py",
+        "tests/test_telemetry_application_wiring.py",
+        "tests/test_telemetry_storage_contract.py"
+      ],
+      "failure_route": null,
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "sdd_orchestrator/telemetry/models.py",
+          "sdd_orchestrator/telemetry/measurement.py",
+          "sdd_orchestrator/telemetry/recorder.py",
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/codex_cli.py",
+          "tests/test_telemetry_stage08_phase.py",
+          "tests/test_telemetry_models.py",
+          "tests/test_telemetry_measurement.py",
+          "tests/test_telemetry_stage08_task.py",
+          "tests/test_telemetry_application_wiring.py",
+          "tests/test_telemetry_storage_contract.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.InProcessBoundedCodexWorker"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:942520676daef8a214abad097d8875cdc9082265da4cd50046e710ce6efb7c4d:stage08-dispatch"
+      }
+    },
+    "post_dispatch": {
+      "envelope_id": "2733820f333f1deb2481b9256d455672f089b62eedbce0bce6d69058eedde688",
+      "outcome": "PASS",
+      "observed_scope": [
+        "sdd_orchestrator/codex_adapter.py",
+        "sdd_orchestrator/telemetry/measurement.py",
+        "sdd_orchestrator/telemetry/models.py",
+        "sdd_orchestrator/telemetry/recorder.py",
+        "tests/test_telemetry_models.py",
+        "tests/test_telemetry_stage08_phase.py",
+        "tests/test_telemetry_stage08_task.py"
+      ],
+      "observed_effects": [
+        "WORKSPACE_WRITE"
+      ],
+      "evidence_references": [
+        "pending-stage08-evidence:T028"
+      ],
+      "failure_route": null,
+      "approval_class": "A0",
+      "approval_reference": "stage07:bdeecac38b8b5e1277bf22e95688dd7d8a8b788b1938eeb8069683e54cc85414",
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "sdd_orchestrator/telemetry/models.py",
+          "sdd_orchestrator/telemetry/measurement.py",
+          "sdd_orchestrator/telemetry/recorder.py",
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/codex_cli.py",
+          "tests/test_telemetry_stage08_phase.py",
+          "tests/test_telemetry_models.py",
+          "tests/test_telemetry_measurement.py",
+          "tests/test_telemetry_stage08_task.py",
+          "tests/test_telemetry_application_wiring.py",
+          "tests/test_telemetry_storage_contract.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.InProcessBoundedCodexWorker"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:942520676daef8a214abad097d8875cdc9082265da4cd50046e710ce6efb7c4d:stage08-dispatch",
+        "outcome": "RECONCILED",
+        "actual_filesystem_paths": [
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/telemetry/measurement.py",
+          "sdd_orchestrator/telemetry/models.py",
+          "sdd_orchestrator/telemetry/recorder.py",
+          "tests/test_telemetry_models.py",
+          "tests/test_telemetry_stage08_phase.py",
+          "tests/test_telemetry_stage08_task.py"
+        ],
+        "actual_network_destinations": [],
+        "actual_credential_references": [],
+        "actual_secret_references": [],
+        "actual_processes": [
+          "sdd_orchestrator.codex_cli.InProcessBoundedCodexWorker"
+        ],
+        "evidence_reference": "pending-stage08-evidence:T028"
+      }
+    },
+    "work_package": {
+      "schema_version": "1.0",
+      "package_id": "97d4c03d78122ba5fc297ccce09101c0c2d162780417832091f5ecf98b32c538",
+      "package_kind": "REMEDIATION_PACKAGE",
+      "task_id": "T028",
+      "sealed_envelope_id": "942520676daef8a214abad097d8875cdc9082265da4cd50046e710ce6efb7c4d",
+      "diff_provenance_sha256": "9d0e98bd34ff73a775b2d575c120ca08e99f282d1de019c2cfe2ceff5cffff0e",
+      "authorized_file_count": 11,
+      "minimum_disclosure": true,
+      "provider_neutral": true
+    },
+    "verification_dispatches": [
+      {
+        "level": "TARGET",
+        "legacy_required": true,
+        "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+        "envelope_id": "2c30e3a80be919b5a4c39e4218f76fd8d85a3025e06fcd0befbd369d5bc76f7b",
+        "approval_class": "A0",
+        "approval_reference": "stage07:bdeecac38b8b5e1277bf22e95688dd7d8a8b788b1938eeb8069683e54cc85414",
+        "pre_dispatch": {
+          "envelope_id": "2c30e3a80be919b5a4c39e4218f76fd8d85a3025e06fcd0befbd369d5bc76f7b",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "stage07:bdeecac38b8b5e1277bf22e95688dd7d8a8b788b1938eeb8069683e54cc85414",
+          "action": "EXECUTE_VERIFICATION_TOOL",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "sdd_orchestrator/telemetry/models.py",
+            "sdd_orchestrator/telemetry/measurement.py",
+            "sdd_orchestrator/telemetry/recorder.py",
+            "sdd_orchestrator/codex_adapter.py",
+            "sdd_orchestrator/codex_cli.py",
+            "tests/test_telemetry_stage08_phase.py",
+            "tests/test_telemetry_models.py",
+            "tests/test_telemetry_measurement.py",
+            "tests/test_telemetry_stage08_task.py",
+            "tests/test_telemetry_application_wiring.py",
+            "tests/test_telemetry_storage_contract.py"
+          ],
+          "failure_route": null,
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "sdd_orchestrator/telemetry/models.py",
+              "sdd_orchestrator/telemetry/measurement.py",
+              "sdd_orchestrator/telemetry/recorder.py",
+              "sdd_orchestrator/codex_adapter.py",
+              "sdd_orchestrator/codex_cli.py",
+              "tests/test_telemetry_stage08_phase.py",
+              "tests/test_telemetry_models.py",
+              "tests/test_telemetry_measurement.py",
+              "tests/test_telemetry_stage08_task.py",
+              "tests/test_telemetry_application_wiring.py",
+              "tests/test_telemetry_storage_contract.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:942520676daef8a214abad097d8875cdc9082265da4cd50046e710ce6efb7c4d:verify:0:verification-0"
+          }
+        },
+        "post_dispatch": {
+          "envelope_id": "2c30e3a80be919b5a4c39e4218f76fd8d85a3025e06fcd0befbd369d5bc76f7b",
+          "outcome": "PASS",
+          "observed_scope": [],
+          "observed_effects": [
+            "TOOL_EXECUTION"
+          ],
+          "evidence_references": [
+            "verification-result:T028:TARGET:0"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "stage07:bdeecac38b8b5e1277bf22e95688dd7d8a8b788b1938eeb8069683e54cc85414",
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "sdd_orchestrator/telemetry/models.py",
+              "sdd_orchestrator/telemetry/measurement.py",
+              "sdd_orchestrator/telemetry/recorder.py",
+              "sdd_orchestrator/codex_adapter.py",
+              "sdd_orchestrator/codex_cli.py",
+              "tests/test_telemetry_stage08_phase.py",
+              "tests/test_telemetry_models.py",
+              "tests/test_telemetry_measurement.py",
+              "tests/test_telemetry_stage08_task.py",
+              "tests/test_telemetry_application_wiring.py",
+              "tests/test_telemetry_storage_contract.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:942520676daef8a214abad097d8875cdc9082265da4cd50046e710ce6efb7c4d:verify:0:verification-0",
+            "outcome": "RECONCILED",
+            "actual_filesystem_paths": [],
+            "actual_network_destinations": [],
+            "actual_credential_references": [],
+            "actual_secret_references": [],
+            "actual_processes": [
+              "verification-execution"
+            ],
+            "evidence_reference": "verification-result:T028:TARGET:0"
+          }
+        }
+      }
+    ],
+    "verification_plan": {
+      "schema_version": "1.0",
+      "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+      "provider_session_required": false,
+      "fast_count": 0,
+      "target_count": 1,
+      "full_count": 0,
+      "full_authorized": false,
+      "stage09_full_verification_preserved": true
+    },
+    "task_contract_evaluation": {
+      "acceptance_criteria": {
+        "EXISTING_TELEMETRY_FRAMEWORK_REUSED": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "TELEMETRY_TRUTH_CLASSES_PRESERVED": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "TASK023_RESOURCE_ENFORCEMENT_NOT_DUPLICATED": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "TASK021_AND_TASK022_GOVERNANCE_PRESERVED": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "LEGACY_STAGE08_TASKS_REMAIN_COMPATIBLE": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION"
+      },
+      "architecture_constitution": {
+        "ARCH-AC-01": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-02": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-03": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-06": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-07": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-08": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-04": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-05": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION",
+        "ARCH-AC-09": "PASS_IMPLEMENTED_AND_EVIDENCED_BY_TASK_VERIFICATION"
+      },
+      "ARCH-AC-09": "PRESERVED_NOT_MODIFIED_BY_TASK",
+      "stage09_decision_created": false,
+      "stage10_decision_created": false
+    }
+  },
+  "stage08_attempt": {
+    "schema_version": "1.0",
+    "attempt_id": "942520676daef8a214abad097d8875cdc9082265da4cd50046e710ce6efb7c4d",
+    "journal_path": ".sdd/state/stage08-attempts/942520676daef8a214abad097d8875cdc9082265da4cd50046e710ce6efb7c4d.yaml",
+    "journal_sha256": "601de062ab5a0892097b940d42d6ad586f59b5091638fb2fe9873c4feaf55f63",
+    "phase_event_digests": [
+      "153d255f9bc7508efed47ba1732c434b18d85277588dfc54e442bab1bb836aae",
+      "a61b00cb056dc10a8b5e7fab84e85d5f1a96a8b9fe5be7fcf0674e2ffb392a8a",
+      "8e60bdec35ab01ee548b5b2e906c7af99f0fc58ae9f1d6be004e54d3cbc83493",
+      "c6c686f5afc9d8e4e29ca3f4944d9a878dfb6112e0534089c092e2f21310c62c",
+      "e948c69f2eec566685dcd1f76bfa189942d921cb6eb69715b57e793aeef178a7",
+      "7612968ce1ba47dbbb2670b5ff46f07813d2bd4b1d1f83b47b1d7c777eed496f",
+      "56ad5230877b4acc6b6f355a4b6bf65d520f47faf7dac6ae4988eadc1a3a8be0"
+    ],
+    "current_phase": "STAGE8_COMPLETE",
+    "resume_count": 0,
+    "interruption_reasons": []
+  }
+}

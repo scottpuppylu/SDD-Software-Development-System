@@ -8,7 +8,7 @@ import subprocess
 from typing import Any
 
 from ..errors import CodexAdapterError
-from uuid import uuid4
+from uuid import UUID, uuid4, uuid5
 
 from .models import (
     Availability,
@@ -22,7 +22,11 @@ from .models import (
     Quality,
     Usage,
     UsageSource,
+    STAGE08_PHASE_SCHEMA_VERSION,
 )
+
+
+_STAGE08_PHASE_EVENT_NAMESPACE = UUID("80f199d0-e8db-4d53-a17b-85b399a32daa")
 
 
 @dataclass(frozen=True)
@@ -327,3 +331,145 @@ def measure_stage08_task_exception(
             "checkpoint_created": False,
         },
     )
+
+
+def _utc_timestamp(value: str) -> datetime:
+    normalized = value.replace("z", "Z")
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        raise ValueError("Stage08 phase timestamps require UTC offsets")
+    return parsed.astimezone(timezone.utc)
+
+
+def _elapsed_ms(start: datetime, end: datetime) -> int:
+    return max(0, round((end - start).total_seconds() * 1000))
+
+
+def measure_stage08_phase_events(
+    *, task_id: str, journal: dict[str, Any]
+) -> list[MeasurementEvent]:
+    """Project a TASK-027 journal into deterministic observational events.
+
+    Values are cumulative per attempt. Consumers deduplicate by deterministic
+    event_id/phase_event_digest and select the greatest sequence, so replaying a
+    reconstructed journal never adds completed work a second time.
+    """
+    if not isinstance(journal, dict) or not isinstance(journal.get("binding"), dict):
+        raise ValueError("Stage08 phase telemetry requires a governed journal")
+    attempt_id = journal["binding"].get("attempt_id")
+    journal_task_id = journal["binding"].get("task_id")
+    if not isinstance(attempt_id, str) or not attempt_id:
+        raise ValueError("Stage08 phase telemetry requires attempt identity")
+    if journal_task_id != task_id:
+        raise ValueError("Stage08 phase telemetry task identity mismatch")
+    raw_events = journal.get("events")
+    if not isinstance(raw_events, list):
+        raise ValueError("Stage08 phase telemetry requires event history")
+
+    seen_digests: set[str] = set()
+    provider_invocations: set[str] = set()
+    emitted: list[MeasurementEvent] = []
+    first_at: datetime | None = None
+    previous_at: datetime | None = None
+    previous_phase: str | None = None
+    codex_ms = 0
+    fast_ms = 0
+    target_ms = 0
+    full_ms = 0
+    remediation_count = 0
+    resume_count = 0
+    verification_reused = False
+
+    for expected_sequence, raw in enumerate(raw_events, start=1):
+        if not isinstance(raw, dict):
+            raise ValueError("Stage08 phase telemetry event must be an object")
+        sequence = raw.get("sequence")
+        digest = raw.get("event_digest")
+        if sequence != expected_sequence:
+            raise ValueError("Stage08 phase telemetry requires contiguous sequence")
+        if not isinstance(digest, str) or len(digest) != 64 or digest in seen_digests:
+            raise ValueError("Stage08 phase telemetry requires unique event digests")
+        seen_digests.add(digest)
+        observed_at = raw.get("recorded_at")
+        if not isinstance(observed_at, str):
+            raise ValueError("Stage08 phase telemetry requires recorded_at")
+        current_at = _utc_timestamp(observed_at)
+        if previous_at is not None and current_at < previous_at:
+            raise ValueError("Stage08 phase telemetry timestamps must be monotonic")
+        first_at = current_at if first_at is None else first_at
+
+        event_kind = str(raw.get("event_type", ""))
+        phase = raw.get("phase")
+        details = raw.get("details") if isinstance(raw.get("details"), dict) else {}
+        provider_id = raw.get("provider_invocation_id")
+        if isinstance(provider_id, str) and provider_id:
+            provider_invocations.add(provider_id)
+        if event_kind == "RESUME":
+            resume_count += 1
+        if phase == "REMEDIATION_REQUIRED":
+            remediation_count += 1
+        verification_reused = verification_reused or details.get("reused") is True
+
+        interval_ms = 0 if previous_at is None else _elapsed_ms(previous_at, current_at)
+        if phase == "CODEX_PATCH_COMPLETE" and previous_phase in {
+            "CONTEXT_READY", "REMEDIATION_REQUIRED",
+        }:
+            codex_ms += interval_ms
+        elif phase == "FAST_VERIFY_COMPLETE" and details.get("reused") is not True:
+            fast_ms += interval_ms
+        elif phase == "TARGET_VERIFY_COMPLETE" and details.get("reused") is not True:
+            target_ms += interval_ms
+        elif phase == "FINAL_VERIFY_COMPLETE" and details.get("reused") is not True:
+            levels = {
+                item.get("level")
+                for item in raw.get("verification", [])
+                if isinstance(item, dict)
+            }
+            if "FULL" in levels:
+                full_ms += interval_ms
+
+        total_ms = _elapsed_ms(first_at, current_at)
+        local_ms = fast_ms + target_ms + full_ms
+        ratio = round(codex_ms / total_ms, 9) if total_ms > 0 else None
+        metadata = {
+            "phase_schema_version": STAGE08_PHASE_SCHEMA_VERSION,
+            "attempt_id": attempt_id,
+            "task_id": task_id,
+            "event_kind": event_kind,
+            "phase": phase,
+            "sequence": sequence,
+            "phase_event_digest": digest,
+            "codex_invocation_count": len(provider_invocations),
+            "codex_active_duration_ms": codex_ms,
+            "local_verification_duration_ms": local_ms,
+            "fast_verify_duration_ms": fast_ms,
+            "target_verify_duration_ms": target_ms,
+            "full_verify_duration_ms": full_ms,
+            "remediation_count": remediation_count,
+            "resume_count": resume_count,
+            "total_stage8_duration_ms": total_ms,
+            "codex_active_time_ratio": ratio,
+            "verification_reused": verification_reused,
+        }
+        outcome = (
+            OutcomeCategory.BLOCKED
+            if event_kind == "SAFE_PAUSE"
+            else OutcomeCategory.COMPLETED
+        )
+        emitted.append(MeasurementEvent(
+            event_type=EventType.STAGE08_PHASE,
+            event_id=str(uuid5(_STAGE08_PHASE_EVENT_NAMESPACE, f"{attempt_id}:{digest}")),
+            observed_at=observed_at,
+            stage_id="08",
+            run_id=attempt_id,
+            outcome_category=outcome,
+            metrics=[],
+            usage=None,
+            metadata=metadata,
+        ))
+        previous_at = current_at
+        if phase is not None:
+            previous_phase = phase
+    return emitted

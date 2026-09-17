@@ -80,6 +80,7 @@ from .stage08_phase_state import (
 from .task_parser import AtomicTask, SealedExecutionEnvelope, TaskFileParser
 from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
 from .telemetry.measurement import (
+    measure_stage08_phase_events,
     measure_stage08_task,
     measure_stage08_task_exception,
 )
@@ -1474,6 +1475,13 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         if self.telemetry_recorder is None:
             return
         try:
+            phase_store = getattr(self, "_active_phase_store", None)
+            if phase_store is not None:
+                for phase_event in measure_stage08_phase_events(
+                    task_id=task.task_id,
+                    journal=phase_store.load(),
+                ):
+                    self.telemetry_recorder.record(phase_event)
             if result is not None:
                 event = measure_stage08_task(
                     task_id=task.task_id,

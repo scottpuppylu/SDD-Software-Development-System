@@ -141,6 +141,17 @@ class Stage08TaskMeasurementContractTests(unittest.TestCase):
 
 
 class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
+    @staticmethod
+    def _reset_qualification_fixture(repo):
+        path = repo / ".sdd/state/implementation-state.yaml"
+        state = yaml.safe_load(path.read_text(encoding="utf-8"))
+        state["last_completed_task"] = None
+        state["current_task"] = None
+        state["next_task"] = None
+        state["last_verified_commit"] = None
+        state["task_qualifications"] = {}
+        path.write_text(yaml.safe_dump(state, sort_keys=False), encoding="utf-8")
+
     def test_runner_accepts_a_shared_optional_telemetry_recorder(self):
         parameters = inspect.signature(Stage08CodexRunner.__init__).parameters
         self.assertIn("telemetry_recorder", parameters)
@@ -179,11 +190,16 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory) / "repo"
             shutil.copytree(source / ".sdd", repo / ".sdd")
+            self._reset_qualification_fixture(repo)
             for relative_path, text in {
-                "AGENTS.md": "# AGENTS\nDo not modify authoritative contracts.\n",
-                "docs/PRD.md": "# PRD\nFR-001 deterministic task\n",
-                "docs/spec.md": "# Spec\nSPEC-001 deterministic behavior\n",
-                "docs/Design.md": "# Design\nDES-001 deterministic design\n",
+                    "AGENTS.md": "# AGENTS\nDo not modify authoritative contracts.\n",
+                    "docs/PRD.md": "# PRD\nFR-001 deterministic task\n",
+                    "docs/spec.md": "# Spec\nSPEC-001 deterministic behavior\n",
+                    "docs/Design.md": "# Design\nDES-001 deterministic design\n",
+                    "docs/handoff/pre-implementation-gate-report.md": (
+                        "# Stage 07 Pre-Implementation Gate Report\n\n"
+                        "RESULT = PASS\nIMPLEMENTATION_AUTHORIZATION = GRANTED\n"
+                    ),
             }.items():
                 path = repo / relative_path
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -243,6 +259,9 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
                     )
                     return SimpleNamespace(returncode=0, stdout="done", stderr="")
 
+            FakeCodex.__module__ = "sdd_orchestrator.codex_cli"
+            FakeCodex.__qualname__ = "LegacyCompletedTestCodex"
+
             initial = Stage08CodexRunner(
                 Orchestrator(repo), codex=FakeCodex()
             ).execute_one("T007")
@@ -281,11 +300,16 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory) / "repo"
             shutil.copytree(source / ".sdd", repo / ".sdd")
+            self._reset_qualification_fixture(repo)
             for relative_path, text in {
-                "AGENTS.md": "# AGENTS\nDo not modify authoritative contracts.\n",
-                "docs/PRD.md": "# PRD\nFR-001 deterministic task\n",
-                "docs/spec.md": "# Spec\nSPEC-001 deterministic behavior\n",
-                "docs/Design.md": "# Design\nDES-001 deterministic design\n",
+                    "AGENTS.md": "# AGENTS\nDo not modify authoritative contracts.\n",
+                    "docs/PRD.md": "# PRD\nFR-001 deterministic task\n",
+                    "docs/spec.md": "# Spec\nSPEC-001 deterministic behavior\n",
+                    "docs/Design.md": "# Design\nDES-001 deterministic design\n",
+                    "docs/handoff/pre-implementation-gate-report.md": (
+                        "# Stage 07 Pre-Implementation Gate Report\n\n"
+                        "RESULT = PASS\nIMPLEMENTATION_AUTHORIZATION = GRANTED\n"
+                    ),
             }.items():
                 path = repo / relative_path
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -338,6 +362,9 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
                         encoding="utf-8",
                     )
                     return SimpleNamespace(returncode=0, stdout="done", stderr="")
+
+            FakeCodex.__module__ = "sdd_orchestrator.codex_cli"
+            FakeCodex.__qualname__ = "LegacyRecoveryTestCodex"
 
             initial_runner = Stage08CodexRunner(Orchestrator(repo), codex=FakeCodex())
             with patch.object(
@@ -740,11 +767,16 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory) / "repo"
             shutil.copytree(source / ".sdd", repo / ".sdd")
+            self._reset_qualification_fixture(repo)
             for relative_path, text in {
-                "AGENTS.md": "# AGENTS\nDo not modify authoritative contracts.\n",
-                "docs/PRD.md": "# PRD\nFR-001 deterministic retry\n",
-                "docs/spec.md": "# Spec\nSPEC-001 deterministic retry behavior\n",
-                "docs/Design.md": "# Design\nDES-001 deterministic retry design\n",
+                    "AGENTS.md": "# AGENTS\nDo not modify authoritative contracts.\n",
+                    "docs/PRD.md": "# PRD\nFR-001 deterministic retry\n",
+                    "docs/spec.md": "# Spec\nSPEC-001 deterministic retry behavior\n",
+                    "docs/Design.md": "# Design\nDES-001 deterministic retry design\n",
+                    "docs/handoff/pre-implementation-gate-report.md": (
+                        "# Stage 07 Pre-Implementation Gate Report\n\n"
+                        "RESULT = PASS\nIMPLEMENTATION_AUTHORIZATION = GRANTED\n"
+                    ),
             }.items():
                 path = repo / relative_path
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -794,6 +826,9 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
                     provider_calls.append(prompt)
                     return SimpleNamespace(returncode=1, stdout="", stderr="failed")
 
+            FailingCodex.__module__ = "sdd_orchestrator.codex_cli"
+            FailingCodex.__qualname__ = "LegacyFailingTestCodex"
+
             first = Stage08CodexRunner(
                 Orchestrator(repo), codex=FailingCodex(), telemetry_recorder=recorder
             ).execute_one("T007")
@@ -811,6 +846,9 @@ class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
                         encoding="utf-8",
                     )
                     return SimpleNamespace(returncode=0, stdout="done", stderr="")
+
+            SuccessfulCodex.__module__ = "sdd_orchestrator.codex_cli"
+            SuccessfulCodex.__qualname__ = "LegacySuccessfulTestCodex"
 
             second = Stage08CodexRunner(
                 Orchestrator(repo), codex=SuccessfulCodex(), telemetry_recorder=recorder

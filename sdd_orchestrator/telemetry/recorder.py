@@ -31,6 +31,7 @@ def _default_directory(environ: Any) -> Path:
 class TelemetryRecorder:
     def __init__(self, sink: Any) -> None:
         self._sink = sink
+        self._seen_event_ids: set[str] = set()
 
     @classmethod
     def from_environment(
@@ -60,8 +61,14 @@ class TelemetryRecorder:
             return cls(NullTelemetrySink())
 
     def record(self, event: Any) -> None:
+        event_id = getattr(event, "event_id", None)
+        if isinstance(event_id, str) and event_id in self._seen_event_ids:
+            return None
         try:
             self._sink.record(event)
         except Exception:
             pass
+        else:
+            if isinstance(event_id, str):
+                self._seen_event_ids.add(event_id)
         return None

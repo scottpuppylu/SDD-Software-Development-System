@@ -99,7 +99,7 @@ class TelemetryModelTests(unittest.TestCase):
     def test_event_type_vocabulary_is_closed(self):
         self.assertEqual(
             {member.value for member in EventType},
-            {"stage_request", "provider_call", "stage08_task"},
+            {"stage_request", "provider_call", "stage08_task", "stage08_phase"},
         )
 
     def test_usage_source_vocabulary_is_frozen(self):
