@@ -98,6 +98,63 @@ class GitRepository:
         patch = self._run(["diff", "--binary", parent, commit, "--"]).stdout
         return hashlib.sha256(patch.encode("utf-8")).hexdigest()
 
+    def working_diff_digest(self, paths: list[str], *, baseline: str = "HEAD") -> str:
+        """Content-bind tracked and untracked task dirtiness without mutating Git."""
+        normalized = sorted(dict.fromkeys(Path(item).as_posix() for item in paths))
+        records: list[dict[str, Any]] = []
+        for rel in normalized:
+            target = (self.repo_root / rel).resolve()
+            try:
+                target.relative_to(self.repo_root)
+            except ValueError as exc:
+                raise GitRuntimeError(f"Dirty path escapes repository: {rel}") from exc
+            tracked = self.is_tracked(rel)
+            patch = self._run(
+                ["diff", "--binary", baseline, "--", rel], check=False
+            ).stdout if tracked else ""
+            records.append({
+                "path": rel,
+                "tracked": tracked,
+                "exists": target.is_file(),
+                "content_sha256": (
+                    hashlib.sha256(target.read_bytes()).hexdigest()
+                    if target.is_file() else None
+                ),
+                "patch_sha256": hashlib.sha256(patch.encode("utf-8")).hexdigest(),
+            })
+        return hashlib.sha256(
+            json.dumps(records, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+    def dirty_diff_provenance(
+        self,
+        *,
+        attempt_id: str,
+        phase: str,
+        allowed_paths: list[str],
+        baseline: str = "HEAD",
+    ) -> dict[str, Any]:
+        snapshot = self.snapshot(recent_limit=1)
+        dirty = sorted(snapshot.dirty_paths)
+        unauthorized = [
+            path for path in dirty if not self._covered_by_paths(path, allowed_paths)
+        ]
+        return {
+            "attempt_id": attempt_id,
+            "phase": phase,
+            "dirty_paths": dirty,
+            "diff_sha256": self.working_diff_digest(dirty, baseline=baseline),
+            "authorized_scope_sha256": hashlib.sha256(
+                json.dumps(
+                    sorted(dict.fromkeys(Path(item).as_posix() for item in allowed_paths)),
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
+            "scope_overrun": bool(unauthorized),
+            "unauthorized_paths": unauthorized,
+            "attributable": not bool(unauthorized),
+        }
+
     @contextmanager
     def isolated_worktree(self, commit: str):
         resolved = self.resolve_commit(commit)

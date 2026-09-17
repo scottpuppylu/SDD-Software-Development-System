@@ -278,6 +278,48 @@ def covered(path: str, allowed_paths: list[str]) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class DirtyDiffScopeResult:
+    status: str
+    dirty_paths: tuple[str, ...]
+    unauthorized_paths: tuple[str, ...]
+    unexpected_untracked_paths: tuple[str, ...]
+    attributable: bool
+
+    @property
+    def safe_to_preserve(self) -> bool:
+        return self.status == "AUTHORIZED_ATTRIBUTABLE_DIRTY_DIFF"
+
+
+def validate_dirty_diff_scope(
+    dirty_paths: tuple[str, ...],
+    allowed_paths: list[str],
+    *,
+    attributable_paths: tuple[str, ...],
+    untracked_paths: tuple[str, ...] = (),
+) -> DirtyDiffScopeResult:
+    """Fail closed unless every dirty path is authorized and attempt-attributable."""
+    normalized = tuple(sorted(dict.fromkeys(_normalized_scope(item) for item in dirty_paths)))
+    attributed = set(_normalized_scope(item) for item in attributable_paths)
+    unauthorized = tuple(item for item in normalized if not covered(item, allowed_paths))
+    unexpected = tuple(
+        sorted(
+            item for item in (_normalized_scope(path) for path in untracked_paths)
+            if item not in attributed
+        )
+    )
+    attributable = all(item in attributed for item in normalized)
+    status = (
+        "AUTHORIZED_ATTRIBUTABLE_DIRTY_DIFF"
+        if normalized and not unauthorized and not unexpected and attributable
+        else "CLEAN" if not normalized and not unexpected
+        else "BLOCK"
+    )
+    return DirtyDiffScopeResult(
+        status, normalized, unauthorized, unexpected, attributable
+    )
+
+
 def runtime_dirty(path: str, runtime_dirty_prefixes: tuple[str, ...]) -> bool:
     return path.startswith(runtime_dirty_prefixes)
 

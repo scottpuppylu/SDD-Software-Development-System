@@ -19,7 +19,12 @@ import yaml
 
 from .core import Orchestrator
 from .codex_cli import CodexCLI
-from .codex_results import VerificationResult, CodexTaskRunResult
+from .codex_results import (
+    CodexOutcome,
+    VerificationResult,
+    CodexTaskRunResult,
+    normalize_codex_outcome,
+)
 from .result_serialization import serialize_task_run_result
 from .evidence_writer import (
     RECOVERY_RECORD_KIND,
@@ -57,6 +62,20 @@ from .stage08_work_package import (
     Stage08WorkPackage,
     Stage08WorkPackageBuilder,
     build_diff_provenance,
+)
+from .stage08_phase_state import (
+    AttemptBinding,
+    DiffProvenance as PhaseDiffProvenance,
+    EventType,
+    InterruptionReason,
+    PhaseStateError,
+    ResumeContext,
+    Stage08Phase,
+    Stage08PhaseStore,
+    VerificationFingerprint,
+    allowed_files_sha256,
+    canonical_sha256 as phase_sha256,
+    classify_safe_pause,
 )
 from .task_parser import AtomicTask, SealedExecutionEnvelope, TaskFileParser
 from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
@@ -132,6 +151,8 @@ class Stage08CodexRunner:
         self.governance_validator = GovernanceEnvelopeValidator(require_security=True)
         self._governance_audit: dict[str, Any] | None = None
         self._active_stage08_envelope: SealedExecutionEnvelope | None = None
+        self._active_phase_store: Stage08PhaseStore | None = None
+        self._active_phase_binding: AttemptBinding | None = None
 
     @staticmethod
     def _security_request(
@@ -759,6 +780,67 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             )
         )
 
+    def _phase_binding(
+        self, task: AtomicTask, envelope: SealedExecutionEnvelope
+    ) -> AttemptBinding:
+        runtime = build_local_verification_runtime(self.repo_root, self.project_python)
+        return AttemptBinding(
+            attempt_id=envelope.envelope_id,
+            task_id=task.task_id,
+            stage07_report_sha256=envelope.stage07_report_sha256,
+            sealed_envelope_id=envelope.envelope_id,
+            branch=envelope.branch,
+            entry_head=envelope.baseline_commit,
+            authorized_baseline=self._authorized_baseline_from_stage07(envelope),
+            task_contract_sha256=envelope.task_contract_sha256,
+            authority_sha256=phase_sha256([list(item) for item in envelope.authority_versions]),
+            allowed_files_sha256=allowed_files_sha256(envelope.allowed_paths),
+            environment_sha256=runtime.identity,
+        )
+
+    def _phase_diff(
+        self,
+        task: AtomicTask,
+        binding: AttemptBinding,
+        phase: Stage08Phase,
+        paths: list[str],
+    ) -> PhaseDiffProvenance:
+        unauthorized = [path for path in paths if not self._covered(path, task.allowed_paths)]
+        return PhaseDiffProvenance(
+            attempt_id=binding.attempt_id,
+            phase=phase.value,
+            dirty_paths=tuple(sorted(paths)),
+            diff_sha256=self.git.working_diff_digest(paths, baseline=binding.entry_head),
+            authorized_scope_sha256=binding.allowed_files_sha256,
+            scope_overrun=bool(unauthorized),
+            attributable=not bool(unauthorized),
+        )
+
+    @staticmethod
+    def _verification_fingerprint(
+        *,
+        level: str,
+        command: str,
+        runtime_identity: str,
+        diff_sha256: str,
+        binding: AttemptBinding,
+        outcome: str,
+    ) -> VerificationFingerprint:
+        return VerificationFingerprint(
+            level=level,
+            command_sha256=phase_sha256(command),
+            input_sha256=phase_sha256({
+                "task": binding.task_contract_sha256,
+                "diff": diff_sha256,
+                "authority": binding.authority_sha256,
+            }),
+            environment_sha256=runtime_identity,
+            diff_sha256=diff_sha256,
+            authority_sha256=binding.authority_sha256,
+            envelope_id=binding.sealed_envelope_id,
+            outcome=outcome,
+        )
+
     def execute_one(self, task_id: str | None = None) -> CodexTaskRunResult:
         self._telemetry_attempt_task = None
         try:
@@ -805,6 +887,45 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         envelope = self.assemble_execution_envelope(task, before)
         self.validate_execution_envelope(envelope, task)
         self._active_stage08_envelope = envelope
+        phase_store: Stage08PhaseStore | None = None
+        phase_binding: AttemptBinding | None = None
+        resume_decision = None
+        if self._uses_structured_work_package(task):
+            phase_binding = self._phase_binding(task, envelope)
+            phase_store = Stage08PhaseStore(self.repo_root, envelope.envelope_id)
+            if phase_store.path.exists():
+                current_diff = self._phase_diff(
+                    task, phase_binding, Stage08Phase.PRECHECK_COMPLETE,
+                    sorted(relevant_dirty),
+                )
+                resume_decision = phase_store.revalidate_resume(
+                    ResumeContext(
+                        binding=phase_binding,
+                        dirty_paths=current_diff.dirty_paths,
+                        diff_sha256=current_diff.diff_sha256,
+                        diff_attributable=current_diff.attributable,
+                        scope_overrun=current_diff.scope_overrun,
+                    )
+                )
+                if resume_decision.status != "RESUME_ALLOWED":
+                    raise CodexAdapterError(
+                        "Stage08 phase resume validation blocked: "
+                        + ", ".join(resume_decision.reasons)
+                    )
+                phase_store.append(
+                    event_type=EventType.RESUME,
+                    diff_provenance=current_diff,
+                    details={"revalidated": True},
+                )
+            else:
+                phase_store.create(phase_binding)
+                phase_store.append(
+                    event_type=EventType.PHASE,
+                    phase=Stage08Phase.PRECHECK_COMPLETE,
+                    details={"authorization_revalidated": True},
+                )
+            self._active_phase_store = phase_store
+            self._active_phase_binding = phase_binding
 
         provider_id = f"{type(self.codex).__module__}.{type(self.codex).__qualname__}"
         governance_identity = IdentityBinding(
@@ -832,6 +953,18 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         work_package = self._build_work_package(
             task, envelope, before, sorted(relevant_dirty)
         )
+        if phase_store is not None:
+            journal = phase_store.load()
+            phase_events = [phase_store._event_from_dict(item) for item in journal["events"]]
+            if phase_store.current_phase(phase_events) is Stage08Phase.PRECHECK_COMPLETE:
+                phase_store.append(
+                    event_type=EventType.PHASE,
+                    phase=Stage08Phase.CONTEXT_READY,
+                    details={
+                        "work_package_id": work_package.package_id if work_package else None,
+                        "minimum_disclosure": True,
+                    },
+                )
         governance_request = DispatchRequest(
             action="EXECUTE_STAGE08_TASK", tool=provider_id,
             arguments={
@@ -923,16 +1056,29 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             if resume is not None:
                 proc = resume[3]
             self._progress(f"{task.task_id} resuming after evidence write failure")
+        elif resume_decision is not None and resume_decision.skip_codex:
+            self._evidence_write_resume = None
+            self._progress(f"{task.task_id} reusing completed Codex patch phase")
+            proc = SimpleNamespace(
+                returncode=0,
+                stdout="Governed resume reused the completed Codex patch phase.",
+                stderr="",
+            )
         else:
             self._evidence_write_resume = None
             self._progress(f"{task.task_id} Codex started")
             self._telemetry_attempt_task = task
-            proc = self._call_with_heartbeat(
-                f"{task.task_id} Codex still running",
-                lambda: self.codex.execute(
-                    self.repo_root, self.build_prompt(task, envelope, work_package)
-                ),
-            )
+            try:
+                proc = self._call_with_heartbeat(
+                    f"{task.task_id} Codex still running",
+                    lambda: self.codex.execute(
+                        self.repo_root, self.build_prompt(task, envelope, work_package)
+                    ),
+                )
+            except (subprocess.TimeoutExpired, TimeoutError) as exc:
+                proc = SimpleNamespace(returncode=124, stdout="", stderr=type(exc).__name__)
+            except (KeyboardInterrupt, InterruptedError) as exc:
+                proc = SimpleNamespace(returncode=130, stdout="", stderr=type(exc).__name__)
             self._progress(f"{task.task_id} Codex completed (exit={proc.returncode})")
         after = self.git.snapshot(recent_limit=5)
         post_nonruntime_dirty = [
@@ -951,6 +1097,11 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
                 "Changes are left uncommitted for inspection."
             )
         changed = sorted(post_nonruntime_dirty)
+        phase_diff = (
+            self._phase_diff(task, phase_binding, Stage08Phase.CODEX_PATCH_COMPLETE, changed)
+            if phase_store is not None and phase_binding is not None
+            else None
+        )
 
         post_governance = self.governance_validator.reconcile_post_dispatch(
             governance_envelope, governance_request,
@@ -994,13 +1145,147 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
         self.validate_execution_envelope(envelope, task)
 
         if proc.returncode != 0:
+            normalized = normalize_codex_outcome(
+                returncode=proc.returncode, stderr=proc.stderr,
+                exception=(TimeoutError() if proc.returncode == 124 else InterruptedError() if proc.returncode == 130 else None),
+            )
+            reason_map = {
+                CodexOutcome.CODEX_QUOTA_EXHAUSTED: InterruptionReason.CODEX_QUOTA_EXHAUSTED,
+                CodexOutcome.CODEX_INTERRUPTED: InterruptionReason.CODEX_INTERRUPTED,
+                CodexOutcome.CODEX_TIMEOUT: InterruptionReason.CODEX_TIMEOUT,
+            }
+            interruption = reason_map.get(normalized)
+            if interruption is not None and phase_store is not None and phase_binding is not None and phase_diff is not None:
+                decision = classify_safe_pause(
+                    ResumeContext(
+                        binding=phase_binding,
+                        dirty_paths=phase_diff.dirty_paths,
+                        diff_sha256=phase_diff.diff_sha256,
+                        diff_attributable=phase_diff.attributable,
+                        scope_overrun=phase_diff.scope_overrun,
+                    ),
+                    interruption,
+                )
+                if decision.status == "SAFE_PAUSE":
+                    phase_store.append(
+                        event_type=EventType.SAFE_PAUSE,
+                        diff_provenance=phase_diff,
+                        interruption_reason=interruption,
+                        details={"unknown_side_effects": False},
+                    )
+                    return self._finish_without_checkpoint(task, proc, changed, "SAFE_PAUSE")
             return self._finish_without_checkpoint(task, proc, changed, "CODEX_FAILED")
         if not changed:
             return self._finish_without_checkpoint(task, proc, changed, "NO_CHANGES")
 
+        if phase_store is not None and phase_diff is not None and (
+            resume_decision is None or not resume_decision.skip_codex
+        ):
+            phase_store.append(
+                event_type=EventType.PHASE,
+                phase=Stage08Phase.CODEX_PATCH_COMPLETE,
+                diff_provenance=phase_diff,
+                provider_invocation_id=f"{envelope.envelope_id}:codex:initial",
+                details={"provider_result": "COMPLETED"},
+            )
+
         self._progress(f"{task.task_id} verification started")
-        verification = self._run_verification(task)
+        verification_reused = False
+        verification: list[VerificationResult]
+        if (
+            phase_store is not None
+            and phase_binding is not None
+            and phase_diff is not None
+            and resume_decision is not None
+            and resume_decision.skip_codex
+        ):
+            plan = VerificationCommandPolicy.plan_for_task(task)
+            runtime = build_local_verification_runtime(self.repo_root, self.project_python)
+            expected = [
+                self._verification_fingerprint(
+                    level=step.level.value,
+                    command=step.command,
+                    runtime_identity=runtime.identity,
+                    diff_sha256=phase_diff.diff_sha256,
+                    binding=phase_binding,
+                    outcome="PASS",
+                )
+                for step in (*plan.fast, *plan.target, *plan.full)
+            ]
+            reuse = phase_store.revalidate_resume(
+                ResumeContext(
+                    binding=phase_binding,
+                    dirty_paths=phase_diff.dirty_paths,
+                    diff_sha256=phase_diff.diff_sha256,
+                    diff_attributable=phase_diff.attributable,
+                    scope_overrun=phase_diff.scope_overrun,
+                ),
+                expected_verification=expected,
+            )
+            required_levels = {item.level for item in expected}
+            if required_levels and required_levels.issubset(reuse.reusable_verification_levels):
+                verification = [
+                    VerificationResult(step.command, 0, "Reused governed PASS proof.", "")
+                    for step in (*plan.fast, *plan.target, *plan.full)
+                ]
+                verification_reused = True
+                self._progress(f"{task.task_id} reused still-valid verification proof")
+            else:
+                verification = self._run_verification(task)
+        else:
+            verification = self._run_verification(task)
+
+        phase_fingerprints: list[VerificationFingerprint] = []
+        if phase_store is not None and phase_binding is not None and phase_diff is not None:
+            plan = VerificationCommandPolicy.plan_for_task(task)
+            runtime = build_local_verification_runtime(self.repo_root, self.project_python)
+            level_by_command = {
+                step.command: step.level.value
+                for step in (*plan.fast, *plan.target, *plan.full)
+            }
+            phase_fingerprints = [
+                self._verification_fingerprint(
+                    level=level_by_command[item.command],
+                    command=item.command,
+                    runtime_identity=runtime.identity,
+                    diff_sha256=phase_diff.diff_sha256,
+                    binding=phase_binding,
+                    outcome="PASS" if item.passed else "FAIL",
+                )
+                for item in verification
+            ]
+            journal = phase_store.load()
+            events = [phase_store._event_from_dict(item) for item in journal["events"]]
+            current_phase = phase_store.current_phase(events)
+            if current_phase is Stage08Phase.CODEX_PATCH_COMPLETE:
+                phase_store.append(
+                    event_type=EventType.PHASE,
+                    phase=Stage08Phase.FAST_VERIFY_COMPLETE,
+                    diff_provenance=phase_diff,
+                    verification=(
+                        item for item in phase_fingerprints if item.level == "FAST"
+                    ),
+                    details={"reused": verification_reused},
+                )
+                current_phase = Stage08Phase.FAST_VERIFY_COMPLETE
+            if current_phase is Stage08Phase.FAST_VERIFY_COMPLETE:
+                phase_store.append(
+                    event_type=EventType.PHASE,
+                    phase=Stage08Phase.TARGET_VERIFY_COMPLETE,
+                    diff_provenance=phase_diff,
+                    verification=(
+                        item for item in phase_fingerprints if item.level == "TARGET"
+                    ),
+                    details={"reused": verification_reused},
+                )
         if not all(v.passed for v in verification):
+            if phase_store is not None:
+                phase_store.append(
+                    event_type=EventType.PHASE,
+                    phase=Stage08Phase.REMEDIATION_REQUIRED,
+                    diff_provenance=phase_diff,
+                    details={"minimum_remediation_package_required": True},
+                )
             if task.task_id == "T014":
                 provisional_indexes = {
                     p for p in changed
@@ -1021,6 +1306,24 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             )
 
         self._progress(f"{task.task_id} verification PASS")
+        if phase_store is not None:
+            journal = phase_store.load()
+            events = [phase_store._event_from_dict(item) for item in journal["events"]]
+            current_phase = phase_store.current_phase(events)
+            if current_phase is Stage08Phase.TARGET_VERIFY_COMPLETE:
+                phase_store.append(
+                    event_type=EventType.PHASE,
+                    phase=Stage08Phase.FINAL_VERIFY_COMPLETE,
+                    diff_provenance=phase_diff,
+                    verification=phase_fingerprints,
+                    details={"scope_and_checkpoint_preconditions_validated": True},
+                )
+                phase_store.append(
+                    event_type=EventType.PHASE,
+                    phase=Stage08Phase.STAGE8_COMPLETE,
+                    diff_provenance=phase_diff,
+                    details={"evidence_and_checkpoint_pending": True},
+                )
         self._record_task_contract_results(task)
         # T014 is an evidence-index task. Codex may draft its Markdown before the
         # Orchestrator has run the declared Verification Commands, so its prose is
@@ -1674,6 +1977,11 @@ This index reports Stage 08 runtime evidence. It does **not** declare Stage 09 `
             verification,
             status=status,
             governance_audit=self._governance_audit,
+            stage08_attempt=(
+                self._active_phase_store.evidence_binding()
+                if self._active_phase_store is not None
+                else None
+            ),
         )
 
     def _finish_without_checkpoint(

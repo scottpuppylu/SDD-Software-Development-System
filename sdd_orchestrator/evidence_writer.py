@@ -755,6 +755,7 @@ def write_stage08_evidence(
     *,
     status: str,
     governance_audit: Mapping[str, Any] | None = None,
+    stage08_attempt: Mapping[str, Any] | None = None,
 ) -> str:
     evidence_dir = repo_root / ".sdd" / "evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -783,6 +784,25 @@ def write_stage08_evidence(
         if not required.issubset(governance_audit):
             raise InvalidEvidence("governance audit is missing required envelope bindings")
         payload["governance"] = redact_security_value(dict(governance_audit))
+    if stage08_attempt is not None:
+        required_attempt = {
+            "schema_version", "attempt_id", "journal_path", "journal_sha256",
+            "phase_event_digests", "current_phase", "resume_count",
+            "interruption_reasons",
+        }
+        if (
+            not required_attempt.issubset(stage08_attempt)
+            or stage08_attempt.get("schema_version") != "1.0"
+            or not re.fullmatch(r"[0-9a-f]{64}", str(stage08_attempt.get("attempt_id", "")))
+            or not re.fullmatch(r"[0-9a-f]{64}", str(stage08_attempt.get("journal_sha256", "")))
+            or not isinstance(stage08_attempt.get("phase_event_digests"), list)
+            or any(
+                not re.fullmatch(r"[0-9a-f]{64}", str(item))
+                for item in stage08_attempt.get("phase_event_digests", [])
+            )
+        ):
+            raise InvalidEvidence("stage08 attempt binding is incomplete or invalid")
+        payload["stage08_attempt"] = redact_security_value(dict(stage08_attempt))
     evidence_path = repo_root / rel
     temporary_file = tempfile.NamedTemporaryFile(
         dir=evidence_dir,

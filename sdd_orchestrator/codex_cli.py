@@ -5,10 +5,19 @@ import os
 import shutil
 import subprocess
 import time
+from dataclasses import dataclass
 
 from .errors import CodexAdapterError
+from .codex_results import CodexOutcome, normalize_codex_outcome
 from .telemetry.measurement import measure_provider_call
 from .telemetry.models import Component, OutcomeCategory
+
+
+@dataclass(frozen=True)
+class NormalizedCodexExecution:
+    outcome: CodexOutcome
+    process: subprocess.CompletedProcess[str] | None
+    exception_type: str | None = None
 
 
 class CodexCLI:
@@ -103,3 +112,18 @@ class CodexCLI:
                     self.telemetry_recorder.record(event)
                 except Exception:
                     pass
+
+    def execute_normalized(self, repo_root: Path, prompt: str) -> NormalizedCodexExecution:
+        """Return interruption identity without deciding whether pausing is safe."""
+        try:
+            process = self.execute(repo_root, prompt)
+        except (subprocess.TimeoutExpired, TimeoutError, KeyboardInterrupt, InterruptedError) as exc:
+            return NormalizedCodexExecution(
+                normalize_codex_outcome(exception=exc), None, type(exc).__name__
+            )
+        return NormalizedCodexExecution(
+            normalize_codex_outcome(
+                returncode=process.returncode, stderr=process.stderr
+            ),
+            process,
+        )

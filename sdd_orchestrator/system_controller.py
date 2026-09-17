@@ -710,6 +710,15 @@ class FullSystemController:
         pending = tuple(item.decision_id for item in self.decisions.list(status="PENDING"))
         return self.runner.governed_snapshot(pending_decisions=pending)
 
+    def resume_stage08_attempt(self, task_id: str):
+        """Resume only through the normal Stage08 gate and runner revalidation path."""
+        snapshot = self.governed_snapshot()
+        if not snapshot.stage08_eligible:
+            raise LifecycleInvariantError(
+                "Stage08 resume requires current Stage07 authorization and no blocker"
+            )
+        return self.codex_runner.execute_one(task_id)
+
     def _repo_structure(self, max_entries: int = 500) -> str:
         ignored = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build"}
         entries = []

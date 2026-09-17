@@ -20,6 +20,27 @@ def serialize_task_run_result(result: CodexTaskRunResult) -> dict[str, Any]:
     return data
 
 
+def stage08_phase_projection(
+    *,
+    attempt_id: str,
+    phase: str | None,
+    status: str,
+    resume_eligible: bool,
+    safe_references: list[str] | tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Minimum-disclosure status only; never an implementation qualification."""
+    return {
+        "attempt_id": attempt_id,
+        "phase": phase,
+        "status": status,
+        "resume_eligible": bool(resume_eligible),
+        "safe_references": [redact_security_value(item) for item in safe_references],
+        "implementation_qualified": False,
+        "stage09_decision": None,
+        "stage10_decision": None,
+    }
+
+
 _UNRESOLVED = "TBD"
 _VERIFICATION_OUTCOMES = {"PASS", "FAIL", "NOT RUN"}
 _SENSITIVE_KEY_PARTS = (
