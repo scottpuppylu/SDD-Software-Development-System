@@ -4,14 +4,14 @@
 
 This artifact is the approved CURRENT prospective Stage06 `EXECUTION_DECOMPOSITION` authority. Stage06 owns task decomposition only: atomic work boundaries, dependency order, implementation scope, required outcomes, preservation and failure obligations, future verification, and checkpoint eligibility. It does not create or revise `PRODUCT_INTENT`, `PRODUCT_REQUIREMENT`, `TECHNICAL_CONTRACT`, `IMPLEMENTATION_DECISION`, or `AGENT_REPOSITORY_GOVERNANCE` authority.
 
-This approved whole artifact contains `TASK-001` through `TASK-025`. `TASK-001` through `TASK-020` retain their original prospective contracts and separately preserved historical implementation qualifications. `TASK-021` through `TASK-025` are new bounded remediation contracts created by the current Stage06 impact evaluation. Approval of this artifact does not create Stage07 `PASS`, authorize Stage08 implementation, evaluate the Current Implementation Recovery Gate, create Stage09 `PASS`, or create Stage10, release, or deployment authority.
+This approved whole artifact contains `TASK-001` through `TASK-028`. `TASK-001` through `TASK-022` retain their prospective contracts and separately preserved implementation qualifications. `TASK-023` through `TASK-025` retain their pending bounded-remediation authority. `TASK-026` through `TASK-028` are the new bounded SPEC-019/DES-020 implementation contracts allocated by this re-decomposition. Approval of this artifact does not create Stage07 `PASS`, authorize Stage08 implementation, evaluate the Current Implementation Recovery Gate, create Stage09 `PASS`, or create Stage10, release, or deployment authority.
 
 ## 2. Approved upstream baseline references
 
 - `docs/proposal.md`: CURRENT `PRODUCT_INTENT` authority, `APPROVED_CURRENT_AUTHORITY`; goals `G-01` through `G-05`.
 - `docs/PRD.md`: CURRENT `PRODUCT_REQUIREMENT` authority, `APPROVED_CURRENT_AUTHORITY`; applicable P0 requirements and acceptance criteria.
-- `docs/spec.md`: CURRENT `TECHNICAL_CONTRACT` authority, `APPROVED_CURRENT_AUTHORITY`; `SPEC-001` through `SPEC-018`.
-- `docs/Design.md`: CURRENT `IMPLEMENTATION_DECISION` authority, `APPROVED_CURRENT_AUTHORITY`; `DES-001` through `DES-019`.
+- `docs/spec.md`: CURRENT `TECHNICAL_CONTRACT` authority, `APPROVED_CURRENT_AUTHORITY`; `SPEC-001` through `SPEC-019`.
+- `docs/Design.md`: CURRENT `IMPLEMENTATION_DECISION` authority, `APPROVED_CURRENT_AUTHORITY`; `DES-001` through `DES-020`.
 - `AGENTS.md`: CURRENT Stage05 `AGENT_REPOSITORY_GOVERNANCE` authority, `APPROVED_CURRENT_AUTHORITY`.
 - `.sdd/system.yaml` and `.sdd/stages.yaml`: configured authority graph, Stage06 contract, lifecycle gates, traceability chain, and checkpoint rules.
 - `.sdd/decisions/HD-A2-ARCH-IDENTIFIER-RESOLUTION-001.yaml` and `.sdd/decisions/HD-A2-PRD-NAMESPACE-CORRECTION-002.yaml`: approved durable authority establishing `ARCH-AC-01` through `ARCH-AC-09` and correcting the separate PRD namespace to `AC-01` through `AC-37` without semantic change.
@@ -432,7 +432,29 @@ This evaluation used the current source tree, import graph, tests, qualified `TA
 | `ARCH-AC-08` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK`: governance coverage is complete, while the enforcement deltas are bounded by `TASK-021` through `TASK-023`. |
 | `ARCH-AC-09` | `IMPLEMENTATION_GAP_REQUIRING_BOUNDED_TASK`: adapter replaceability is evidenced, but provider change/fallback/default-promotion conformance is not enforced. `TASK-024`. |
 
-No prior task is reopened. The new tasks extend current authority without altering `TASK-001` through `TASK-020`, their checkpoints, qualification records, or evidence. The new identifier allocation continues the repository's sequential `TASK-NNN` convention from the existing highest identifier `TASK-020`.
+No prior task is reopened. The original remediation tasks extend current authority without altering `TASK-001` through `TASK-020`, their checkpoints, qualification records, or evidence. The original identifier allocation continued the repository's sequential `TASK-NNN` convention from the then-highest identifier `TASK-020`.
+
+### 4.3 SPEC-019 / DES-020 re-decomposition and ownership reconciliation
+
+Stage03 `SPEC-019`, Stage04 `DES-020`, and the Stage05 affected-scope revalidation add three implementation-gap families without changing the already-qualified facts for `TASK-001` through `TASK-022`: (A) a provider-neutral bounded coding-worker Work Package plus local verification levels; (B) durable Stage08 phase state, SAFE_PAUSE, and precise resume; and (C) observational phase-consumption telemetry. The smallest independently checkpointable decomposition is three ordered tasks because A establishes the provider and verification contract consumed by B, while C needs the stable attempt/phase identities produced by B and has a separate telemetry compatibility risk surface.
+
+The new identifier allocation continues the repository-authoritative sequential `TASK-NNN` convention from the existing highest identifier `TASK-025`, allocating `TASK-026`, `TASK-027`, and `TASK-028`. These identifiers are allocated only by this Stage06 authority. They do not imply execution order outside the declared dependency graph, implementation qualification, Stage07 `PASS`, or Stage08 authorization.
+
+#### Existing cost/resource task ownership slicing
+
+The existing `TASK-023` contract remains authoritative and unchanged. It owns resource/budget/exhaustion **enforcement**: budget lookup and reservation, provider/tool/retry counters as enforceable budget state, hard/soft limits, cumulative accounting, runtime/process/resource constraints, and exhaustion stop/route. `TASK-028` owns only observational phase measurement needed to explain Stage08 consumption and efficiency. It neither decides budget state nor stops/allows dispatch.
+
+| Concern | Ownership classification | Current authority disposition |
+| --- | --- | --- |
+| `codex_invocation_count` and `remediation_count` as non-authoritative phase observations | `MOVES_TO_NEW_STAGE8_OPTIMIZATION_TASK` | `TASK-028` records attributable counts; no threshold, reservation, or dispatch decision is permitted. |
+| Provider/tool/retry counters used for budgets, limits, cumulative accounting, or exhaustion | `REMAINS_TASK023` | `TASK-023` remains the sole enforcement owner. It may consume independently trustworthy observations but must establish its own governed accounting semantics. |
+| Provider-active, local/FAST/TARGET/FULL verification durations and effectiveness ratio | `MOVES_TO_NEW_STAGE8_OPTIMIZATION_TASK` | `TASK-028` measures phase duration using the existing telemetry framework and cannot create lifecycle authority. |
+| Runtime duration/resource limits and timeout/exhaustion stop/route | `REMAINS_TASK023` | `TASK-023` retains policy evaluation, hard/soft limit enforcement, and exhaustion behavior. |
+| Existing telemetry models/measurement primitives | `SHARED_DEPENDENCY_WITH_NON_OVERLAPPING_AUTHORITY` | `TASK-028` adds versioned observational phase events; `TASK-023` adds enforcement/accounting behavior. Fresh baselines and exact task scopes prevent silent authority merging. |
+| Unavailable/actual/estimated/context-size usage truth | `SHARED_DEPENDENCY_WITH_NON_OVERLAPPING_AUTHORITY` | Both tasks preserve the Cost/Token truth classes; `TASK-028` reports only attributable observations, while `TASK-023` governs budget policy and enforcement. |
+| Budget state, reservation, approved increase, deployment limit, or exhaustion classification | `REMAINS_TASK023` | No new SPEC-019 task may implement or infer these controls. |
+
+There is no `TASK-023` authority amendment: its objective, dependencies, files, acceptance obligations, and historical identity remain unchanged. File overlap in `codex_adapter.py`, `codex_cli.py`, and telemetry modules is an explicit scheduling/rebase concern, not duplicated semantic authority. Stage07 must bind each task to its own fresh baseline and sealed scope. `TASK-024` and `TASK-025` are unaffected and retain their existing intent, dependencies, files, and verification commands.
 
 ## TASK-021 - Unified pre-dispatch governance envelope and capability enforcement
 
@@ -519,39 +541,93 @@ No prior task is reopened. The new tasks extend current authority without alteri
 - **Checkpoint eligibility:** Eligible only when the declared command passes, only `tests/test_m7_decision_gateway.py` changes, no production/authority/state/evidence file changes, and the fix isolates fixture state rather than weakening an assertion.
 - **Out-of-scope:** Production Decision Gateway changes, decision-store migration, A2 mutation/removal, broader test cleanup, implementation qualification changes, or Stage07/08/09/10 execution.
 
+## TASK-026 - Structured coding-worker Work Package and local verification levels
+
+- **Status:** `TODO`
+- **Purpose / objective:** Introduce the provider-neutral structured Codex Work Package and controller-owned FAST/TARGET/FULL verification plan so Codex remains a bounded patch worker and deterministic verification runs locally without an active provider session.
+- **Authority trace:** `SPEC-019 -> DES-020 -> TASK-026`; applicable Architecture Constitution mappings are `ARCH-AC-01`, `ARCH-AC-02`, `ARCH-AC-03`, `ARCH-AC-04`, `ARCH-AC-05`, `ARCH-AC-06`, `ARCH-AC-07`, and `ARCH-AC-08`. Supporting governance is `AGENTS.md` sections 3 through 9 and 14 plus the Agent Adapter, Remote Sandbox Security, Cost/Token, and Human Approval contracts.
+- **Dependencies:** `TASK-007`, `TASK-011`, `TASK-012`, `TASK-014`, `TASK-017`, `TASK-021`, `TASK-022`.
+- **Allowed files:** `sdd_orchestrator/stage08_work_package.py`, `sdd_orchestrator/task_parser.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/verification_policy.py`, `sdd_orchestrator/verification_execution.py`, `sdd_orchestrator/verification_runtime.py`, `tests/test_stage08_work_package.py`, `tests/test_stage08_verification_levels.py`, `tests/test_m6_codex_adapter.py`, `tests/test_v1113_codex_stdin_prompt.py`, `tests/test_v1118_safe_pause_and_evidence.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_stage08_work_package.py tests/test_stage08_verification_levels.py tests/test_m6_codex_adapter.py tests/test_v1113_codex_stdin_prompt.py tests/test_v1118_safe_pause_and_evidence.py`.
+- **Allowed implementation scope:** A versioned immutable provider-neutral Work Package model; canonical content binding; `INITIAL_PATCH_PACKAGE` and minimum-disclosure `REMEDIATION_PACKAGE`; authoritative field suppliers; structured worker result identity; worker-only prompt restrictions; versioned FAST/TARGET/FULL command grouping; local command planning/execution; backward-compatible mapping of every legacy Verification Command to TARGET unless stronger authority exists; and explicit authority validation before Stage08 FULL execution.
+- **Required behavior/outcome:** Every provider invocation receives all SPEC-019 bindings and only the relevant redacted context. Codex may analyze and edit authorized files or return a bounded structured result, but cannot commit, finalize evidence/state, own deterministic verification, or inspect unrelated scope. FAST and TARGET run locally; required task commands are never skipped; FULL does not run implicitly and never substitutes for Stage09. A failed applicable check creates only a minimal remediation package.
+- **Acceptance criteria:** `CODEX_WORKER_ONLY_BOUNDARY`; `MINIMAL_STRUCTURED_WORK_PACKAGE`; `LOCAL_VERIFICATION_INDEPENDENT_OF_CODEX_SESSION`; `FAST_TARGET_FULL_POLICY_ENFORCED`; `NO_IMPLICIT_FULL_REGRESSION`; `TASK_CONTRACT_REQUIRED_COMMANDS_NEVER_SKIPPED`; `MINIMAL_FAILURE_PACKAGE`; `NO_FULL_CONTEXT_REBUILD_ON_REMEDIATION`; `TASK021_AND_TASK022_GOVERNANCE_PRESERVED`; `STAGE09_FULL_REGRESSION_UNCHANGED`; `LEGACY_STAGE08_TASKS_REMAIN_COMPATIBLE`.
+- **Preservation obligations:** Preserve Stage07 authorization and sealed-envelope semantics, exact allowed-file enforcement, TASK-021 pre-dispatch governance, TASK-022 classification/redaction/injection/sandbox controls, existing verification-command behavior, historical evidence, Stage09 full regression, Stage10 finalization, provider independence, and qualified TASK-001 through TASK-022 facts.
+- **Error/failure expectations:** Missing/stale/ambiguous package bindings, unsafe or overbroad context, unauthorized file/tool/capability, absent legacy command, unapproved FULL request, malformed worker result, or local-verification policy/runtime mismatch fails closed before the affected dispatch or checkpoint. No error permits broader context, weaker policy, provider-owned verification, or a green-seeking substitute command.
+- **Security/safety expectations:** Package construction passes through the TASK-021 control envelope and TASK-022 security policy. Secrets and credentials are references only; untrusted content is data; failure output is redacted and minimized; filesystem/network/process capability remains exact and default-deny.
+- **Checkpoint eligibility / done when:** The exact command passes; all acceptance criteria are proven by positive and negative tests; local checks run with no active Codex session; unauthorized paths and implicit FULL produce no side effect; legacy tests remain green; only allowed files change; and qualifying evidence binds the package/verification-plan identities without changing upstream authority or implementation state prematurely.
+- **Forbidden scope / out-of-scope:** Durable phase-state persistence or resume owned by `TASK-027`; phase telemetry owned by `TASK-028`; resource/budget/exhaustion enforcement owned by `TASK-023`; provider promotion owned by `TASK-024`; Decision Gateway fixture work owned by `TASK-025`; Stage09 behavior changes; task/authority/state/evidence rewriting; deployment; or Stage07/08/09/10 execution outside the later sealed workflow.
+
+## TASK-027 - Durable Stage08 phase state, SAFE_PAUSE, and precise resume
+
+- **Status:** `TODO`
+- **Purpose / objective:** Persist an atomic, reconstructable Stage08 attempt/phase history and enforce authority-bound SAFE_PAUSE/resume without repeating completed provider work or still-valid successful deterministic verification.
+- **Authority trace:** `SPEC-019 -> DES-020 -> TASK-027`; applicable Architecture Constitution mappings are `ARCH-AC-01`, `ARCH-AC-02`, `ARCH-AC-03`, `ARCH-AC-04`, `ARCH-AC-05`, `ARCH-AC-06`, `ARCH-AC-07`, and `ARCH-AC-08`.
+- **Dependencies:** `TASK-001`, `TASK-002`, `TASK-010`, `TASK-011`, `TASK-012`, `TASK-017`, `TASK-021`, `TASK-022`, `TASK-026`.
+- **Allowed files:** `sdd_orchestrator/stage08_phase_state.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/codex_cli.py`, `sdd_orchestrator/codex_results.py`, `sdd_orchestrator/git_runtime.py`, `sdd_orchestrator/path_scope_policy.py`, `sdd_orchestrator/evidence_writer.py`, `sdd_orchestrator/result_serialization.py`, `sdd_orchestrator/system_controller.py`, `tests/test_stage08_phase_resume.py`, `tests/test_m5_git_recovery.py`, `tests/test_m6_codex_adapter.py`, `tests/test_v1118_safe_pause_and_evidence.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_stage08_phase_resume.py tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py tests/test_v1118_safe_pause_and_evidence.py`.
+- **Allowed implementation scope:** Versioned attempt journals for every DES-020 phase; atomic hash-bound transitions; attempt/task/authorization/envelope/branch/entry-head/baseline/task-authority/allowed-files/diff bindings; verification fingerprints; normalized `CODEX_QUOTA_EXHAUSTED`, `CODEX_INTERRUPTED`, and `CODEX_TIMEOUT`; fail-closed SAFE_PAUSE classification; precise resume revalidation; bounded remediation invocation history; integration with existing Git scope/provenance, RecoveryManager, `pending_evidence_write`, evidence, and status projections.
+- **Required behavior/outcome:** Phase state reconstructs deterministically and never implies qualification. An interruption becomes SAFE_PAUSE only when authorization, scope, provenance, security handling, and absence of unknown side effects are proven; otherwise it blocks. Resume revalidates every SPEC-019 binding, does not repeat a valid completed initial coding invocation or still-current successful verification, never expands authority/capabilities/files, and binds final evidence/checkpoint to the complete phase history.
+- **Acceptance criteria:** `PHASE_STATE_ATOMIC_AND_RECONSTRUCTABLE`; `QUOTA_INTERRUPTION_TIMEOUT_SAFE_PAUSE_WHEN_PROVEN_SAFE`; `RESUME_REVALIDATES_AUTHORIZATION_BASELINE_ENVELOPE_AND_ALLOWED_FILES`; `COMPLETED_CODEX_INVOCATION_NOT_REPEATED`; `SUCCESSFUL_VERIFICATION_NOT_REPEATED_WHEN_STILL_VALID`; `UNAUTHORIZED_DIFF_FAILS_CLOSED`; `EVIDENCE_AND_CHECKPOINT_BIND_PHASE_HISTORY`; `TASK021_AND_TASK022_GOVERNANCE_PRESERVED`; `LEGACY_STAGE08_TASKS_REMAIN_COMPATIBLE`.
+- **Preservation obligations:** Preserve immutable Stage07 authorization, sealed envelopes, existing pending-evidence recovery, task qualification monotonicity, historical evidence, exact verification semantics from TASK-026, TASK-021/TASK-022 enforcement, Stage09/10 ownership, and valid legacy Stage08 behavior. Phase state is not a Git implementation checkpoint or qualification record.
+- **Error/failure expectations:** Corrupt/unknown schema, broken transition/digest chain, stale authorization, branch/head/baseline mismatch, changed authority or allowed-files digest, unexplained dirty/untracked path, unprovable diff provenance, unknown side effect, changed verification fingerprint, or unsafe sensitive data blocks without resetting/discarding valid progress or fabricating completion.
+- **Security/safety expectations:** Resume repeats TASK-021 and TASK-022 pre-dispatch checks. No stale approval, provider session, credential possession, historical chat, or prior success enlarges authority. Journals and status projections use minimum disclosure and contain no secret values or unsafe raw error output.
+- **Checkpoint eligibility / done when:** The exact command passes; every legal/illegal phase transition, atomic-write interruption, corruption path, all three interruption classes, safe/unsafe resume, invocation/verification reuse, dirty-scope rejection, pending-evidence compatibility, fresh-process reconstruction, and final evidence binding behave as required; only allowed files change; no Stage09/10 or historical evidence/state fact is upgraded.
+- **Forbidden scope / out-of-scope:** Work Package/verification-level ownership already bounded by `TASK-026`; observational phase telemetry owned by `TASK-028`; resource/budget/exhaustion enforcement owned by `TASK-023`; provider promotion, fixture repair, upstream authority changes, destructive Git recovery, or automatic execution of another task.
+
+## TASK-028 - Observational Stage08 phase-consumption telemetry
+
+- **Status:** `TODO`
+- **Purpose / objective:** Extend the existing telemetry framework with non-authoritative, minimum-disclosure Stage08 phase measurements that separate provider-active time from local verification and total Stage08 time without implementing resource or budget enforcement.
+- **Authority trace:** `SPEC-019 -> DES-020 -> TASK-028`; applicable Architecture Constitution mappings are `ARCH-AC-01`, `ARCH-AC-02`, `ARCH-AC-03`, `ARCH-AC-06`, `ARCH-AC-07`, and `ARCH-AC-08`; `ARCH-AC-04`, `ARCH-AC-05`, and `ARCH-AC-09` controls remain preserved and cannot be weakened by telemetry.
+- **Dependencies:** `TASK-021`, `TASK-022`, `TASK-027`.
+- **Allowed files:** `sdd_orchestrator/telemetry/models.py`, `sdd_orchestrator/telemetry/measurement.py`, `sdd_orchestrator/telemetry/recorder.py`, `sdd_orchestrator/codex_adapter.py`, `sdd_orchestrator/codex_cli.py`, `tests/test_telemetry_stage08_phase.py`, `tests/test_telemetry_models.py`, `tests/test_telemetry_measurement.py`, `tests/test_telemetry_stage08_task.py`, `tests/test_telemetry_application_wiring.py`, `tests/test_telemetry_storage_contract.py`.
+- **Verification Commands:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_telemetry_stage08_phase.py tests/test_telemetry_models.py tests/test_telemetry_measurement.py tests/test_telemetry_stage08_task.py tests/test_telemetry_application_wiring.py tests/test_telemetry_storage_contract.py`.
+- **Allowed implementation scope:** A versioned `STAGE08_PHASE` event and compatible measurement/recorder wiring for `codex_invocation_count`, `codex_active_duration`, `local_verification_duration`, `fast_verify_duration`, `target_verify_duration`, `full_verify_duration`, `remediation_count`, `resume_count`, total Stage08 duration, and the derivable `CODEX_ACTIVE_TIME / TOTAL_STAGE8_TIME` ratio. Reuse existing sinks and provider-call provenance; prevent double-counting across resumes/remediation.
+- **Required behavior/outcome:** Every metric is attributable to the TASK-027 attempt/phase identity, uses the existing telemetry recorder/store, preserves frozen `STAGE08_TASK` compatibility and usage truth classes, emits no raw package/diff/prompt/error/secret content, and remains observational. Unavailable token usage remains unavailable rather than zero or estimated actual. Telemetry cannot authorize, qualify, checkpoint, pause, resume, enforce a limit, or alter Stage09/10.
+- **Acceptance criteria:** `EXISTING_TELEMETRY_FRAMEWORK_REUSED`; `TELEMETRY_TRUTH_CLASSES_PRESERVED`; `TASK023_RESOURCE_ENFORCEMENT_NOT_DUPLICATED`; `TASK021_AND_TASK022_GOVERNANCE_PRESERVED`; `LEGACY_STAGE08_TASKS_REMAIN_COMPATIBLE`; all eight required counts/durations and the effectiveness ratio are derivable without overlap or fabricated usage.
+- **Preservation obligations:** Preserve existing telemetry schemas/readers/sinks, the frozen `STAGE08_TASK` event, provider-call provenance, Cost/Token truth classes, TASK-021/TASK-022 security, historical telemetry/evidence, provider independence, Stage09 full regression, Stage10 finalization, and TASK-023's exclusive enforcement authority.
+- **Error/failure expectations:** Missing or ambiguous attempt correlation, negative/non-monotonic/overlapping duration, duplicate resume event, unsupported schema, sensitive payload, fabricated token/cost value, recorder/sink failure, or any attempted control-plane decision remains explicit and cannot affect governed execution truth.
+- **Security/safety expectations:** Record only safe identities, phase/outcome, durations, and bounded counters. Apply TASK-022 minimum-disclosure/redaction before recording; never persist prompts, relevant-source payloads, raw tracebacks, credentials, or secrets.
+- **Checkpoint eligibility / done when:** The exact command passes; versioned phase-event compatibility, metric derivation, resume/remediation de-duplication, unavailable-token truth, sensitive-data exclusion, non-authority behavior, existing telemetry storage/application wiring, and legacy Stage08 regressions all pass; only allowed files change.
+- **Forbidden scope / out-of-scope:** Budget policy/state, reservation, hard/soft limits, cumulative enforcement counters, resource/runtime/deployment constraints, exhaustion stop/route, approval-bound budget increase, or any other `TASK-023` behavior; parallel telemetry stores; provider promotion; upstream authority changes; or Stage07/08/09/10 execution.
+
 ## 5. Whole-artifact dependency graph
 
 The declared dependency graph is:
 
 ```text
-TASK-001 -> TASK-002, TASK-005, TASK-008, TASK-010, TASK-012, TASK-013, TASK-016, TASK-019, TASK-020
-TASK-002 -> TASK-003, TASK-004, TASK-005, TASK-006, TASK-009, TASK-010, TASK-011, TASK-012
+TASK-001 -> TASK-002, TASK-005, TASK-008, TASK-010, TASK-012, TASK-013, TASK-016, TASK-019, TASK-020, TASK-027
+TASK-002 -> TASK-003, TASK-004, TASK-005, TASK-006, TASK-009, TASK-010, TASK-011, TASK-012, TASK-027
 TASK-003 -> TASK-015, TASK-017, TASK-021
 TASK-004 -> TASK-015, TASK-017
 TASK-005 -> TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-019, TASK-021
 TASK-006 -> TASK-009, TASK-011, TASK-013, TASK-015, TASK-017, TASK-021, TASK-025
-TASK-007 -> TASK-015, TASK-017, TASK-021, TASK-024
+TASK-007 -> TASK-015, TASK-017, TASK-021, TASK-024, TASK-026
 TASK-008 -> TASK-009, TASK-012, TASK-014, TASK-016, TASK-017, TASK-019, TASK-020, TASK-021
 TASK-009 -> TASK-015, TASK-017
-TASK-010 -> TASK-007, TASK-011, TASK-012, TASK-015, TASK-017, TASK-019, TASK-021
-TASK-011 -> TASK-012, TASK-015, TASK-017, TASK-019, TASK-021, TASK-022
-TASK-012 -> TASK-015, TASK-017, TASK-019, TASK-020, TASK-021
+TASK-010 -> TASK-007, TASK-011, TASK-012, TASK-015, TASK-017, TASK-019, TASK-021, TASK-027
+TASK-011 -> TASK-012, TASK-015, TASK-017, TASK-019, TASK-021, TASK-022, TASK-026, TASK-027
+TASK-012 -> TASK-015, TASK-017, TASK-019, TASK-020, TASK-021, TASK-026, TASK-027
 TASK-013 -> TASK-014, TASK-016, TASK-017
-TASK-014 -> TASK-015, TASK-016, TASK-017
+TASK-014 -> TASK-015, TASK-016, TASK-017, TASK-026
 TASK-015 -> TASK-016, TASK-017
 TASK-016 -> TASK-017, TASK-018
-TASK-017 -> TASK-018, TASK-021
+TASK-017 -> TASK-018, TASK-021, TASK-026, TASK-027
 TASK-018 -> none
 TASK-019 -> TASK-018, TASK-020
 TASK-020 -> none
-TASK-021 -> TASK-022, TASK-023, TASK-024
-TASK-022 -> TASK-023, TASK-024
+TASK-021 -> TASK-022, TASK-023, TASK-024, TASK-026, TASK-027, TASK-028
+TASK-022 -> TASK-023, TASK-024, TASK-026, TASK-027, TASK-028
 TASK-023 -> TASK-024
 TASK-024 -> none
 TASK-025 -> none
+TASK-026 -> TASK-027
+TASK-027 -> TASK-028
+TASK-028 -> none
 ```
 
-Analysis of the actual dependency declarations found no cycle, self-dependency, nonexistent task reference, or missing dependency required by the stated task scopes. `TASK-021` through `TASK-024` form the control-enforcement sequence; test-only `TASK-025` is independent after its already-qualified `TASK-006` dependency. The graph preserves parallel work where dependencies permit it.
+Analysis of the actual dependency declarations found no cycle, self-dependency, nonexistent task reference, or missing dependency required by the stated task scopes. `TASK-021` through `TASK-024` retain the control-enforcement sequence; test-only `TASK-025` remains independent after its already-qualified `TASK-006` dependency. The SPEC-019 sequence is `TASK-026 -> TASK-027 -> TASK-028`. It intentionally has no dependency on `TASK-023`: observational phase measurement is permitted only after `TASK-027`, while `TASK-023` independently retains resource/budget/exhaustion enforcement. File overlap is explicit and requires a fresh baseline per Stage07/08 task, but it is not a semantic dependency. The graph preserves parallel work where dependencies permit it.
 
 ## 6. Whole-artifact traceability and P0/architecture coverage
 
@@ -577,15 +653,16 @@ Stage06 extends the canonical chain only through `TASK`: `G -> FR/NFR/EC -> AC -
 | `SPEC-016` | `DES-001`, `DES-004`, `DES-007`, `DES-009` | `TASK-002`, `TASK-005`, `TASK-008`, `TASK-012`, `TASK-017`, `TASK-018` |
 | `SPEC-017` | `DES-017` | `TASK-019` |
 | `SPEC-018` | `DES-018` | `TASK-020` |
+| `SPEC-019` | `DES-020` | `TASK-026`, `TASK-027`, `TASK-028` |
 
 Coverage analysis confirms:
 
 - All 34 applicable P0 requirements are covered: `FR-01` through `FR-21`, `NFR-01` through `NFR-05`, and `EC-01` through `EC-08`.
 - All applicable P0 acceptance criteria are covered: `AC-01` through `AC-21`, `AC-23` through `AC-27`, and `AC-29` through `AC-36`.
-- `SPEC-001` through `SPEC-018` and `DES-001` through `DES-019` are covered.
-- `TASK-001` through `TASK-025` each have upstream authority; orphan task count is zero.
-- All 25 tasks contain the full task contract. The five current remediation tasks begin `TODO`; historical qualification for `TASK-001` through `TASK-020` remains exclusively in `.sdd/state/implementation-state.yaml` and its bound evidence.
-- `ARCH-AC-01` through `ARCH-AC-09` have explicit Stage06 impact results; every confirmed implementation gap is assigned to `TASK-021` through `TASK-025` without changing the Architecture Constitution semantics.
+- `SPEC-001` through `SPEC-019` and `DES-001` through `DES-020` are covered.
+- `TASK-001` through `TASK-028` each have upstream authority; orphan task count is zero.
+- All 28 tasks contain the full task contract. `TASK-023` through `TASK-028` remain prospective `TODO` contracts; implementation qualification for `TASK-001` through `TASK-022` remains exclusively in `.sdd/state/implementation-state.yaml` and its bound evidence.
+- `ARCH-AC-01` through `ARCH-AC-09` have explicit Stage06 mappings. The original enforcement gaps remain bounded by `TASK-023` through `TASK-025`; the SPEC-019/DES-020 gaps are assigned to `TASK-026` through `TASK-028` without changing Architecture Constitution semantics or reopening qualified work.
 - The dependency graph closes with zero unresolved forward references and is a DAG.
 - Approved Design reports no blocking Design TBD; this decomposition introduces no blocking task TBD and detects no cross-domain conflict.
 
@@ -605,7 +682,7 @@ This approved current authority supplies Stage07 with reviewable support for all
 - Stage08 scope boundaries, sealed-envelope requirements, and overrun stops; and
 - complete upstream traceability through `TASK` for all P0 requirements, acceptance criteria, SPECs, DESs, and Architecture Constitution remediation scope.
 
-Fresh Stage07 evaluation must treat `TASK-021` through `TASK-025` as the only unqualified remediation tasks, validate their exact dependencies and scope, and enforce `ARCH-AC-01` through `ARCH-AC-08`. It must not invalidate the separately repository-qualified `TASK-001` through `TASK-020` or infer that qualification from their unchanged prospective `TODO` labels in this authority artifact.
+Fresh Stage07 evaluation must use `.sdd/state/implementation-state.yaml` rather than prospective labels to distinguish qualified and unqualified work. `TASK-001` through `TASK-022` remain separately repository-qualified; `TASK-023` through `TASK-028` remain unqualified prospective tasks. Under the Project Authority hold and this reconciliation result, the first selected task is `TASK-026`; it alone may be evaluated next. Stage07 must validate its exact dependencies and scope and enforce all applicable `ARCH-AC-01` through `ARCH-AC-08` checks. It must not authorize `TASK-023` through `TASK-025` or infer any qualification from this authority artifact.
 
 Stage07 must independently inspect the approved artifact state, repository/Git readiness, testability, conflicts, security blockers, critical TBDs, traceability, and every other configured entry/check condition. Nothing in this section is a Stage07 `PASS` or `FAIL` decision.
 
@@ -644,7 +721,7 @@ AGENT_REPOSITORY_GOVERNANCE_AUTHORITY =
 APPROVED_CURRENT_AUTHORITY
 
 TASK_COUNT =
-25
+28
 
 P0_TASK_COVERAGE_COMPLETE =
 YES
@@ -655,11 +732,20 @@ ARCHITECTURE_IMPACT_CANDIDATES_EVALUATED =
 NEW_BOUNDED_REMEDIATION_TASKS =
 TASK-021_THROUGH_TASK-025
 
+SPEC019_NEW_BOUNDED_TASKS =
+TASK-026_THROUGH_TASK-028
+
+TASK023_AUTHORITY_RESULT =
+UNCHANGED_RESOURCE_BUDGET_EXHAUSTION_ENFORCEMENT_OWNER
+
+SPEC019_PHASE_MEASUREMENT_OWNER =
+TASK-028_OBSERVATIONAL_ONLY
+
 EXISTING_TASKS_REOPENED =
 NONE
 
 IMPLEMENTATION_QUALIFICATION_PRESERVED =
-TASK-001_THROUGH_TASK-020
+TASK-001_THROUGH_TASK-022
 
 ORPHAN_TASK_COUNT =
 0
@@ -689,5 +775,5 @@ EXECUTION_DECOMPOSITION_PROJECT_AUTHORITY_REVIEW_REQUIRED =
 NO
 
 NEXT_STEP =
-FRESH_STAGE07_PRE_IMPLEMENTATION_GATE_FOR_TASK-021_THROUGH_TASK-025
+FRESH_STAGE07_PRE_IMPLEMENTATION_GATE_FOR_TASK-026_ONLY
 ```
