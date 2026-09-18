@@ -4,10 +4,10 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: 08
-  current_stage_name: IMPLEMENTATION_RUNNER
+  current_stage: '07'
+  current_stage_name: PRE_IMPLEMENTATION_GATE
   last_completed_stage: '07'
-  next_action: RUN_STAGE
+  next_action: REMEDIATION_ROUTER
 stages:
   '01':
     status: DONE
@@ -29,9 +29,9 @@ stages:
     result: COMPLETED
   '07':
     status: DONE
-    result: PASS
+    result: FAIL
   08:
-    status: IN_PROGRESS
+    status: TODO
     result: null
   09:
     status: TODO
@@ -40,7 +40,7 @@ stages:
     status: TODO
     result: null
 authorizations:
-  implementation: true
+  implementation: false
   release: false
 blocking:
   is_blocked: false
@@ -72,7 +72,7 @@ provenance:
   historical_phase01_06_reconstruction: NOT_AUTHORIZED
   existing_implementation_adopted: false
   retroactive_stage07_pass_created: false
-  stage08_authorization_created: true
+  stage08_authorization_created: false
   implementation_conformance_claimed: false
   test_pass_claimed: false
   implementation_recovery_gate_result: NOT_EVALUATED
