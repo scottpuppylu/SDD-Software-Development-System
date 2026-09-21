@@ -13,8 +13,12 @@ SOURCE = Path(__file__).resolve().parents[1]
 class DecisionGatewayTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        self.durable_repo = Path(self.tmp.name) / "durable-repo"
+        shutil.copytree(SOURCE / ".sdd", self.durable_repo / ".sdd")
         self.repo = Path(self.tmp.name) / "repo"
-        shutil.copytree(SOURCE / ".sdd", self.repo / ".sdd")
+        shutil.copytree(self.durable_repo / ".sdd", self.repo / ".sdd")
+        shutil.rmtree(self.repo / ".sdd" / "decisions")
+        (self.repo / ".sdd" / "decisions").mkdir()
         self.orch = Orchestrator(self.repo)
         self.gateway = DecisionGateway(self.orch)
 
@@ -77,6 +81,16 @@ class DecisionGatewayTests(unittest.TestCase):
                 )
         self.assertEqual(self.gateway.list(), [])
         self.assertFalse(self.orch.project_state["blocking"]["is_blocked"])
+
+    def test_source_repository_a2_decisions_load_truthfully(self):
+        gateway = DecisionGateway(Orchestrator(self.durable_repo))
+        self.assertEqual(
+            {decision.decision_id for decision in gateway.list()},
+            {
+                "HD-A2-ARCH-IDENTIFIER-RESOLUTION-001",
+                "HD-A2-PRD-NAMESPACE-CORRECTION-002",
+            },
+        )
 
     def test_all_result_paths_retain_attribution_and_history(self):
         for result, expected in (("APPROVE", "APPROVED"), ("REJECT", "REJECTED"),
