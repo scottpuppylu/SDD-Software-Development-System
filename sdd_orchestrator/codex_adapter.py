@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from types import SimpleNamespace
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -101,6 +101,15 @@ from .security_policy import (
     SecurityRequest,
     create_security_envelope,
 )
+from .resource_policy import (
+    MeasurementTruth,
+    ResourceController,
+    ResourceDimension,
+    ResourceMeasurement,
+    ResourceObservation,
+    ResourcePolicyError,
+    ResourceRequest,
+)
 
 
 
@@ -138,6 +147,7 @@ class Stage08CodexRunner:
         project_python: str | None = None,
         heartbeat_seconds: int = 30,
         telemetry_recorder: Any = None,
+        resource_controllers: Mapping[str, ResourceController] | None = None,
     ):
         self.orchestrator = orchestrator
         self.repo_root = orchestrator.repo_root
@@ -147,6 +157,7 @@ class Stage08CodexRunner:
         self.project_python = project_python
         self.heartbeat_seconds = max(0, int(heartbeat_seconds))
         self.telemetry_recorder = telemetry_recorder
+        self.resource_controllers = dict(resource_controllers or {})
         self._telemetry_attempt_task: AtomicTask | None = None
         self._evidence_write_resume: tuple[str, str | None, list[str], Any] | None = None
         self.governance_validator = GovernanceEnvelopeValidator(require_security=True)
@@ -154,6 +165,67 @@ class Stage08CodexRunner:
         self._active_stage08_envelope: SealedExecutionEnvelope | None = None
         self._active_phase_store: Stage08PhaseStore | None = None
         self._active_phase_binding: AttemptBinding | None = None
+
+    def _reserve_resources(
+        self,
+        key: str,
+        *,
+        dispatch_id: str,
+        provider: str,
+        model: str,
+        runtime: str,
+        values: Mapping[ResourceDimension, int],
+        retry: bool = False,
+    ) -> ResourceController | None:
+        controller = self.resource_controllers.get(key)
+        if controller is None:
+            return None
+        missing = set(controller.policy.required_dimensions) - set(values)
+        if missing:
+            raise ResourcePolicyError(
+                "UNKNOWN_REQUIRED_BUDGET",
+                "BUDGET_POLICY_OWNER",
+                ",".join(sorted(item.value for item in missing)),
+            )
+        controller.reserve(
+            ResourceRequest(
+                dispatch_id=dispatch_id,
+                provider=provider,
+                model=model,
+                runtime=runtime,
+                scope=controller.policy.scope,
+                reservation={
+                    item: value
+                    for item, value in values.items()
+                    if item in controller.policy.by_dimension
+                },
+                retry=retry,
+            )
+        )
+        return controller
+
+    @staticmethod
+    def _settle_resources(
+        controller: ResourceController | None,
+        *,
+        dispatch_id: str,
+        outcome: str,
+        measurements: tuple[ResourceMeasurement, ...],
+    ) -> None:
+        if controller is None:
+            return
+        applicable = tuple(
+            item for item in measurements
+            if item.dimension in controller.policy.by_dimension
+        )
+        controller.settle(
+            ResourceObservation(
+                dispatch_id=dispatch_id,
+                measurements=applicable,
+                outcome=outcome,
+                evidence_reference=f"stage08-resource-dispatch:{dispatch_id}",
+            )
+        )
 
     @staticmethod
     def _security_request(
@@ -1069,17 +1141,78 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             self._evidence_write_resume = None
             self._progress(f"{task.task_id} Codex started")
             self._telemetry_attempt_task = task
+            prompt = self.build_prompt(task, envelope, work_package)
+            resource_dispatch_id = f"{envelope.envelope_id}:codex"
+            timeout_seconds = int(getattr(self.codex, "timeout_seconds", 1800))
+            codex_resource = (
+                None
+                if getattr(self.codex, "resource_controller", None) is self.resource_controllers.get("codex")
+                else self._reserve_resources(
+                    "codex",
+                    dispatch_id=resource_dispatch_id,
+                    provider="codex",
+                    model=str(getattr(self.codex, "model", None) or "codex-config-default"),
+                    runtime="codex_cli",
+                    values={
+                        ResourceDimension.PROVIDER_CALLS: 1,
+                        ResourceDimension.RUNTIME_MS: timeout_seconds * 1000,
+                        ResourceDimension.PROCESS_COUNT: 1,
+                        ResourceDimension.CONTEXT_BYTES: len(prompt.encode("utf-8")),
+                    },
+                )
+            )
+            resource_started = time.monotonic()
             try:
                 proc = self._call_with_heartbeat(
                     f"{task.task_id} Codex still running",
-                    lambda: self.codex.execute(
-                        self.repo_root, self.build_prompt(task, envelope, work_package)
-                    ),
+                    lambda: self.codex.execute(self.repo_root, prompt),
                 )
             except (subprocess.TimeoutExpired, TimeoutError) as exc:
                 proc = SimpleNamespace(returncode=124, stdout="", stderr=type(exc).__name__)
             except (KeyboardInterrupt, InterruptedError) as exc:
                 proc = SimpleNamespace(returncode=130, stdout="", stderr=type(exc).__name__)
+            finally:
+                duration_ms = max(0, round((time.monotonic() - resource_started) * 1000))
+                self._settle_resources(
+                    codex_resource,
+                    dispatch_id=resource_dispatch_id,
+                    outcome=(
+                        "completed"
+                        if "proc" in locals() and proc.returncode == 0
+                        else "timeout"
+                        if "proc" in locals() and proc.returncode == 124
+                        else "failed"
+                    ),
+                    measurements=(
+                        ResourceMeasurement(
+                            ResourceDimension.PROVIDER_CALLS, 1, MeasurementTruth.ACTUAL,
+                            "runtime_meter", resource_dispatch_id,
+                        ),
+                        ResourceMeasurement(
+                            ResourceDimension.RUNTIME_MS, duration_ms, MeasurementTruth.ACTUAL,
+                            "runtime_meter", resource_dispatch_id,
+                        ),
+                        ResourceMeasurement(
+                            ResourceDimension.PROCESS_COUNT, 1, MeasurementTruth.ACTUAL,
+                            "runtime_meter", resource_dispatch_id,
+                        ),
+                        ResourceMeasurement(
+                            ResourceDimension.CONTEXT_BYTES, len(prompt.encode("utf-8")),
+                            MeasurementTruth.CONTEXT_SIZE, "utf8_measurement",
+                            resource_dispatch_id,
+                        ),
+                        ResourceMeasurement(
+                            ResourceDimension.ACTUAL_TOKENS, None,
+                            MeasurementTruth.UNAVAILABLE, "codex_cli_unavailable",
+                            resource_dispatch_id,
+                        ),
+                        ResourceMeasurement(
+                            ResourceDimension.ACTUAL_COST_USD, None,
+                            MeasurementTruth.UNAVAILABLE, "codex_cli_unavailable",
+                            resource_dispatch_id,
+                        ),
+                    ),
+                )
             self._progress(f"{task.task_id} Codex completed (exit={proc.returncode})")
         after = self.git.snapshot(recent_limit=5)
         post_nonruntime_dirty = [
@@ -1821,15 +1954,54 @@ BEGIN EXECUTION NOW. Do not merely acknowledge these instructions. Read the repo
             pre = self.governance_validator.validate_pre_dispatch(
                 governance, dispatch, current_identity=identity
             )
-            result = execute_verification_command(
-                command,
-                argv,
-                self.repo_root,
-                runtime.environment,
-                run_command=subprocess.run,
-                call_with_heartbeat=self._call_with_heartbeat,
-                heartbeat_label=f"{task.task_id} verification still running",
+            resource_dispatch_id = identity.attempt_id
+            verification_resource = self._reserve_resources(
+                "verification",
+                dispatch_id=resource_dispatch_id,
+                provider="local",
+                model=str(argv[0]),
+                runtime=runtime.identity,
+                values={
+                    ResourceDimension.TOOL_CALLS: 1,
+                    ResourceDimension.PROCESS_COUNT: 1,
+                },
             )
+            resource_started = time.monotonic()
+            try:
+                result = execute_verification_command(
+                    command,
+                    argv,
+                    self.repo_root,
+                    runtime.environment,
+                    run_command=subprocess.run,
+                    call_with_heartbeat=self._call_with_heartbeat,
+                    heartbeat_label=f"{task.task_id} verification still running",
+                )
+            finally:
+                duration_ms = max(0, round((time.monotonic() - resource_started) * 1000))
+                self._settle_resources(
+                    verification_resource,
+                    dispatch_id=resource_dispatch_id,
+                    outcome=(
+                        "completed"
+                        if "result" in locals() and result.passed
+                        else "failed"
+                    ),
+                    measurements=(
+                        ResourceMeasurement(
+                            ResourceDimension.TOOL_CALLS, 1, MeasurementTruth.ACTUAL,
+                            "runtime_meter", resource_dispatch_id,
+                        ),
+                        ResourceMeasurement(
+                            ResourceDimension.PROCESS_COUNT, 1, MeasurementTruth.ACTUAL,
+                            "runtime_meter", resource_dispatch_id,
+                        ),
+                        ResourceMeasurement(
+                            ResourceDimension.RUNTIME_MS, duration_ms, MeasurementTruth.ACTUAL,
+                            "runtime_meter", resource_dispatch_id,
+                        ),
+                    ),
+                )
             post = self.governance_validator.reconcile_post_dispatch(
                 governance, dispatch,
                 DispatchObservation(

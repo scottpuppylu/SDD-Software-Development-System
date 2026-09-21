@@ -190,6 +190,8 @@ class GovernanceEnvelope:
     expires_at: str
     sealed_stage08_envelope_id: str | None = None
     security_envelope: SecurityEnvelope | None = None
+    resource_policy_reference: str | None = None
+    deployment_grant_reference: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -213,6 +215,8 @@ class DispatchRequest:
     approval_reference: str
     provider_authority_claims: tuple[str, ...] = ()
     security_request: SecurityRequest | None = None
+    resource_policy_reference: str | None = None
+    deployment_grant_reference: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "arguments", MappingProxyType(dict(self.arguments)))
@@ -270,6 +274,8 @@ def _envelope_payload(envelope: GovernanceEnvelope) -> dict[str, Any]:
         "expires_at": envelope.expires_at,
         "sealed_stage08_envelope_id": envelope.sealed_stage08_envelope_id,
         "security_envelope": envelope.security_envelope,
+        "resource_policy_reference": envelope.resource_policy_reference,
+        "deployment_grant_reference": envelope.deployment_grant_reference,
     }
 
 
@@ -394,6 +400,36 @@ class GovernanceEnvelopeValidator:
                 self._deny("UNKNOWN_CAPABILITY", "SECURITY_OR_AUTHORITY_OWNER", str(item))
         if not requested_capabilities or len(set(requested_capabilities)) != len(requested_capabilities):
             self._deny("CAPABILITY_DENIED", "SECURITY_OR_AUTHORITY_OWNER", "capability request is absent or ambiguous")
+        resource_binding_present = bool(
+            request.resource_policy_reference or envelope.resource_policy_reference
+        )
+        if resource_binding_present and (
+            not request.resource_policy_reference
+            or request.resource_policy_reference != envelope.resource_policy_reference
+            or request.resource_policy_reference not in envelope.limit_references
+        ):
+            self._deny(
+                "RESOURCE_POLICY_MISMATCH",
+                "BUDGET_POLICY_OWNER",
+                "dispatch must bind the exact applicable budget policy",
+            )
+        if "BUDGET_INCREASE" in request.action.upper() and request.approval_class not in {"A2", "A3"}:
+            self._deny(
+                "BUDGET_INCREASE_REQUIRES_APPROVAL",
+                "HUMAN_DECISION_OWNER",
+                "material budget increase requires A2/A3",
+            )
+        if CapabilityClass.DEPLOYMENT in requested_capabilities:
+            if (
+                not request.deployment_grant_reference
+                or request.deployment_grant_reference != envelope.deployment_grant_reference
+                or request.deployment_grant_reference != approval.reference
+            ):
+                self._deny(
+                    "DEPLOYMENT_GRANT_MISMATCH",
+                    "HUMAN_DECISION_OWNER",
+                    "deployment requires a separate exact current grant",
+                )
         digest = argument_digest(request.arguments)
         for capability in requested_capabilities:
             matches = [
@@ -513,6 +549,8 @@ def create_dispatch_envelope(
     provider_capability: str = "declared-adapter-capability",
     sealed_stage08_envelope_id: str | None = None,
     security_envelope: SecurityEnvelope | None = None,
+    resource_policy_reference: str | None = None,
+    deployment_grant_reference: str | None = None,
     lifetime_seconds: int = 300,
     now: datetime | None = None,
 ) -> GovernanceEnvelope:
@@ -569,4 +607,6 @@ def create_dispatch_envelope(
         issued_at=issued_at, expires_at=expires_at,
         sealed_stage08_envelope_id=sealed_stage08_envelope_id,
         security_envelope=security_envelope,
+        resource_policy_reference=resource_policy_reference,
+        deployment_grant_reference=deployment_grant_reference,
     )

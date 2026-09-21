@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import re
+from uuid import uuid4
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
@@ -37,6 +38,15 @@ from .governance_envelope import (
     IdentityBinding,
 )
 from .security_policy import redact_security_value
+from .resource_policy import (
+    MeasurementTruth,
+    ResourceController,
+    ResourceDimension,
+    ResourceMeasurement,
+    ResourceObservation,
+    ResourcePolicyError,
+    ResourceRequest,
+)
 
 
 class ReasoningProviderError(RuntimeError):
@@ -94,6 +104,7 @@ class ReasoningInvocation:
     governance_envelope: GovernanceEnvelope | None = None
     governance_request: DispatchRequest | None = None
     current_identity: IdentityBinding | None = None
+    resource_request: ResourceRequest | None = None
 
 
 @dataclass(frozen=True)
@@ -150,11 +161,15 @@ class ReasoningProviderBoundary:
         authorization_validator: Callable[[SealedExecutionEnvelope], bool] | None = None,
         governance_validator: GovernanceEnvelopeValidator | None = None,
         require_governance: bool = False,
+        resource_controller: ResourceController | None = None,
+        require_resource_policy: bool = False,
     ):
         self.provider = provider
         self.authorization_validator = authorization_validator
         self.governance_validator = governance_validator or GovernanceEnvelopeValidator()
         self.require_governance = require_governance
+        self.resource_controller = resource_controller
+        self.require_resource_policy = require_resource_policy
 
     @staticmethod
     def _safe_detail(detail: str) -> str:
@@ -224,6 +239,28 @@ class ReasoningProviderBoundary:
                 "NO_AUTHORIZATION",
                 "write-capable invocation requires a sealed Stage08 envelope covering affected scope",
             )
+        resource_bound = bool(
+            invocation.governance_request is not None
+            and invocation.governance_request.resource_policy_reference
+        )
+        if self.require_resource_policy or resource_bound or invocation.resource_request is not None:
+            if self.resource_controller is None or invocation.resource_request is None:
+                return self._failure(
+                    invocation,
+                    "POLICY_VIOLATION",
+                    "complete resource policy bindings are required before dispatch",
+                )
+            if (
+                invocation.governance_request is not None
+                and invocation.governance_request.resource_policy_reference
+                and invocation.governance_request.resource_policy_reference
+                != self.resource_controller.policy.policy_id
+            ):
+                return self._failure(
+                    invocation,
+                    "POLICY_VIOLATION",
+                    "resource policy identity does not match the governance envelope",
+                )
         governance_fields = (
             invocation.governance_envelope,
             invocation.governance_request,
@@ -248,6 +285,55 @@ class ReasoningProviderBoundary:
                     else "POLICY_VIOLATION"
                 )
                 return self._failure(invocation, category, f"{exc.code}: {exc.detail}")
+        return None
+
+    def _settle_resource(
+        self,
+        invocation: ReasoningInvocation,
+        *,
+        started: float,
+        outcome: str,
+    ) -> ReasoningBoundaryResult | None:
+        if self.resource_controller is None or invocation.resource_request is None:
+            return None
+        dispatch_id = invocation.resource_request.dispatch_id
+        duration_ms = max(0, round((time.monotonic() - started) * 1000))
+        measurements = (
+            ResourceMeasurement(
+                ResourceDimension.PROVIDER_CALLS, 1, MeasurementTruth.ACTUAL,
+                "runtime_meter", dispatch_id,
+            ),
+            ResourceMeasurement(
+                ResourceDimension.RUNTIME_MS, duration_ms, MeasurementTruth.ACTUAL,
+                "runtime_meter", dispatch_id,
+            ),
+            ResourceMeasurement(
+                ResourceDimension.PROCESS_COUNT, 1, MeasurementTruth.ACTUAL,
+                "runtime_meter", dispatch_id,
+            ),
+            ResourceMeasurement(
+                ResourceDimension.ACTUAL_TOKENS, None, MeasurementTruth.UNAVAILABLE,
+                "provider_interface_unavailable", dispatch_id,
+            ),
+            ResourceMeasurement(
+                ResourceDimension.ACTUAL_COST_USD, None, MeasurementTruth.UNAVAILABLE,
+                "provider_interface_unavailable", dispatch_id,
+            ),
+        )
+        try:
+            self.resource_controller.settle(
+                ResourceObservation(
+                    dispatch_id=dispatch_id,
+                    measurements=tuple(
+                        item for item in measurements
+                        if item.dimension in self.resource_controller.policy.by_dimension
+                    ),
+                    outcome=outcome,
+                    evidence_reference=f"reasoning-boundary:{invocation.attempt_id}",
+                )
+            )
+        except ResourcePolicyError as exc:
+            return self._failure(invocation, "POLICY_VIOLATION", f"{exc.code}: {exc.detail}")
         return None
 
     def _validate_output(
@@ -302,19 +388,57 @@ class ReasoningProviderBoundary:
         return None
 
     def invoke(self, invocation: ReasoningInvocation) -> ReasoningBoundaryResult:
+        reserved = False
+        if self.resource_controller is not None and invocation.resource_request is not None:
+            try:
+                self.resource_controller.reserve(invocation.resource_request)
+                reserved = True
+            except ResourcePolicyError as exc:
+                return self._failure(
+                    invocation, "POLICY_VIOLATION", f"{exc.code}: {exc.detail}"
+                )
         blocked = self._preflight(invocation)
         if blocked is not None:
+            if reserved:
+                self.resource_controller.cancel(invocation.resource_request.dispatch_id)
             return blocked
+        resource_started = time.monotonic()
         try:
             output = self.provider.execute(invocation.request)
         except (TimeoutError, subprocess.TimeoutExpired) as exc:
+            accounting = self._settle_resource(
+                invocation, started=resource_started, outcome="timeout"
+            )
+            if accounting is not None:
+                return accounting
             return self._failure(invocation, "TIMEOUT", str(exc) or "provider timed out")
         except (ProviderUnavailableError, SharedReasoningProviderPrerequisiteError) as exc:
+            accounting = self._settle_resource(
+                invocation, started=resource_started, outcome="unavailable"
+            )
+            if accounting is not None:
+                return accounting
             return self._failure(invocation, "UNAVAILABLE", str(exc))
         except ProviderPolicyViolationError as exc:
+            accounting = self._settle_resource(
+                invocation, started=resource_started, outcome="blocked"
+            )
+            if accounting is not None:
+                return accounting
             return self._failure(invocation, "POLICY_VIOLATION", str(exc))
         except Exception as exc:
+            accounting = self._settle_resource(
+                invocation, started=resource_started, outcome="failed"
+            )
+            if accounting is not None:
+                return accounting
             return self._failure(invocation, "MALFORMED", f"{type(exc).__name__}: {exc}")
+
+        accounting = self._settle_resource(
+            invocation, started=resource_started, outcome="completed"
+        )
+        if accounting is not None:
+            return accounting
 
         try:
             blocked = self._validate_output(invocation, output)
@@ -557,6 +681,113 @@ def _openai_response_usage(payload: Any) -> Usage | None:
         },
     )
 
+
+def _reserve_provider_dispatch(
+    controller: ResourceController | None,
+    *,
+    dispatch_id: str,
+    provider: str,
+    model: str,
+    runtime: str,
+    context_bytes: int,
+    timeout_ms: int,
+    declared: Mapping[ResourceDimension | str, Any] | None,
+) -> None:
+    if controller is None:
+        return
+    known: dict[ResourceDimension | str, Any] = {
+        ResourceDimension.PROVIDER_CALLS: 1,
+        ResourceDimension.RUNTIME_MS: timeout_ms,
+        ResourceDimension.PROCESS_COUNT: 1,
+        ResourceDimension.CONTEXT_BYTES: context_bytes,
+    }
+    known.update(dict(declared or {}))
+    normalized = {ResourceDimension(key): value for key, value in known.items()}
+    missing = set(controller.policy.required_dimensions) - set(normalized)
+    if missing:
+        raise ResourcePolicyError(
+            "UNKNOWN_REQUIRED_BUDGET",
+            "BUDGET_POLICY_OWNER",
+            ",".join(sorted(item.value for item in missing)),
+        )
+    controller.reserve(
+        ResourceRequest(
+            dispatch_id=dispatch_id,
+            provider=provider,
+            model=model,
+            runtime=runtime,
+            scope=controller.policy.scope,
+            reservation={
+                item: value
+                for item, value in normalized.items()
+                if item in controller.policy.by_dimension
+            },
+        )
+    )
+
+
+def _settle_provider_dispatch(
+    controller: ResourceController | None,
+    *,
+    dispatch_id: str,
+    duration_ms: int,
+    context_bytes: int,
+    outcome: OutcomeCategory,
+    usage: Usage | None,
+    usage_source: str,
+) -> None:
+    if controller is None:
+        return
+    measurements = [
+        ResourceMeasurement(
+            ResourceDimension.PROVIDER_CALLS, 1, MeasurementTruth.ACTUAL,
+            "runtime_meter", dispatch_id,
+        ),
+        ResourceMeasurement(
+            ResourceDimension.RUNTIME_MS, duration_ms, MeasurementTruth.ACTUAL,
+            "runtime_meter", dispatch_id,
+        ),
+        ResourceMeasurement(
+            ResourceDimension.PROCESS_COUNT, 1, MeasurementTruth.ACTUAL,
+            "runtime_meter", dispatch_id,
+        ),
+        ResourceMeasurement(
+            ResourceDimension.CONTEXT_BYTES, context_bytes, MeasurementTruth.CONTEXT_SIZE,
+            "utf8_measurement", dispatch_id,
+        ),
+    ]
+    if usage is not None and usage.total_tokens is not None:
+        measurements.append(
+            ResourceMeasurement(
+                ResourceDimension.ACTUAL_TOKENS, usage.total_tokens,
+                MeasurementTruth.ACTUAL, usage_source, dispatch_id,
+            )
+        )
+    else:
+        measurements.append(
+            ResourceMeasurement(
+                ResourceDimension.ACTUAL_TOKENS, None, MeasurementTruth.UNAVAILABLE,
+                usage_source, dispatch_id,
+            )
+        )
+    measurements.append(
+        ResourceMeasurement(
+            ResourceDimension.ACTUAL_COST_USD, None, MeasurementTruth.UNAVAILABLE,
+            usage_source, dispatch_id,
+        )
+    )
+    controller.settle(
+        ResourceObservation(
+            dispatch_id=dispatch_id,
+            measurements=tuple(
+                item for item in measurements
+                if item.dimension in controller.policy.by_dimension
+            ),
+            outcome=outcome.value,
+            evidence_reference=f"provider-dispatch:{dispatch_id}",
+        )
+    )
+
 class CodexExecReasoningExecutor:
     """Default reasoning adapter using Codex CLI with saved ChatGPT authentication.
 
@@ -575,6 +806,8 @@ class CodexExecReasoningExecutor:
         ignore_user_config: bool = False,
         repo_root: str | Path | None = None,
         telemetry_recorder=None,
+        resource_controller: ResourceController | None = None,
+        resource_reservation: Mapping[ResourceDimension | str, Any] | None = None,
     ):
         self.executable = executable
         self.model = model
@@ -583,6 +816,8 @@ class CodexExecReasoningExecutor:
         self.ignore_user_config = ignore_user_config
         self.repo_root = Path(repo_root).resolve() if repo_root is not None else Path.cwd()
         self.telemetry_recorder = telemetry_recorder
+        self.resource_controller = resource_controller
+        self.resource_reservation = dict(resource_reservation or {})
 
     def resolved_executable(self) -> str | None:
         resolved = shutil.which(self.executable)
@@ -641,6 +876,17 @@ class CodexExecReasoningExecutor:
     def dispatch(self, prepared: PreparedCodexExecution) -> StageExecutionResult:
         request = prepared.request
         prompt = prepared.prompt
+        dispatch_id = f"codex-reasoning:{uuid4()}"
+        _reserve_provider_dispatch(
+            self.resource_controller,
+            dispatch_id=dispatch_id,
+            provider="codex",
+            model=self.model or "codex-config-default",
+            runtime="codex_exec_reasoning",
+            context_bytes=len(prompt.encode("utf-8")),
+            timeout_ms=self.timeout_seconds * 1000,
+            declared=self.resource_reservation,
+        )
         with tempfile.TemporaryDirectory(prefix=f"sdd-stage-{request.stage_id}-") as tmp:
             tmpdir = Path(tmp)
             schema_path = tmpdir / "result.schema.json"
@@ -666,9 +912,18 @@ class CodexExecReasoningExecutor:
                 outcome = OutcomeCategory.TIMEOUT
                 raise
             finally:
+                duration_ms = max(0, round((time.monotonic() - started) * 1000))
+                _settle_provider_dispatch(
+                    self.resource_controller,
+                    dispatch_id=dispatch_id,
+                    duration_ms=duration_ms,
+                    context_bytes=len(prompt.encode("utf-8")),
+                    outcome=outcome,
+                    usage=None,
+                    usage_source="codex_cli_unavailable",
+                )
                 if self.telemetry_recorder is not None:
                     try:
-                        duration_ms = max(0, round((time.monotonic() - started) * 1000))
                         event = measure_provider_call(
                             stage_id=request.stage_id,
                             rendered=[(prompt, Component.USER_INPUT)],
@@ -745,12 +1000,16 @@ class OpenAIResponsesExecutor:
         timeout_seconds: int = 300,
         max_output_tokens: int = 12000,
         telemetry_recorder=None,
+        resource_controller: ResourceController | None = None,
+        resource_reservation: Mapping[ResourceDimension | str, Any] | None = None,
     ):
         self.model = model
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.timeout_seconds = timeout_seconds
         self.max_output_tokens = max_output_tokens
         self.telemetry_recorder = telemetry_recorder
+        self.resource_controller = resource_controller
+        self.resource_reservation = dict(resource_reservation or {})
         if not self.api_key:
             raise SharedReasoningProviderPrerequisiteError(
                 "OPENAI_API_KEY is not set. Configure it in the environment; do not store it in repository files."
@@ -788,6 +1047,17 @@ class OpenAIResponsesExecutor:
     def dispatch(self, prepared: PreparedOpenAIExecution) -> StageExecutionResult:
         request = prepared.request
         wire = prepared.wire
+        dispatch_id = f"openai-responses:{uuid4()}"
+        _reserve_provider_dispatch(
+            self.resource_controller,
+            dispatch_id=dispatch_id,
+            provider="openai",
+            model=self.model,
+            runtime="openai_responses",
+            context_bytes=len(wire),
+            timeout_ms=self.timeout_seconds * 1000,
+            declared=self.resource_reservation,
+        )
         req = urllib.request.Request(
             self.endpoint,
             data=wire,
@@ -822,9 +1092,21 @@ class OpenAIResponsesExecutor:
                 outcome = OutcomeCategory.TIMEOUT
                 raise
         finally:
+            duration_ms = max(0, round((time.monotonic() - started) * 1000))
+            _settle_provider_dispatch(
+                self.resource_controller,
+                dispatch_id=dispatch_id,
+                duration_ms=duration_ms,
+                context_bytes=len(wire),
+                outcome=outcome,
+                usage=provider_usage,
+                usage_source=(
+                    "openai_responses_usage" if provider_usage is not None
+                    else "openai_responses_unavailable"
+                ),
+            )
             if self.telemetry_recorder is not None:
                 try:
-                    duration_ms = max(0, round((time.monotonic() - started) * 1000))
                     event = measure_provider_call(
                         stage_id=request.stage_id,
                         rendered=[

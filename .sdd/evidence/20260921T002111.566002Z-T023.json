@@ -1,0 +1,267 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "T023",
+  "title": "Cost, token, call, runtime, resource, and deployment-limit enforcement",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/codex_adapter.py",
+    "sdd_orchestrator/codex_cli.py",
+    "sdd_orchestrator/governance_envelope.py",
+    "sdd_orchestrator/providers.py",
+    "sdd_orchestrator/resource_policy.py",
+    "tests/test_resource_policy.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_resource_policy.py tests/test_m42_evaluation_metrics.py tests/test_telemetry_measurement.py tests/test_telemetry_models.py tests/test_telemetry_stage08_phase.py tests/test_stage08_phase_resume.py tests/test_m6_codex_adapter.py",
+      "returncode": 0,
+      "stdout": ".......................................................................... [ 48%]\n................................................................. [ 90%]\n..............                                                    [100%]\n153 passed, 156 subtests passed in 595.10s (0:09:55)\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "TASK-023 LUNA bounded remediation worker accepted the attributable sealed-scope patch without scope expansion.",
+    "stderr": ""
+  },
+  "recorded_at": "20260921T002111.566002Z",
+  "governance": {
+    "envelope_id": "c859bf8dbcceb95218cbe5bed68ee74182e6223a59cada335a600b3d702bbb25",
+    "approval_class": "A0",
+    "approval_reference": "stage07:16af9de0f3ad1340b4d23192c2f38802d95dfe7d2ac29ef88399e4f8acb45d2b",
+    "pre_dispatch": {
+      "envelope_id": "c859bf8dbcceb95218cbe5bed68ee74182e6223a59cada335a600b3d702bbb25",
+      "outcome": "AUTHORIZED",
+      "approval_class": "A0",
+      "approval_reference": "stage07:16af9de0f3ad1340b4d23192c2f38802d95dfe7d2ac29ef88399e4f8acb45d2b",
+      "action": "EXECUTE_STAGE08_TASK",
+      "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+      "scope": [
+        "sdd_orchestrator/resource_policy.py",
+        "sdd_orchestrator/governance_envelope.py",
+        "sdd_orchestrator/providers.py",
+        "sdd_orchestrator/codex_adapter.py",
+        "sdd_orchestrator/codex_cli.py",
+        "sdd_orchestrator/context_evaluation.py",
+        "sdd_orchestrator/telemetry/measurement.py",
+        "sdd_orchestrator/telemetry/models.py",
+        "tests/test_resource_policy.py"
+      ],
+      "failure_route": null,
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "sdd_orchestrator/resource_policy.py",
+          "sdd_orchestrator/governance_envelope.py",
+          "sdd_orchestrator/providers.py",
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/codex_cli.py",
+          "sdd_orchestrator/context_evaluation.py",
+          "sdd_orchestrator/telemetry/measurement.py",
+          "sdd_orchestrator/telemetry/models.py",
+          "tests/test_resource_policy.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.LunaBoundedRemediationWorker"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:ac47c32638c8de54c03e8866d7149cab12588e96d8eae6a0a7575814fd590274:stage08-dispatch"
+      }
+    },
+    "post_dispatch": {
+      "envelope_id": "c859bf8dbcceb95218cbe5bed68ee74182e6223a59cada335a600b3d702bbb25",
+      "outcome": "PASS",
+      "observed_scope": [
+        "sdd_orchestrator/codex_adapter.py",
+        "sdd_orchestrator/codex_cli.py",
+        "sdd_orchestrator/governance_envelope.py",
+        "sdd_orchestrator/providers.py",
+        "sdd_orchestrator/resource_policy.py",
+        "tests/test_resource_policy.py"
+      ],
+      "observed_effects": [
+        "WORKSPACE_WRITE"
+      ],
+      "evidence_references": [
+        "pending-stage08-evidence:T023"
+      ],
+      "failure_route": null,
+      "approval_class": "A0",
+      "approval_reference": "stage07:16af9de0f3ad1340b4d23192c2f38802d95dfe7d2ac29ef88399e4f8acb45d2b",
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "sdd_orchestrator/resource_policy.py",
+          "sdd_orchestrator/governance_envelope.py",
+          "sdd_orchestrator/providers.py",
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/codex_cli.py",
+          "sdd_orchestrator/context_evaluation.py",
+          "sdd_orchestrator/telemetry/measurement.py",
+          "sdd_orchestrator/telemetry/models.py",
+          "tests/test_resource_policy.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.LunaBoundedRemediationWorker"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:ac47c32638c8de54c03e8866d7149cab12588e96d8eae6a0a7575814fd590274:stage08-dispatch",
+        "outcome": "RECONCILED",
+        "actual_filesystem_paths": [
+          "sdd_orchestrator/codex_adapter.py",
+          "sdd_orchestrator/codex_cli.py",
+          "sdd_orchestrator/governance_envelope.py",
+          "sdd_orchestrator/providers.py",
+          "sdd_orchestrator/resource_policy.py",
+          "tests/test_resource_policy.py"
+        ],
+        "actual_network_destinations": [],
+        "actual_credential_references": [],
+        "actual_secret_references": [],
+        "actual_processes": [
+          "sdd_orchestrator.codex_cli.LunaBoundedRemediationWorker"
+        ],
+        "evidence_reference": "pending-stage08-evidence:T023"
+      }
+    },
+    "verification_dispatches": [
+      {
+        "level": "TARGET",
+        "legacy_required": true,
+        "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+        "envelope_id": "396153542d9b12b1e9c70b3f6d29fe2a4008e5278dc9d4c370bb7201e7137f7b",
+        "approval_class": "A0",
+        "approval_reference": "stage07:16af9de0f3ad1340b4d23192c2f38802d95dfe7d2ac29ef88399e4f8acb45d2b",
+        "pre_dispatch": {
+          "envelope_id": "396153542d9b12b1e9c70b3f6d29fe2a4008e5278dc9d4c370bb7201e7137f7b",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "stage07:16af9de0f3ad1340b4d23192c2f38802d95dfe7d2ac29ef88399e4f8acb45d2b",
+          "action": "EXECUTE_VERIFICATION_TOOL",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "sdd_orchestrator/resource_policy.py",
+            "sdd_orchestrator/governance_envelope.py",
+            "sdd_orchestrator/providers.py",
+            "sdd_orchestrator/codex_adapter.py",
+            "sdd_orchestrator/codex_cli.py",
+            "sdd_orchestrator/context_evaluation.py",
+            "sdd_orchestrator/telemetry/measurement.py",
+            "sdd_orchestrator/telemetry/models.py",
+            "tests/test_resource_policy.py"
+          ],
+          "failure_route": null,
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "sdd_orchestrator/resource_policy.py",
+              "sdd_orchestrator/governance_envelope.py",
+              "sdd_orchestrator/providers.py",
+              "sdd_orchestrator/codex_adapter.py",
+              "sdd_orchestrator/codex_cli.py",
+              "sdd_orchestrator/context_evaluation.py",
+              "sdd_orchestrator/telemetry/measurement.py",
+              "sdd_orchestrator/telemetry/models.py",
+              "tests/test_resource_policy.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:ac47c32638c8de54c03e8866d7149cab12588e96d8eae6a0a7575814fd590274:verify:0:verification-0"
+          }
+        },
+        "post_dispatch": {
+          "envelope_id": "396153542d9b12b1e9c70b3f6d29fe2a4008e5278dc9d4c370bb7201e7137f7b",
+          "outcome": "PASS",
+          "observed_scope": [],
+          "observed_effects": [
+            "TOOL_EXECUTION"
+          ],
+          "evidence_references": [
+            "verification-result:T023:TARGET:0"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "stage07:16af9de0f3ad1340b4d23192c2f38802d95dfe7d2ac29ef88399e4f8acb45d2b",
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "sdd_orchestrator/resource_policy.py",
+              "sdd_orchestrator/governance_envelope.py",
+              "sdd_orchestrator/providers.py",
+              "sdd_orchestrator/codex_adapter.py",
+              "sdd_orchestrator/codex_cli.py",
+              "sdd_orchestrator/context_evaluation.py",
+              "sdd_orchestrator/telemetry/measurement.py",
+              "sdd_orchestrator/telemetry/models.py",
+              "tests/test_resource_policy.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:ac47c32638c8de54c03e8866d7149cab12588e96d8eae6a0a7575814fd590274:verify:0:verification-0",
+            "outcome": "RECONCILED",
+            "actual_filesystem_paths": [],
+            "actual_network_destinations": [],
+            "actual_credential_references": [],
+            "actual_secret_references": [],
+            "actual_processes": [
+              "verification-execution"
+            ],
+            "evidence_reference": "verification-result:T023:TARGET:0"
+          }
+        }
+      }
+    ],
+    "verification_plan": {
+      "schema_version": "1.0",
+      "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+      "provider_session_required": false,
+      "fast_count": 0,
+      "target_count": 1,
+      "full_count": 0,
+      "full_authorized": false,
+      "stage09_full_verification_preserved": true
+    }
+  }
+}
