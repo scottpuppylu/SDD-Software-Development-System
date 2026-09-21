@@ -47,6 +47,13 @@ from .resource_policy import (
     ResourcePolicyError,
     ResourceRequest,
 )
+from .provider_conformance import (
+    ProviderCapabilityManifest,
+    ProviderConformanceContext,
+    ProviderConformanceError,
+    ProviderConformanceEvidence,
+    ProviderConformanceGate,
+)
 
 
 class ReasoningProviderError(RuntimeError):
@@ -79,6 +86,13 @@ REASONING_CAPABILITIES = frozenset(
     }
 )
 WRITE_CAPABILITY = "AUTHORIZED_STAGE08_ASSISTANCE"
+
+
+def _conformance_metadata(
+    evidence: ProviderConformanceEvidence | None,
+) -> dict[str, Any]:
+    """Expose only machine-visible, non-secret conformance evidence to owners."""
+    return {} if evidence is None else {"provider_conformance": evidence.payload()}
 
 
 class ReasoningProvider(Protocol):
@@ -163,6 +177,10 @@ class ReasoningProviderBoundary:
         require_governance: bool = False,
         resource_controller: ResourceController | None = None,
         require_resource_policy: bool = False,
+        conformance_gate: ProviderConformanceGate | None = None,
+        conformance_manifest: ProviderCapabilityManifest | None = None,
+        conformance_evidence: ProviderConformanceEvidence | None = None,
+        conformance_context: ProviderConformanceContext | None = None,
     ):
         self.provider = provider
         self.authorization_validator = authorization_validator
@@ -170,6 +188,10 @@ class ReasoningProviderBoundary:
         self.require_governance = require_governance
         self.resource_controller = resource_controller
         self.require_resource_policy = require_resource_policy
+        self.conformance_gate = conformance_gate
+        self.conformance_manifest = conformance_manifest
+        self.conformance_evidence = conformance_evidence
+        self.conformance_context = conformance_context
 
     @staticmethod
     def _safe_detail(detail: str) -> str:
@@ -239,6 +261,17 @@ class ReasoningProviderBoundary:
                 "NO_AUTHORIZATION",
                 "write-capable invocation requires a sealed Stage08 envelope covering affected scope",
             )
+        if self.conformance_gate is not None:
+            try:
+                self.conformance_gate.require_dispatch(
+                    self.conformance_manifest,
+                    self.conformance_evidence,
+                    self.conformance_context,
+                )
+            except ProviderConformanceError as exc:
+                return self._failure(
+                    invocation, "POLICY_VIOLATION", f"{exc.code}: {exc.detail}"
+                )
         resource_bound = bool(
             invocation.governance_request is not None
             and invocation.governance_request.resource_policy_reference
@@ -471,6 +504,7 @@ class ReasoningProviderBoundary:
                 "provider_operation": invocation.operation,
             }
         )
+        metadata.update(_conformance_metadata(self.conformance_evidence))
         proposed = replace(output, metadata=metadata)
         return ReasoningBoundaryResult(
             status="PROPOSED",
@@ -808,6 +842,10 @@ class CodexExecReasoningExecutor:
         telemetry_recorder=None,
         resource_controller: ResourceController | None = None,
         resource_reservation: Mapping[ResourceDimension | str, Any] | None = None,
+        conformance_gate: ProviderConformanceGate | None = None,
+        conformance_manifest: ProviderCapabilityManifest | None = None,
+        conformance_evidence: ProviderConformanceEvidence | None = None,
+        conformance_context: ProviderConformanceContext | None = None,
     ):
         self.executable = executable
         self.model = model
@@ -818,6 +856,18 @@ class CodexExecReasoningExecutor:
         self.telemetry_recorder = telemetry_recorder
         self.resource_controller = resource_controller
         self.resource_reservation = dict(resource_reservation or {})
+        self.conformance_gate = conformance_gate
+        self.conformance_manifest = conformance_manifest
+        self.conformance_evidence = conformance_evidence
+        self.conformance_context = conformance_context
+
+    def _validate_conformance(self) -> None:
+        if self.conformance_gate is not None:
+            self.conformance_gate.require_dispatch(
+                self.conformance_manifest,
+                self.conformance_evidence,
+                self.conformance_context,
+            )
 
     def resolved_executable(self) -> str | None:
         resolved = shutil.which(self.executable)
@@ -876,6 +926,7 @@ class CodexExecReasoningExecutor:
     def dispatch(self, prepared: PreparedCodexExecution) -> StageExecutionResult:
         request = prepared.request
         prompt = prepared.prompt
+        self._validate_conformance()
         dispatch_id = f"codex-reasoning:{uuid4()}"
         _reserve_provider_dispatch(
             self.resource_controller,
@@ -965,6 +1016,14 @@ class CodexExecReasoningExecutor:
             for item in artifact_list
             if item.get("path") != "__NO_OUTPUT__"
         }
+        metadata = {
+            "provider": "codex_exec_reasoning",
+            "model": self.model or "codex-config-default",
+            "sandbox": "read-only",
+            "ephemeral": self.ephemeral,
+            "provider_notes": data.get("provider_notes"),
+        }
+        metadata.update(_conformance_metadata(self.conformance_evidence))
         return StageExecutionResult(
             status=data["status"],
             artifacts=artifacts,
@@ -972,13 +1031,7 @@ class CodexExecReasoningExecutor:
             classification=data.get("classification"),
             remediation_reasons=list(data.get("remediation_reasons", [])),
             convergence_tasks=list(data.get("convergence_tasks", [])),
-            metadata={
-                "provider": "codex_exec_reasoning",
-                "model": self.model or "codex-config-default",
-                "sandbox": "read-only",
-                "ephemeral": self.ephemeral,
-                "provider_notes": data.get("provider_notes"),
-            },
+            metadata=metadata,
         )
 
 
@@ -1002,6 +1055,10 @@ class OpenAIResponsesExecutor:
         telemetry_recorder=None,
         resource_controller: ResourceController | None = None,
         resource_reservation: Mapping[ResourceDimension | str, Any] | None = None,
+        conformance_gate: ProviderConformanceGate | None = None,
+        conformance_manifest: ProviderCapabilityManifest | None = None,
+        conformance_evidence: ProviderConformanceEvidence | None = None,
+        conformance_context: ProviderConformanceContext | None = None,
     ):
         self.model = model
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
@@ -1010,6 +1067,10 @@ class OpenAIResponsesExecutor:
         self.telemetry_recorder = telemetry_recorder
         self.resource_controller = resource_controller
         self.resource_reservation = dict(resource_reservation or {})
+        self.conformance_gate = conformance_gate
+        self.conformance_manifest = conformance_manifest
+        self.conformance_evidence = conformance_evidence
+        self.conformance_context = conformance_context
         if not self.api_key:
             raise SharedReasoningProviderPrerequisiteError(
                 "OPENAI_API_KEY is not set. Configure it in the environment; do not store it in repository files."
@@ -1047,6 +1108,12 @@ class OpenAIResponsesExecutor:
     def dispatch(self, prepared: PreparedOpenAIExecution) -> StageExecutionResult:
         request = prepared.request
         wire = prepared.wire
+        if self.conformance_gate is not None:
+            self.conformance_gate.require_dispatch(
+                self.conformance_manifest,
+                self.conformance_evidence,
+                self.conformance_context,
+            )
         dispatch_id = f"openai-responses:{uuid4()}"
         _reserve_provider_dispatch(
             self.resource_controller,
@@ -1142,6 +1209,13 @@ class OpenAIResponsesExecutor:
             for item in artifact_list
             if item.get("path") != "__NO_OUTPUT__"
         }
+        metadata = {
+            "provider": "openai_responses",
+            "model": self.model,
+            "response_id": payload.get("id"),
+            "provider_notes": data.get("provider_notes"),
+        }
+        metadata.update(_conformance_metadata(self.conformance_evidence))
         return StageExecutionResult(
             status=data["status"],
             artifacts=artifacts,
@@ -1149,10 +1223,5 @@ class OpenAIResponsesExecutor:
             classification=data.get("classification"),
             remediation_reasons=list(data.get("remediation_reasons", [])),
             convergence_tasks=list(data.get("convergence_tasks", [])),
-            metadata={
-                "provider": "openai_responses",
-                "model": self.model,
-                "response_id": payload.get("id"),
-                "provider_notes": data.get("provider_notes"),
-            },
+            metadata=metadata,
         )
