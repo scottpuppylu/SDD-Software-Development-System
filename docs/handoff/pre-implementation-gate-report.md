@@ -1,4 +1,4 @@
-# Stage 07 Pre-Implementation Gate Report — TASK-023
+# Stage 07 Pre-Implementation Gate Report — TASK-024
 
 ## 1. Decision
 
@@ -8,170 +8,117 @@ STAGE_NAME = PRE_IMPLEMENTATION_GATE
 RESULT = PASS
 CLASSIFICATION = null
 IMPLEMENTATION_AUTHORIZATION = GRANTED
-AUTHORIZED_TASK = TASK-023
-UNAUTHORIZED_TASKS = TASK-024,TASK-025
-AUTHORIZED_NEXT_OPERATION = SEALED_STAGE08_TASK_023_IMPLEMENTATION
+AUTHORIZED_TASK = TASK-024
+UNAUTHORIZED_TASKS = TASK-025
+AUTHORIZED_NEXT_OPERATION = SEALED_STAGE08_TASK_024_IMPLEMENTATION
 NEXT_STAGE = 08
 ```
 
-This is a fresh constitution-aware Stage07 decision evaluated against entry baseline `86c45e0675383347aac79c3fbda02d9f6ff09af2` on branch `telemetry-measurement-v2`. The failed decision at `bfa8c170fc11146f807b16a93f66eb9b81f4b919` is historical audit evidence only; no prior TASK-023 authorization or envelope is reused. This decision authorizes only TASK-023 and does not implement it, execute TASK-024/TASK-025, create implementation evidence/checkpoints, or execute Stage08, Stage09, or Stage10.
+This is a fresh constitution-aware Stage 07 decision evaluated from entry baseline `3ca2e16c36afe1a3162438e4d04bd95fc98a1a0f` on branch `telemetry-measurement-v2`. It authorizes only TASK-024. It does not implement TASK-024, execute TASK-025, create implementation evidence or a checkpoint, or execute Stage 08, Stage 09, or Stage 10.
 
-## 2. Owner, runtime, repository, and authority readiness
+## 2. Readiness and governing authority
 
-- `.sdd/stages.yaml` and `.sdd/instructions/stage-07.md` identify Stage07 as the sole owner of `PRE_IMPLEMENTATION_GATE_DECISION`.
-- Entry HEAD exactly matched `86c45e0675383347aac79c3fbda02d9f6ff09af2`; the worktree was clean; branch was `telemetry-measurement-v2`.
-- Repository runtime is Python `3.14.7`; pytest is `9.1.1`.
-- `tests/test_v117_machine_task_contract.py` passed 10 tests. This is gate/tooling evidence, not TASK-023 implementation verification.
-- `.sdd/state/authority-state.yaml` contains no unresolved authority conflict or blocking TBD.
-- Product, Spec, Design, Stage05, and repaired Stage06 authority are current and were not modified by this gate.
+- `.sdd/stages.yaml` and `.sdd/instructions/stage-07.md` identify Stage 07 as the sole owner of `PRE_IMPLEMENTATION_GATE_DECISION`.
+- Entry HEAD matched the required baseline and the worktree was clean. Runtime is Python `3.14.7`; pytest is `9.1.1`.
+- `tests/test_v117_machine_task_contract.py` passed 10 tests. This is gate tooling evidence only, not TASK-024 implementation verification.
+- Current Product, Spec, Design, Stage 05 governance, and Stage 06 task decomposition are present. `.sdd/state/authority-state.yaml` has no unresolved authority conflict or blocking TBD affecting TASK-024.
+- TASK-023 is `IMPLEMENTATION_QUALIFIED` at checkpoint `22b2baf8a98aa0bbc3220e5407159331b9062680`, with state finalization at this entry baseline. Its authority is preserved rather than reopened.
 
-## 3. Stage06 repair validation
+## 3. TASK-024 contract, eligibility, and scope
 
-Stage06 repair checkpoint `86c45e0675383347aac79c3fbda02d9f6ff09af2` and run `.sdd/runs/20260918T040422.880990Z-stage-06.json` are valid. The run records `TASK-023_MACHINE_VERIFICATION_READINESS_REPAIR`, a completed transition to Stage07, and false values for substantive-authority, dependency, allowed-file, and acceptance-intent changes.
+The authoritative contract is `tasks.md`, `TASK-024 - Provider change, fallback, and default-promotion conformance gate`. Its purpose is to prevent a provider, model, or adapter addition, switch, fallback, upgrade, or default promotion unless current evidence proves Architecture Constitution and required capability conformance.
 
-Comparison with the pre-repair TASK-023 contract proves that title/objective, dependencies, allowed files, allowed implementation scope, required behavior, preservation obligations, failure behavior, safety obligations, checkpoint eligibility, and out-of-scope authority remain unchanged. Only the invalid verification filenames and verification-proof clarification changed. The prior invalid command is not authoritative and must not be reused.
+Dependencies are `T007`, `T021`, `T022`, and `T023`; all are implementation-qualified with repository-backed evidence. The declared graph is acyclic and TASK-024 is DAG-eligible. TASK-024 has no implementation qualification record. TASK-025 is pending, unexecuted, and outside this authorization.
 
-## 4. Eligibility and dependencies
+The bounded implementation scope is versioned provider/adapter capability manifests, common conformance evidence, mandatory architecture/lifecycle/authority/sandbox/security/budget/capability/evidence/approval checks, stable default-selection identity, explicit change/fallback/promotion decisions, and fail-closed integration at provider construction or routing.
 
-The authoritative contract is `tasks.md`, `TASK-023 - Cost, token, call, runtime, resource, and deployment-limit enforcement`. TASK-023 remains prospective `TODO`, has no implementation qualification, and is DAG-eligible.
+The task does not authorize a generic CodingWorker protocol or registry redesign, replacing `Stage08CodexRunner`, cross-provider in-progress attempt handoff, cross-host resume, model-routing policy, Work cockpit integration, Remote Sandbox, Zero-DevEnv, new real providers, changing model defaults, live API calls, deployment, or upstream authority changes. Those remain outside this V1 task and, where applicable, belong to a later governed upgrade wave.
 
-| Dependency | Status | Implementation checkpoint | Qualifying evidence |
-| --- | --- | --- | --- |
-| `T021` | `IMPLEMENTATION_QUALIFIED` | `6588ef148d44070ee71c03158fa9f5fe6dae85ae` | `.sdd/evidence/20260916T000708.940197Z-T021.json` |
-| `T022` | `IMPLEMENTATION_QUALIFIED` | `48c4fc796886190bb282d61fc479f76361242749` | `.sdd/evidence/20260916T060527.168269Z-T022.json` |
+## 4. Provider conformance, fallback, and promotion rules
 
-The whole task graph resolves every dependency and is acyclic. TASK-024 and TASK-025 have no qualification record and remain pending/unexecuted.
+`DES-006`, `DES-019`, AGENTS.md section 14, and `SDD_AGENT_ADAPTER_CONTRACT.md` require SDD to remain controller/governor while provider adapters remain replaceable and non-authoritative. The task contract permits a versioned capability manifest only for supported contract fields: provider and model identity, bounded structured request/result behavior, normalized error/timeout/interruption behavior, sandbox and capability expectations, trustworthy usage/accounting support, verification independence, and security/governance compatibility.
 
-## 5. Authorized objective, scope, and forbidden scope
+A provider is eligible only when durable, current evidence covers every mandatory capability and control for its requested role. The evidence and decision must bind provider identity, manifest version, conformance checks and results, prior/default identity, proposed fallback or promotion, Human Approval reference where required, and evidence/checkpoint linkage. Availability, configuration, authentication, cost, speed, model recency, or benchmark status alone is insufficient.
 
-TASK-023 authorizes a cohesive resource-policy/enforcement boundary for provider/model/runtime identity; applicable resource-budget lookup and state; actual/estimated/context-size/unavailable measurement truth; provider-call, tool-call, and retry accounting; token, cost, duration, process/resource, filesystem, network, Git, deployment, and secret-access hard/soft bounds already named by authority; pre-dispatch reservation/check; post-dispatch accounting; deterministic exhaustion stop/route; and approval binding for material budget/deployment changes.
+Missing, ambiguous, stale, failed, incompatible, or environment-mismatched manifest/evidence; a weaker fallback; a default mutation without a governed decision; or declared-versus-observed adapter identity mismatch must fail closed before provider dispatch. A conformant fallback preserves the same request and envelope, records the decision, and may not reuse stale authorization. Cross-provider continuation of an in-progress attempt is not authorized by TASK-024.
 
-The task must preserve required authority/context/evidence rather than truncate it to fit a limit. It may integrate enforcement decisions into existing governed dispatch boundaries, but Codex remains a bounded worker and telemetry remains observation rather than lifecycle authority.
+## 5. Preservation obligations
 
-Forbidden scope is billing-provider integration, cloud or deployment execution, changing budgets as authority, provider-default selection/promotion, provider registry redesign, TASK-024 provider-conformance authority, TASK-025 DecisionGateway fixture repair, a second telemetry recorder/store or shadow metrics pipeline, upstream authority changes, and Stage09/Stage10 semantic changes.
+- TASK-023 remains the exclusive resource, budget, reservation, accounting, runtime/resource-limit, and exhaustion-policy owner. A provider change must retain provider/model/runtime identity for its policy and may not bypass limits, accounting, exhaustion routing, or approval-bound resource changes.
+- TASK-021 remains the owner of pre-dispatch identity/authentication/authorization, default deny, exact tool validation, audit, and Human Approval bindings. TASK-022 remains the owner of minimum disclosure, prompt-injection containment, and filesystem/network/credential/secret security boundaries. A provider unable to meet these controls fails conformance.
+- TASK-026's provider-neutral Work Package, bounded worker, controller-owned local FAST/TARGET/FULL verification, and Stage 09 boundary remain unchanged.
+- TASK-027's phase state, SAFE_PAUSE, provenance, exact resume, and no-duplicate-work guarantees remain unchanged. TASK-024 neither owns nor authorizes cross-provider continuation of a live attempt.
+- TASK-028 remains the sole observational Stage 08 telemetry owner. Its truth classes and deterministic event identities are preserved; conformance/promotion policy cannot turn telemetry into lifecycle authority or create another measurement pipeline.
 
-## 6. TASK-028 observation and TASK-023 enforcement boundary
+## 6. Exact allowed files and machine verification
 
-TASK-028 owns observational measurement. TASK-023 owns resource, budget, accounting, limit, and exhaustion policy evaluation and enforcement. TASK-023 must consume attributable TASK-028 observations where relevant without reimplementing phase/duration measurement, creating a second recorder/store, or converting an observation event directly into lifecycle authority.
+The exact TASK-024 Stage 08 write scope is:
 
-Policy outcomes must separately bind current identity, policy, limits, reservation/accounting state, observation provenance, authorization, Human Approval where applicable, and an auditable deterministic result. Re-observing or replaying an already-accounted completed unit cannot consume the same budget twice.
+- `sdd_orchestrator/provider_conformance.py` — cohesive versioned manifest, evidence, and conformance decision module.
+- `sdd_orchestrator/providers.py` — bounded provider construction/routing enforcement point.
+- `sdd_orchestrator/cli.py` — thin authorized composition/wiring only.
+- `sdd_orchestrator/runner.py` — governed provider-dispatch integration only.
+- `sdd_orchestrator/system_controller.py` — bounded system orchestration integration only.
+- `tests/test_provider_conformance.py` — dedicated positive and negative conformance proof.
 
-## 7. Truth classes and SAFE_PAUSE/resume
-
-- `ACTUAL`, `ESTIMATED`, `UNAVAILABLE`, and `UNKNOWN` remain distinguishable where applicable.
-- Unavailable provider/Codex CLI token usage remains unavailable and is never coerced to zero.
-- Estimated values never populate measured-actual fields.
-- Missing trustworthy data follows the task-defined fail-closed/fallback policy; required unknown or unavailable hard-limit inputs stop new metered dispatch.
-- Mandatory authority, evidence, security, or audit content is never truncated to satisfy a budget.
-
-TASK-027 worker interruption (`CODEX_QUOTA_EXHAUSTED`, `CODEX_INTERRUPTED`, or `CODEX_TIMEOUT`) remains distinct from an SDD resource-policy exhaustion outcome. Any permitted SAFE_PAUSE/resume/remediation must preserve authorization, phase/diff provenance, remaining budget, and accounting identity. Completed worker invocations and still-valid reused verification are not charged again merely because execution resumes. A policy stop/block is deterministic and auditable and cannot weaken TASK-027 dirty-state preservation or precise-resume rules.
-
-## 8. Exact allowed files
-
-- `sdd_orchestrator/resource_policy.py`
-- `sdd_orchestrator/governance_envelope.py`
-- `sdd_orchestrator/providers.py`
-- `sdd_orchestrator/codex_adapter.py`
-- `sdd_orchestrator/codex_cli.py`
-- `sdd_orchestrator/context_evaluation.py`
-- `sdd_orchestrator/telemetry/measurement.py`
-- `sdd_orchestrator/telemetry/models.py`
-- `tests/test_resource_policy.py`
-
-`tests/test_resource_policy.py` is absent and explicitly authorized for creation during TASK-023 Stage08. No other production, telemetry, authority, state, or test file is authorized.
-
-## 9. Authoritative verification and machine readiness
-
-The repaired authoritative command is:
+No other file is authorized. `tests/test_provider_conformance.py` is absent but expressly authorized for creation. The other command paths exist:
 
 ```text
-.\.venv\Scripts\python.exe -m pytest -q tests/test_resource_policy.py tests/test_m42_evaluation_metrics.py tests/test_telemetry_measurement.py tests/test_telemetry_models.py tests/test_telemetry_stage08_phase.py tests/test_stage08_phase_resume.py tests/test_m6_codex_adapter.py
-```
-
-Machine-path resolution:
-
-```text
-tests/test_resource_policy.py = ABSENT_BUT_AUTHORIZED_FOR_CREATION
-tests/test_m42_evaluation_metrics.py = PRESENT
-tests/test_telemetry_measurement.py = PRESENT
-tests/test_telemetry_models.py = PRESENT
-tests/test_telemetry_stage08_phase.py = PRESENT
-tests/test_stage08_phase_resume.py = PRESENT
-tests/test_m6_codex_adapter.py = PRESENT
+tests/test_provider_conformance.py = ABSENT_BUT_AUTHORIZED_FOR_CREATION
+tests/test_m4_reasoning_pipeline.py = PRESENT
+tests/test_m41_atomic_executor.py = PRESENT
+tests/test_v114_provider_schema.py = PRESENT
 ALL_VERIFICATION_PATHS_MACHINE_READY = YES
 MACHINE_EXECUTION_READY = YES
-ARCH_AC_06_MACHINE_READINESS = PASS_CONTRACT_LEVEL
 ```
 
-The command is accepted without substitution by the repository verification-command policy. The repaired set preserves the original resource-policy, context truth-class, telemetry measurement, and Codex adapter obligations while adding explicit existing regressions for telemetry truth classes, TASK-028 de-duplication, and TASK-027 resume/provenance behavior. No proof obligation was silently removed. TASK-023 implementation verification is `NOT RUN` at Stage07.
+The exact authoritative command is:
 
-## 10. Acceptance criteria resolved from authority
+```text
+.\.venv\Scripts\python.exe -m pytest -q tests/test_provider_conformance.py tests/test_m4_reasoning_pipeline.py tests/test_m41_atomic_executor.py tests/test_v114_provider_schema.py
+```
 
-Implementation must prove: explicit fail-closed pre-dispatch resource governance; deterministic reservation and cumulative accounting; provider/tool/retry accounting; actual/estimated/unavailable truth preservation; token/cost/runtime/process/resource hard and soft limits; deterministic exhaustion stop/route; no mid-context or required-evidence truncation; approval-bound budget/deployment changes; TASK-028 telemetry reuse without duplicate measurement/store; no double accounting across SAFE_PAUSE, resume, remediation, reconstructed history, reused verification, or persistence retry; TASK-027 provenance/resume compatibility; telemetry non-authority; and preservation of TASK-021/022/026/027/028 plus Stage09/10 boundaries.
+It must prove conformant and non-conformant additions, upgrade/switch/fallback/promotion decisions, stale evidence and changed environment rejection, cost-only selection rejection, prior-default preservation, and no provider invocation or default mutation before gate success. No verification obligation was substituted or removed. Implementation verification is `NOT RUN` at this gate.
 
-These are authorization-time contract criteria, not implementation evidence or Stage09 qualification.
+## 7. Architecture Constitution evaluation
 
-## 11. Governance preservation
-
-- TASK-021 identity/authentication/authorization bindings, default deny, exact capability/tool/action/target validation, audit, and Human Approval remain non-bypassable.
-- TASK-022 sensitive-data handling, minimum disclosure, prompt-injection containment, sandbox/filesystem/network/process/credential/secret boundaries, and redaction remain mandatory.
-- TASK-026 bounded worker, provider-neutral Work Package, controller-owned local verification, and FAST/TARGET/FULL semantics remain unchanged.
-- TASK-027 durable phase state, SAFE_PAUSE, precise resume, provenance revalidation, and no-duplicate behavior remain unchanged.
-- TASK-028 existing telemetry framework, deterministic event identity, truth classes, de-duplication, and observational-only authority remain unchanged.
-- TASK-024 provider promotion/fallback conformance and TASK-025 fixture-repair authority remain separate, pending, and unexecuted.
-
-TASK-001 through TASK-022 and TASK-026 through TASK-028 qualification/evidence remain intact. Historical evidence is unchanged.
-
-## 12. Architecture Constitution evaluation
-
-These results establish task-contract authorizability only, not implementation conformance.
+These are task-contract authorization findings, not implementation or Stage 09 proof.
 
 | Criterion | Result | Basis |
 | --- | --- | --- |
-| `ARCH-AC-01` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | SDD remains controller/governor; resource policy does not move into Codex. |
-| `ARCH-AC-02` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Cohesive policy/accounting belongs in `resource_policy.py`; adapter changes are bounded integration points. |
-| `ARCH-AC-03` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Provider/model identity is input to provider-neutral policy and accounting semantics. |
-| `ARCH-AC-04` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Required policy, limit, reservation, authorization, and approval checks precede metered dispatch. |
-| `ARCH-AC-05` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Missing required grants/policy/limits deny dispatch; exact allowed files remain bounded. |
-| `ARCH-AC-06` | `PASS_CONTRACT_LEVEL_MACHINE_READINESS_RESTORED_NOT_IMPLEMENTATION_PROOF` | Exact machine verification is now executable after authorized test creation and proves bounded runtime/resource/exhaustion behavior. |
-| `ARCH-AC-07` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Stage06 repair and fresh Stage07 precede any Stage08 work; Stage09/10 remain separate. |
-| `ARCH-AC-08` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Security, audit, evidence, minimum disclosure, and Human Approval bindings remain mandatory. |
-| `ARCH-AC-09` | `PRESERVED_NOT_IMPLEMENTED_BY_TASK023` | Provider promotion/change/fallback conformance remains TASK-024 authority. |
+| `ARCH-AC-01` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | SDD remains the controller/governor; provider adapters cannot create authority. |
+| `ARCH-AC-02` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Conformance is a cohesive module; CLI, runner, and controller changes are bounded integration points. |
+| `ARCH-AC-03` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Versioned common conformance strengthens provider independence without a registry redesign. |
+| `ARCH-AC-04` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Current conformance, security, resource, and approval checks precede eligible provider dispatch. |
+| `ARCH-AC-05` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Missing or incompatible manifest/evidence and unapproved default mutation deny dispatch. |
+| `ARCH-AC-06` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Provider compatibility must retain TASK-023 resource bounds and TASK-022 sandbox/security bounds. |
+| `ARCH-AC-07` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | A fresh Stage 07 authorization precedes only this atomic Stage 08 task; Stage 09/10 remain separate. |
+| `ARCH-AC-08` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Evidence, approval, audit, minimum disclosure, and security remain non-bypassable. |
+| `ARCH-AC-09` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Provider change, fallback, and promotion become implementation-ready only through current conformance evidence and governed decisions. |
 
-No applicable Architecture Constitution requirement is missing, failed, contradictory, or unverifiable at the Stage07 contract boundary.
+No applicable requirement is missing, contradictory, or unverifiable at the Stage 07 contract boundary.
 
-## 13. Fresh seal and authorization boundary
+## 8. Authorization boundary and final state
 
-After this Stage07 report, state, and run artifact are checkpointed, a brand-new deterministic TASK-023 sealed execution envelope must be assembled and revalidated against the complete execution-bound HEAD. It binds TASK-023, the entry baseline, repaired task-contract digest, current authority/report digests, branch and execution-bound HEAD, exact allowed files, behavior/forbidden scope, repaired command, checkpoint conditions, dependency state, TASK-027 resume/accounting rules, TASK-028 observation/enforcement boundary, runtime, Architecture Constitution evaluation, and Stage05/TASK-021/TASK-022 security/Human Approval governance. Any mismatch blocks Stage08.
-
-## 14. Final state
+After this Stage 07 report, run artifact, and state are checkpointed, a fresh TASK-024 sealed execution envelope must be assembled and validated against the complete execution-bound HEAD. It binds TASK-024, this baseline, current task and authority digests, finalized dependency state, TASK-023 policy preservation, exact allowed files and forbidden scope, the exact verification command, acceptance obligations, provider-conformance requirements, Architecture Constitution evaluation, runtime, and TASK-021/TASK-022 Human Approval/security authority. A mismatch blocks Stage 08.
 
 ```text
 PRE_IMPLEMENTATION_GATE_DECISION = PASS
-EVALUATED_BASELINE = 86c45e0675383347aac79c3fbda02d9f6ff09af2
-TARGET_TASK = TASK-023
-TASK_DEPENDENCIES = T021,T022
+EVALUATED_BASELINE = 3ca2e16c36afe1a3162438e4d04bd95fc98a1a0f
+TARGET_TASK = TASK-024
+TASK_DEPENDENCIES = T007,T021,T022,T023
 TASK_DEPENDENCY_STATUS = ALL_REPOSITORY_QUALIFIED_AND_STATE_FINALIZED
-STAGE06_REPAIR = VALIDATED
 TASK_CONTRACT_STATUS = VALID_COMPLETE_BOUNDED_MACHINE_READY
-VERIFICATION_POLICY_VALID = YES
 ALL_VERIFICATION_PATHS_MACHINE_READY = YES
 MACHINE_EXECUTION_READY = YES
-TASK023_IMPLEMENTATION_VERIFICATION = NOT_RUN
-APPLICABLE_ARCHITECTURE_CONSTITUTION = ARCH-AC-01,ARCH-AC-02,ARCH-AC-03,ARCH-AC-04,ARCH-AC-05,ARCH-AC-06,ARCH-AC-07,ARCH-AC-08
-ARCH_AC_09 = PRESERVED
-ARCHITECTURE_CONSTITUTION_GATE_RESULT = PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF
-NORMAL_STAGE08_AUTHORIZED = YES_TASK_023_ONLY
-STAGE08_AUTHORIZATION_BOUND_TASK = TASK-023
-TASK024_AUTHORIZED = NO
+NORMAL_STAGE08_AUTHORIZED = YES_TASK_024_ONLY
 TASK025_AUTHORIZED = NO
-TASK023_EXECUTED = NO
 TASK024_EXECUTED = NO
 TASK025_EXECUTED = NO
 IMPLEMENTATION_EVIDENCE_CREATED = NO
 IMPLEMENTATION_CHECKPOINT_CREATED = NO
 STAGE09_DECISION = NOT_EVALUATED
 STAGE10_DECISION = NOT_EVALUATED
-NEXT_STEP = CREATE_AND_VALIDATE_POST_CHECKPOINT_SEALED_ENVELOPE_THEN_STOP_BEFORE_STAGE08
+NEXT_STEP = CREATE_AND_VALIDATE_SEALED_TASK024_ENVELOPE_THEN_STOP_BEFORE_STAGE08
 BLOCKER = NONE
 ```

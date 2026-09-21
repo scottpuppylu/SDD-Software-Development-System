@@ -1,0 +1,81 @@
+{
+  "request_summary": {
+    "stage_id": "07",
+    "stage_name": "PRE_IMPLEMENTATION_GATE",
+    "artifact_paths": [
+      ".sdd/state/authority-state.yaml",
+      ".sdd/state/project-state.yaml",
+      "AGENTS.md",
+      "docs/Design.md",
+      "docs/PRD.md",
+      "docs/spec.md",
+      "tasks.md"
+    ],
+    "semantic_input_keys": [
+      "GIT_READINESS",
+      "REPOSITORY_STRUCTURE"
+    ],
+    "has_stage_instructions": true
+  },
+  "result": {
+    "status": "COMPLETED",
+    "artifacts": {
+      "docs/handoff/pre-implementation-gate-report.md": "# Stage 07 Pre-Implementation Gate Report — TASK-024\n\n## 1. Decision\n\n```text\nSTAGE_ID = 07\nSTAGE_NAME = PRE_IMPLEMENTATION_GATE\nRESULT = PASS\nCLASSIFICATION = null\nIMPLEMENTATION_AUTHORIZATION = GRANTED\nAUTHORIZED_TASK = TASK-024\nUNAUTHORIZED_TASKS = TASK-025\nAUTHORIZED_NEXT_OPERATION = SEALED_STAGE08_TASK_024_IMPLEMENTATION\nNEXT_STAGE = 08\n```\n\nThis is a fresh constitution-aware Stage 07 decision evaluated from entry baseline `3ca2e16c36afe1a3162438e4d04bd95fc98a1a0f` on branch `telemetry-measurement-v2`. It authorizes only TASK-024. It does not implement TASK-024, execute TASK-025, create implementation evidence or a checkpoint, or execute Stage 08, Stage 09, or Stage 10.\n\n## 2. Readiness and governing authority\n\n- `.sdd/stages.yaml` and `.sdd/instructions/stage-07.md` identify Stage 07 as the sole owner of `PRE_IMPLEMENTATION_GATE_DECISION`.\n- Entry HEAD matched the required baseline and the worktree was clean. Runtime is Python `3.14.7`; pytest is `9.1.1`.\n- `tests/test_v117_machine_task_contract.py` passed 10 tests. This is gate tooling evidence only, not TASK-024 implementation verification.\n- Current Product, Spec, Design, Stage 05 governance, and Stage 06 task decomposition are present. `.sdd/state/authority-state.yaml` has no unresolved authority conflict or blocking TBD affecting TASK-024.\n- TASK-023 is `IMPLEMENTATION_QUALIFIED` at checkpoint `22b2baf8a98aa0bbc3220e5407159331b9062680`, with state finalization at this entry baseline. Its authority is preserved rather than reopened.\n\n## 3. TASK-024 contract, eligibility, and scope\n\nThe authoritative contract is `tasks.md`, `TASK-024 - Provider change, fallback, and default-promotion conformance gate`. Its purpose is to prevent a provider, model, or adapter addition, switch, fallback, upgrade, or default promotion unless current evidence proves Architecture Constitution and required capability conformance.\n\nDependencies are `T007`, `T021`, `T022`, and `T023`; all are implementation-qualified with repository-backed evidence. The declared graph is acyclic and TASK-024 is DAG-eligible. TASK-024 has no implementation qualification record. TASK-025 is pending, unexecuted, and outside this authorization.\n\nThe bounded implementation scope is versioned provider/adapter capability manifests, common conformance evidence, mandatory architecture/lifecycle/authority/sandbox/security/budget/capability/evidence/approval checks, stable default-selection identity, explicit change/fallback/promotion decisions, and fail-closed integration at provider construction or routing.\n\nThe task does not authorize a generic CodingWorker protocol or registry redesign, replacing `Stage08CodexRunner`, cross-provider in-progress attempt handoff, cross-host resume, model-routing policy, Work cockpit integration, Remote Sandbox, Zero-DevEnv, new real providers, changing model defaults, live API calls, deployment, or upstream authority changes. Those remain outside this V1 task and, where applicable, belong to a later governed upgrade wave.\n\n## 4. Provider conformance, fallback, and promotion rules\n\n`DES-006`, `DES-019`, AGENTS.md section 14, and `SDD_AGENT_ADAPTER_CONTRACT.md` require SDD to remain controller/governor while provider adapters remain replaceable and non-authoritative. The task contract permits a versioned capability manifest only for supported contract fields: provider and model identity, bounded structured request/result behavior, normalized error/timeout/interruption behavior, sandbox and capability expectations, trustworthy usage/accounting support, verification independence, and security/governance compatibility.\n\nA provider is eligible only when durable, current evidence covers every mandatory capability and control for its requested role. The evidence and decision must bind provider identity, manifest version, conformance checks and results, prior/default identity, proposed fallback or promotion, Human Approval reference where required, and evidence/checkpoint linkage. Availability, configuration, authentication, cost, speed, model recency, or benchmark status alone is insufficient.\n\nMissing, ambiguous, stale, failed, incompatible, or environment-mismatched manifest/evidence; a weaker fallback; a default mutation without a governed decision; or declared-versus-observed adapter identity mismatch must fail closed before provider dispatch. A conformant fallback preserves the same request and envelope, records the decision, and may not reuse stale authorization. Cross-provider continuation of an in-progress attempt is not authorized by TASK-024.\n\n## 5. Preservation obligations\n\n- TASK-023 remains the exclusive resource, budget, reservation, accounting, runtime/resource-limit, and exhaustion-policy owner. A provider change must retain provider/model/runtime identity for its policy and may not bypass limits, accounting, exhaustion routing, or approval-bound resource changes.\n- TASK-021 remains the owner of pre-dispatch identity/authentication/authorization, default deny, exact tool validation, audit, and Human Approval bindings. TASK-022 remains the owner of minimum disclosure, prompt-injection containment, and filesystem/network/credential/secret security boundaries. A provider unable to meet these controls fails conformance.\n- TASK-026's provider-neutral Work Package, bounded worker, controller-owned local FAST/TARGET/FULL verification, and Stage 09 boundary remain unchanged.\n- TASK-027's phase state, SAFE_PAUSE, provenance, exact resume, and no-duplicate-work guarantees remain unchanged. TASK-024 neither owns nor authorizes cross-provider continuation of a live attempt.\n- TASK-028 remains the sole observational Stage 08 telemetry owner. Its truth classes and deterministic event identities are preserved; conformance/promotion policy cannot turn telemetry into lifecycle authority or create another measurement pipeline.\n\n## 6. Exact allowed files and machine verification\n\nThe exact TASK-024 Stage 08 write scope is:\n\n- `sdd_orchestrator/provider_conformance.py` — cohesive versioned manifest, evidence, and conformance decision module.\n- `sdd_orchestrator/providers.py` — bounded provider construction/routing enforcement point.\n- `sdd_orchestrator/cli.py` — thin authorized composition/wiring only.\n- `sdd_orchestrator/runner.py` — governed provider-dispatch integration only.\n- `sdd_orchestrator/system_controller.py` — bounded system orchestration integration only.\n- `tests/test_provider_conformance.py` — dedicated positive and negative conformance proof.\n\nNo other file is authorized. `tests/test_provider_conformance.py` is absent but expressly authorized for creation. The other command paths exist:\n\n```text\ntests/test_provider_conformance.py = ABSENT_BUT_AUTHORIZED_FOR_CREATION\ntests/test_m4_reasoning_pipeline.py = PRESENT\ntests/test_m41_atomic_executor.py = PRESENT\ntests/test_v114_provider_schema.py = PRESENT\nALL_VERIFICATION_PATHS_MACHINE_READY = YES\nMACHINE_EXECUTION_READY = YES\n```\n\nThe exact authoritative command is:\n\n```text\n.\\.venv\\Scripts\\python.exe -m pytest -q tests/test_provider_conformance.py tests/test_m4_reasoning_pipeline.py tests/test_m41_atomic_executor.py tests/test_v114_provider_schema.py\n```\n\nIt must prove conformant and non-conformant additions, upgrade/switch/fallback/promotion decisions, stale evidence and changed environment rejection, cost-only selection rejection, prior-default preservation, and no provider invocation or default mutation before gate success. No verification obligation was substituted or removed. Implementation verification is `NOT RUN` at this gate.\n\n## 7. Architecture Constitution evaluation\n\nThese are task-contract authorization findings, not implementation or Stage 09 proof.\n\n| Criterion | Result | Basis |\n| --- | --- | --- |\n| `ARCH-AC-01` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | SDD remains the controller/governor; provider adapters cannot create authority. |\n| `ARCH-AC-02` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Conformance is a cohesive module; CLI, runner, and controller changes are bounded integration points. |\n| `ARCH-AC-03` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Versioned common conformance strengthens provider independence without a registry redesign. |\n| `ARCH-AC-04` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Current conformance, security, resource, and approval checks precede eligible provider dispatch. |\n| `ARCH-AC-05` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Missing or incompatible manifest/evidence and unapproved default mutation deny dispatch. |\n| `ARCH-AC-06` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Provider compatibility must retain TASK-023 resource bounds and TASK-022 sandbox/security bounds. |\n| `ARCH-AC-07` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | A fresh Stage 07 authorization precedes only this atomic Stage 08 task; Stage 09/10 remain separate. |\n| `ARCH-AC-08` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Evidence, approval, audit, minimum disclosure, and security remain non-bypassable. |\n| `ARCH-AC-09` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Provider change, fallback, and promotion become implementation-ready only through current conformance evidence and governed decisions. |\n\nNo applicable requirement is missing, contradictory, or unverifiable at the Stage 07 contract boundary.\n\n## 8. Authorization boundary and final state\n\nAfter this Stage 07 report, run artifact, and state are checkpointed, a fresh TASK-024 sealed execution envelope must be assembled and validated against the complete execution-bound HEAD. It binds TASK-024, this baseline, current task and authority digests, finalized dependency state, TASK-023 policy preservation, exact allowed files and forbidden scope, the exact verification command, acceptance obligations, provider-conformance requirements, Architecture Constitution evaluation, runtime, and TASK-021/TASK-022 Human Approval/security authority. A mismatch blocks Stage 08.\n\n```text\nPRE_IMPLEMENTATION_GATE_DECISION = PASS\nEVALUATED_BASELINE = 3ca2e16c36afe1a3162438e4d04bd95fc98a1a0f\nTARGET_TASK = TASK-024\nTASK_DEPENDENCIES = T007,T021,T022,T023\nTASK_DEPENDENCY_STATUS = ALL_REPOSITORY_QUALIFIED_AND_STATE_FINALIZED\nTASK_CONTRACT_STATUS = VALID_COMPLETE_BOUNDED_MACHINE_READY\nALL_VERIFICATION_PATHS_MACHINE_READY = YES\nMACHINE_EXECUTION_READY = YES\nNORMAL_STAGE08_AUTHORIZED = YES_TASK_024_ONLY\nTASK025_AUTHORIZED = NO\nTASK024_EXECUTED = NO\nTASK025_EXECUTED = NO\nIMPLEMENTATION_EVIDENCE_CREATED = NO\nIMPLEMENTATION_CHECKPOINT_CREATED = NO\nSTAGE09_DECISION = NOT_EVALUATED\nSTAGE10_DECISION = NOT_EVALUATED\nNEXT_STEP = CREATE_AND_VALIDATE_SEALED_TASK024_ENVELOPE_THEN_STOP_BEFORE_STAGE08\nBLOCKER = NONE\n```\n"
+    },
+    "result": "PASS",
+    "classification": null,
+    "remediation_reasons": [],
+    "convergence_tasks": [],
+    "metadata": {
+      "target_task": "TASK-024",
+      "authorized_baseline": "3ca2e16c36afe1a3162438e4d04bd95fc98a1a0f",
+      "machine_execution_ready": true,
+      "all_verification_paths_machine_ready": true,
+      "implementation_executed": false,
+      "approval_class": "A0",
+      "approval_reference": "approval-matrix:A0:stage-07",
+      "security_human_approval_preserved": true,
+      "governance": {
+        "envelope_id": "25b9422839bda9c46c0e893a32e1291dab83c92187d2eaf92fb7238130217c26",
+        "pre_dispatch": {
+          "envelope_id": "25b9422839bda9c46c0e893a32e1291dab83c92187d2eaf92fb7238130217c26",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "approval-matrix:A0:stage-07",
+          "action": "REASONING_STAGE_DISPATCH",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "docs/handoff/pre-implementation-gate-report.md"
+          ],
+          "failure_route": null,
+          "security": null
+        },
+        "post_dispatch": {
+          "envelope_id": "25b9422839bda9c46c0e893a32e1291dab83c92187d2eaf92fb7238130217c26",
+          "outcome": "PASS",
+          "observed_scope": [
+            "docs/handoff/pre-implementation-gate-report.md"
+          ],
+          "observed_effects": [
+            "PROPOSED_OUTPUT"
+          ],
+          "evidence_references": [
+            "pending-run-record:b183e4ef5ad65f9b866bb61a"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "approval-matrix:A0:stage-07",
+          "security": null
+        }
+      }
+    }
+  },
+  "transition": {
+    "stage_id": "07",
+    "result": "PASS",
+    "classification": null,
+    "next": "08",
+    "implementation_authorization": true,
+    "release_authorization": false
+  }
+}
