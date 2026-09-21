@@ -1,10 +1,10 @@
 schema_version: '2.0'
 current_stage: 08
 current_branch: null
-last_completed_task: T024
+last_completed_task: T025
 current_task: null
 next_task: null
-last_verified_commit: 7b1707570a3afa554ee97790e6748501af7a823a
+last_verified_commit: 0f60e06c978e6014dde7a4585a250b61fd4b38a6
 test_status:
   overall: PASS
   required_checks: []
@@ -381,6 +381,21 @@ task_qualifications:
       sequence: 27
       recorded_at: 20260921T010928.181495Z
       source_head: 7b1707570a3afa554ee97790e6748501af7a823a
+  T025:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 0f60e06c978e6014dde7a4585a250b61fd4b38a6
+    evidence:
+      path: .sdd/evidence/20260921T013843.150630Z-T025.json
+      kind: ORDINARY_STAGE08
+      record_sha256: a87fd04039c38239d5f8bd0ad90679eb394a1c8ddb9520bb36918032ab5699dc
+      repository_commit: 0f60e06c978e6014dde7a4585a250b61fd4b38a6
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-T025-a87fd04039c3
+      sequence: 28
+      recorded_at: 20260921T013843.150630Z
+      source_head: 0f60e06c978e6014dde7a4585a250b61fd4b38a6
   T026:
     status: IMPLEMENTATION_QUALIFIED
     implementation_checkpoint: fea7db462333f4ad85b1ba7732d7487429f305a2
