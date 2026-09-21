@@ -777,3 +777,77 @@ NO
 NEXT_STEP =
 FRESH_STAGE07_PRE_IMPLEMENTATION_GATE_FOR_TASK-026_ONLY
 ```
+
+## 10. Stage09 machine-verification execution contract
+
+### 10.1 Authority and repair classification
+
+This section is a narrowly bounded Stage06 `EXECUTION_DECOMPOSITION` repair. Stage06 owns the executable verification decomposition recorded in `tasks.md`; Stage09 exclusively owns the later `VERIFICATION_DECISION`. This repair does not alter Product, Technical Contract, Design, Agent Governance, task objective, dependency, acceptance, implementation, evidence, Recovery Gate, or release authority.
+
+The repaired gap is `GOVERNANCE_CONTRACT_GAP`: the prior Stage09 entry stopped with `INCOMPLETE` because no exact repository-authoritative machine-verification command existed. That historical result remains unchanged. This section creates no Stage09 result, executes no Stage09 qualification, reopens no task, and allocates no task ID.
+
+The Current Implementation Recovery Gate `PASS` at commit `2d70c439ebbefe30c917116ea16b886747645bb4` remains the required Stage09 entry authority. Its result is preserved and is not rerun or reinterpreted by this repair.
+
+### 10.2 Entry prerequisites
+
+Before executing the commands below, Stage09 must independently establish all configured entry facts against one exact baseline:
+
+- the Recovery Gate remains `PASS` and applicable;
+- the implementation graph is complete, every required task qualification and dependency is intact, and no implementation task or transaction is active;
+- the branch, HEAD, runtime, authority package, worktree, index, evidence, checkpoints, state finalization, and recovery state are current and internally coherent;
+- no active `SAFE_PAUSE`, remediation-required phase, execution lock, unexplained dirty path, or unresolved recovery obligation exists; and
+- Stage10, release, deployment, and Upgrade Gate work have not started.
+
+Missing, stale, ambiguous, conflicting, or unverifiable entry input makes Stage09 `INCOMPLETE`; it is not normalized into a test failure or a best-effort run.
+
+### 10.3 Authoritative machine-verification commands
+
+Execute each command exactly and independently from the repository root, without shell chaining or substitution, before creating the Stage09 report:
+
+1. `.\.venv\Scripts\python.exe -m pytest -q tests`
+2. `git diff --check`
+3. `git diff --cached --check`
+4. `git status --porcelain=v1`
+
+The pytest command is the integrated repository-local suite, not a promotion of any one historical task command. It includes all existing unit, contract, integration, regression, lifecycle, security, resource-policy, provider-conformance, DecisionGateway, Stage08 optimization, recovery, telemetry, and compatibility tests under `tests/`. The Git commands prove that the entry verification baseline has no whitespace-error diff, staged whitespace-error diff, or unexplained tracked/untracked change. Command 4 passes only with empty output.
+
+The machine suite is necessary but not sufficient for Stage09 `PASS`. Green tests cannot create requirement authority or substitute for the required bidirectional traceability, evidence/checkpoint integrity, repository integrity, Architecture Constitution, governance regression, or authority-deviation review.
+
+### 10.4 Coverage mapping
+
+| Required Stage09 category | Machine-evidence coverage in the integrated suite | Additional Stage09 review required |
+| --- | --- | --- |
+| Implementation graph, lifecycle, task completion, state machine, and convergence routing | `test_governed_state.py`, `test_orchestrator.py`, `test_runner.py`, `test_m10_convergence_auto.py`, Stage07/runtime reconciliation tests | Validate all current qualification records, dependencies, active cursors, and required traceability against authority and Git. |
+| Governance, authorization, default deny, Human Approval, and audit | `test_governance_envelope.py`, `test_m4_reasoning_pipeline.py`, `test_m41_atomic_dispatch.py`, `test_m41_atomic_executor.py`, `test_m7_decision_gateway.py` | Confirm current envelopes, approvals, decision records, and audit/evidence bindings remain applicable. |
+| Security, minimum disclosure, injection containment, filesystem/network/secret bounds | `test_security_policy.py`, `test_stage08_work_package.py`, `test_v1118_safe_pause_and_evidence.py` | Review current security authority and any recorded deviations or sensitive-data findings. |
+| Resource policy, truth classes, reservation/accounting, limits, and exhaustion | `test_resource_policy.py`, `test_m42_evaluation_metrics.py`, telemetry measurement/model tests | Confirm TASK-023 evidence and current provider/model/runtime identity remain bound and no unavailable value is treated as zero. |
+| Provider conformance, default preservation, fallback, and promotion | `test_provider_conformance.py`, `test_m41_atomic_executor.py`, `test_v114_provider_schema.py`, provider telemetry-envelope tests | Confirm TASK-024 evidence, manifest/evidence identity, approval, security, and resource-policy compatibility. |
+| DecisionGateway fixture isolation and approval/denial/fail-closed behavior | `test_m7_decision_gateway.py` | Confirm TASK-025 changed no production DecisionGateway code and durable A2 coverage/evidence remains intact. |
+| Stage08 Work Package and FAST/TARGET/FULL local verification | `test_stage08_work_package.py`, `test_stage08_verification_levels.py`, `test_m6_codex_adapter.py`, `test_v1113_codex_stdin_prompt.py` | Confirm TASK-026 checkpoint/evidence and local authoritative-verification ownership. |
+| Durable phase state, SAFE_PAUSE, precise resume, provenance, and no duplicate work | `test_stage08_phase_resume.py`, `test_m5_git_recovery.py`, `test_v1118_safe_pause_and_evidence.py` | Confirm TASK-027 journals are complete historical attempts with no active recovery obligation. |
+| Observational telemetry, deterministic identity, truth classes, storage, and de-duplication | `test_telemetry_*.py` | Confirm TASK-028 evidence and telemetry remain observational and do not acquire lifecycle authority. |
+| Architecture Constitution `ARCH-AC-01` through `ARCH-AC-09` | Cross-cutting governance, security, resource, provider, lifecycle, recovery, Stage08, and telemetry tests above | Perform explicit rule-by-rule integrated qualification against current code, authority, evidence, and repository state. |
+| Evidence/checkpoint immutability and repository integrity | `test_governed_state.py`, `test_m5_git_recovery.py`, `test_m6_codex_adapter.py`, `test_v1118_safe_pause_and_evidence.py`; Git commands 2-4 | Validate every required evidence blob, referenced commit, checkpoint, separate finalization commit, Git reachability, and historical/nonqualifying-record preservation. |
+
+The full `tests` tree was selected only after repository inventory established that all 53 current test files are local and collection-safe, and that narrower task suites omit cross-task and legacy regression coverage required by Stage09. Stage06 path-readiness inspection collected 598 tests without executing them. No live external API is part of the contract; provider/network behavior in the suite must remain substituted, mocked, or otherwise locally bounded.
+
+### 10.5 Result and evidence criteria
+
+Stage09 may return `PASS` only when all four commands execute with their required outcomes, every applicable configured Stage09 category passes, bidirectional traceability is complete, all required evidence/checkpoint/state/repository integrity checks pass, `ARCH-AC-01` through `ARCH-AC-09` pass integrated qualification, no unresolved authority deviation exists, and `docs/handoff/verification-report.md` truthfully binds the exact baseline, commands, outputs, duration, counts, findings, and Stage10 eligibility consequence.
+
+Stage09 returns `FAIL` only after qualifying verification executed and a required criterion was not satisfied:
+
+- a confirmed code/test/behavior/evidence defect under clear authority is `IMPLEMENTATION_GAP` and routes to a bounded convergence task followed by the normal applicable Stage07/Stage08 path and a fresh Stage09 run;
+- a confirmed authority contradiction is `AUTHORITY_CONTRACT_CONFLICT` and routes to the affected authoritative owner stage(s), propagates affected scope, and requires the applicable downstream gate reruns before implementation.
+
+Stage09 returns `INCOMPLETE` when a required command cannot legally or completely execute, the environment/toolchain or command contract is missing/stale, a required input or proof is absent/ambiguous/unverifiable, or the outcome cannot truthfully be classified. Environment/tooling failures route to the applicable runtime owner without changing implementation. A stale Stage09 verification command routes to Stage06 `EXECUTION_DECOMPOSITION`. Missing evidence or integrity input routes to its owning lifecycle domain; confirmed invalid implementation evidence is classified under the Stage09 failure rules rather than repaired in place.
+
+Stage09 must preserve the exact command output and the non-machine review references needed to reproduce the decision. It must not modify production or tests, silently repair a failure, invent a green alternative, reinterpret an unavailable result as success, or use future Upgrade Wave capability as a V1 prerequisite.
+
+### 10.6 Checkpoint, state, and hard-stop rules
+
+A completed Stage09 decision must be recorded in `docs/handoff/verification-report.md`, the protected `VERIFICATION_DECISION` artifact owned by Stage09. The decision becomes repository-backed only through a dedicated Stage09 report checkpoint that does not amend implementation or Recovery Gate commits. If the repository-owned lifecycle state requires a separate update after that checkpoint, it must be a separate state-finalization commit and may advance no farther than the proven Stage09 result.
+
+Only a repository-backed Stage09 `PASS` makes Stage10 entry eligible. `FAIL` and `INCOMPLETE` do not. Stage09 execution must stop before Stage10, V1 tagging/release, deployment, Upgrade Gate #2, or Upgrade Wave work unless a later operation supplies their separate authority.
+
+This contract repair itself requires only the Stage06 `tasks.md` authority checkpoint and its Stage06 run audit. It requires no implementation-state mutation or separate state-finalization commit. After that checkpoint, Stage09 may be freshly re-entered from the new complete baseline; Stage09 is not executed by this repair.

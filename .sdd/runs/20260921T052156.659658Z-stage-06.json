@@ -1,0 +1,47 @@
+{
+  "request_summary": {
+    "stage_id": "06",
+    "stage_name": "IMPLEMENTATION_TASKS",
+    "operation": "STAGE09_MACHINE_VERIFICATION_CONTRACT_REPAIR",
+    "baseline": "2d70c439ebbefe30c917116ea16b886747645bb4",
+    "artifact_paths": [
+      "tasks.md"
+    ]
+  },
+  "result": {
+    "status": "COMPLETED",
+    "classification": "GOVERNANCE_CONTRACT_GAP_REPAIRED",
+    "owner": "STAGE06_EXECUTION_DECOMPOSITION",
+    "changed_authority": "STAGE09_MACHINE_VERIFICATION_EXECUTION_CONTRACT_ONLY",
+    "authoritative_commands": [
+      ".\\.venv\\Scripts\\python.exe -m pytest -q tests",
+      "git diff --check",
+      "git diff --cached --check",
+      "git status --porcelain=v1"
+    ],
+    "machine_readiness": {
+      "pytest_collection": "PASS",
+      "test_files": 53,
+      "collected_tests": 598,
+      "test_root": "tests",
+      "runtime": "Python 3.14.7",
+      "pytest": "9.1.1"
+    },
+    "preservation": {
+      "prior_stage09_result": "INCOMPLETE",
+      "recovery_gate": "PASS",
+      "implementation_graph_reopened": false,
+      "production_code_changed": false,
+      "tests_changed": false,
+      "stage09_executed": false,
+      "stage10_executed": false,
+      "upgrade_gate_2_started": false
+    }
+  },
+  "transition": {
+    "stage_id": "06",
+    "result": "COMPLETED",
+    "next": "09",
+    "stage09_reentry_eligible": true
+  }
+}
