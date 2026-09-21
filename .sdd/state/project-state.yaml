@@ -4,9 +4,9 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: 08
-  current_stage_name: IMPLEMENTATION_RUNNER
-  last_completed_stage: '07'
+  current_stage: '09'
+  current_stage_name: VERIFICATION_AND_CONVERGENCE
+  last_completed_stage: '08'
   next_action: RUN_STAGE
 stages:
   '01':
@@ -31,8 +31,8 @@ stages:
     status: DONE
     result: PASS
   08:
-    status: IN_PROGRESS
-    result: null
+    status: DONE
+    result: COMPLETED
   09:
     status: TODO
     result: null
@@ -40,7 +40,7 @@ stages:
     status: TODO
     result: null
 authorizations:
-  implementation: true
+  implementation: false
   release: false
 blocking:
   is_blocked: false
@@ -57,8 +57,8 @@ artifacts:
   handoff_report: null
 git:
   branch: telemetry-measurement-v2
-  head_commit: 88c40fa069bf817ca6293611fd970768276ea122
-  last_verified_commit: b58e79883b41904e710801191997c9729f26e8bf
+  head_commit: 557565b8203876bbead31118443db401d9d10054
+  last_verified_commit: 0f60e06c978e6014dde7a4585a250b61fd4b38a6
 provenance:
   current_authority_package:
     status: APPROVED_CURRENT_PROSPECTIVE_AUTHORITY
@@ -70,10 +70,10 @@ provenance:
     - '05'
     - '06'
   historical_phase01_06_reconstruction: NOT_AUTHORIZED
-  existing_implementation_adopted: false
+  existing_implementation_adopted: true
   retroactive_stage07_pass_created: false
   stage08_authorization_created: true
   implementation_conformance_claimed: false
   test_pass_claimed: false
-  implementation_recovery_gate_result: NOT_EVALUATED
+  implementation_recovery_gate_result: PASS
   stage09_decision: NOT_EVALUATED
