@@ -1,0 +1,82 @@
+{
+  "request_summary": {
+    "stage_id": "07",
+    "stage_name": "PRE_IMPLEMENTATION_GATE",
+    "artifact_paths": [
+      ".sdd/state/authority-state.yaml",
+      ".sdd/state/project-state.yaml",
+      "AGENTS.md",
+      "docs/Design.md",
+      "docs/PRD.md",
+      "docs/spec.md",
+      "tasks.md"
+    ],
+    "semantic_input_keys": [
+      "GIT_READINESS",
+      "REPOSITORY_STRUCTURE"
+    ],
+    "has_stage_instructions": true
+  },
+  "result": {
+    "status": "COMPLETED",
+    "artifacts": {
+      "docs/handoff/pre-implementation-gate-report.md": "# Stage 07 Pre-Implementation Gate Report — TASK-025\n\n## 1. Decision\n\n```text\nSTAGE_ID = 07\nSTAGE_NAME = PRE_IMPLEMENTATION_GATE\nRESULT = PASS\nCLASSIFICATION = null\nIMPLEMENTATION_AUTHORIZATION = GRANTED\nAUTHORIZED_TASK = TASK-025\nUNAUTHORIZED_TASKS = TASK-001_THROUGH_TASK-024,TASK-026_THROUGH_TASK-028\nAUTHORIZED_NEXT_OPERATION = SEALED_STAGE08_TASK025_FIXTURE_REPAIR_ONLY\nNEXT_STAGE = 08\n```\n\nThis is a fresh constitution-aware Stage 07 decision from entry baseline `5c966bd0157c97aa0accb55a66256bab63fb9c5a` on branch `telemetry-measurement-v2`. It authorizes only TASK-025. It does not implement TASK-025, execute Stage 08, Stage 09, or Stage 10, create implementation evidence or a checkpoint, begin Upgrade Gate #2, or alter any upstream authority.\n\n## 2. Preflight and governing authority\n\n- `.sdd/stages.yaml` and `.sdd/instructions/stage-07.md` identify Stage 07 as the sole owner of `PRE_IMPLEMENTATION_GATE_DECISION`.\n- Entry HEAD exactly matched `5c966bd0157c97aa0accb55a66256bab63fb9c5a`; the worktree was clean. Runtime is Python `3.14.7`; pytest is `9.1.1`.\n- `tests/test_v117_machine_task_contract.py` passed `10` tests. This is gate tooling evidence only, not TASK-025 implementation verification.\n- Current Product, Spec, Design, Stage 05 governance, and Stage 06 decomposition authority are present. `.sdd/state/authority-state.yaml` records no unresolved authority conflict or blocking TBD.\n- TASK-024 is `IMPLEMENTATION_QUALIFIED` at checkpoint `7b1707570a3afa554ee97790e6748501af7a823a`, with state finalization at the entry baseline. Its evidence and finalization are preserved rather than reopened.\n\n## 3. TASK-025 contract, eligibility, and repair classification\n\nThe authoritative contract is `tasks.md`, `TASK-025 - Decision Gateway fixture isolation from durable repository decisions`. Its sole dependency is `TASK-006`, which is repository-qualified at immutable checkpoint `0f3449d62ec301a41e8fd3a58edd824ef84a19a9` with bound evidence `.sdd/evidence/20260909T004005.844815Z-T006.json`. The declared dependency graph is acyclic; TASK-025 is DAG-eligible, has no implementation-qualification entry, and has not been executed.\n\nTASK-025 is `TEST_FIXTURE_REPAIR_AND_DETERMINISTIC_TEST_CONTRACT_COMPATIBILITY_REPAIR_ONLY`, not new feature work. Its exact objective is to make test initial state explicit so the two legitimate repository-backed A2 decisions do not violate an empty-store assumption. The existing production `DecisionGateway` and the two durable A2 decisions are authoritative behavior and data, not stale fixtures.\n\nThe authorized change is only fixture setup/isolation and assertions in `tests/test_m7_decision_gateway.py`: tests requiring an empty store must create one explicitly, while separate coverage must continue to load the durable A2 decisions truthfully. The independent-scope rejection assertion must compare against its controlled initial state, so it still detects a newly persisted decision. Production `DecisionGateway` behavior, both A2 records, decision-store migration, broader cleanup, state/evidence mutation, and all Stage 07/08/09/10 actions remain outside this task.\n\n## 4. DecisionGateway contract and preservation\n\n`DES-005` requires durable append-preserving `HD-*` records, explicit human authority, stable identity/versioning, pending blocking, named-condition-only approval, rejection blocking, and no unblocking on collision, ambiguity, stale target, or unauthorized actor. `DES-019` classifies the gateway as a bounded governance spoke rather than an alternate authority plane.\n\nThe mismatch is repository-backed: `tests/test_m7_decision_gateway.py` copies `.sdd` into a temporary repository and then its independent-scope test asserts `DecisionGateway.list()` is empty. The copied source legitimately includes `HD-A2-ARCH-IDENTIFIER-RESOLUTION-001.yaml` and `HD-A2-PRD-NAMESPACE-CORRECTION-002.yaml`. Therefore the test assumption is stale; neither production code nor durable decision content may be weakened to obtain a green result.\n\nTASK-025 must preserve explicit approval and denial semantics, Human Approval, auditability, deterministic authorization state, scoped blocking, append-only history, collision/path safety, owner routing, default deny, and fail-closed behavior. It cannot create implicit approval, model self-approval, a Stage-governance bypass, a resource-policy bypass, or a provider-conformance bypass.\n\n## 5. Exact scope and machine verification\n\nThe exact Stage 08 write scope is:\n\n- `tests/test_m7_decision_gateway.py` — isolated temporary fixture and bounded assertions only.\n\nNo production file, authority artifact, state file, evidence file, durable decision, Stage 09/10 artifact, telemetry file, provider file, or future-upgrade file is authorized. This single file is necessary and sufficient for the declared fixture-only repair.\n\nThe exact authoritative verification command is:\n\n```text\n.\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m7_decision_gateway.py\n```\n\n`tests/test_m7_decision_gateway.py` exists at the entry baseline and is an explicitly authorized write path. No verification path is absent, unauthorized, substituted, or silently removed. The command remains the entire TASK-025 proof obligation and is `NOT RUN` at this Stage 07 gate.\n\n```text\nALL_VERIFICATION_PATHS_MACHINE_READY = YES\nMACHINE_EXECUTION_READY = YES\nTASK025_ACCEPTANCE = FIXTURE_ALIGNMENT; DURABLE_A2_LOADING; CONTROLLED_EMPTY_STORE;\n                     APPROVAL_DENIAL_AND_FAIL_CLOSED_PRESERVATION; TEST_ONLY_SCOPE;\n                     NO_STAGE09_OR_STAGE10_LEAKAGE\n```\n\n## 6. Preservation boundary\n\n- TASK-021 pre-dispatch identity/authentication/authorization, default-deny capability controls, exact tool validation, Human Approval and audit binding remain intact.\n- TASK-022 minimum disclosure, sensitive-data, prompt-injection, filesystem, network, credential, and secret controls remain intact.\n- TASK-023 resource/budget/runtime/process policy and deterministic exhaustion handling remain untouched.\n- TASK-024 provider conformance, fail-closed dispatch, governed promotion/fallback, and default-provider preservation remain untouched.\n- TASK-026 bounded provider-neutral Work Package and controller-owned FAST/TARGET/FULL verification remain intact.\n- TASK-027 durable phase state, SAFE_PAUSE, provenance and precise resume remain intact.\n- TASK-028 observational telemetry, deterministic event identity, truth classes, and existing telemetry pipeline remain intact.\n- Stage 09 verification decision, Stage 10 release decision, V1 closure, Upgrade Gate #2, and all Upgrade Wave work (provider-agnostic registry/routing, Work cockpit, remote sandbox, Zero-DevEnv, cross-host handoff, self-upgrade and migration/rollback automation) are excluded.\n\n## 7. Architecture Constitution evaluation\n\nThese are task-contract authorization findings only; they are not implementation or Stage 09 proof.\n\n| Criterion | Result | Basis |\n| --- | --- | --- |\n| `ARCH-AC-01` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | The repair changes a test fixture only; SDD remains controller/governor. |\n| `ARCH-AC-02` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | The bounded test remains isolated from production/harness responsibility. |\n| `ARCH-AC-03` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | No provider, worker, or model behavior changes. |\n| `ARCH-AC-04` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Explicit human decision and lifecycle gating semantics remain test obligations. |\n| `ARCH-AC-05` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | No implicit approval or capability expansion is authorized. |\n| `ARCH-AC-06` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Existing TASK-022/023 runtime, security, and resource bounds are unaffected. |\n| `ARCH-AC-07` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Fresh Stage 07 precedes one atomic test-only task; Stage 09/10 remain distinct. |\n| `ARCH-AC-08` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | Durable evidence, Human Approval, audit, and security remain non-bypassable. |\n| `ARCH-AC-09` | `PASS_TASK_CONTRACT_CONFORMANCE_ONLY_NOT_IMPLEMENTATION_PROOF` | TASK-024 provider-conformance results are preserved without modification. |\n\nNo applicable requirement is missing, contradictory, or unverifiable at this gate's task-contract boundary.\n\n## 8. Authorization boundary and required next action\n\nAfter this report, its Stage 07 run artifact, and project-state transition are checkpointed, a new TASK-025 sealed execution envelope must be assembled and validated against the complete execution-bound HEAD. It must bind the current baseline, TASK-025 contract, TASK-006 qualification, exact one-file scope, exact command, fixture-only acceptance obligations, `DES-005`/`DES-019`, Human Approval semantics, Architecture Constitution evaluation, runtime, and preserved qualifying state.\n\n```text\nPRE_IMPLEMENTATION_GATE_DECISION = PASS\nEVALUATED_BASELINE = 5c966bd0157c97aa0accb55a66256bab63fb9c5a\nTARGET_TASK = TASK-025\nTASK_DEPENDENCIES = T006\nTASK_DEPENDENCY_STATUS = ALL_REPOSITORY_QUALIFIED_AND_FINALIZED_WHERE_REQUIRED\nTASK_CONTRACT_STATUS = VALID_COMPLETE_BOUNDED_MACHINE_READY_FIXTURE_REPAIR_ONLY\nALL_VERIFICATION_PATHS_MACHINE_READY = YES\nMACHINE_EXECUTION_READY = YES\nNORMAL_STAGE08_AUTHORIZED = YES_TASK025_ONLY\nTASK025_EXECUTED = NO\nIMPLEMENTATION_EVIDENCE_CREATED = NO\nIMPLEMENTATION_CHECKPOINT_CREATED = NO\nSTAGE09_DECISION = NOT_EVALUATED\nSTAGE10_DECISION = NOT_EVALUATED\nNEXT_STEP = CREATE_AND_VALIDATE_SEALED_TASK025_ENVELOPE_THEN_STOP_BEFORE_STAGE08\nBLOCKER = NONE\n```\n"
+    },
+    "result": "PASS",
+    "classification": null,
+    "remediation_reasons": [],
+    "convergence_tasks": [],
+    "metadata": {
+      "target_task": "TASK-025",
+      "authorized_baseline": "5c966bd0157c97aa0accb55a66256bab63fb9c5a",
+      "all_verification_paths_machine_ready": true,
+      "machine_execution_ready": true,
+      "implementation_executed": false,
+      "task025_authority_classification": "TEST_FIXTURE_REPAIR_ONLY",
+      "approval_class": "A0",
+      "approval_reference": "approval-matrix:A0:stage-07",
+      "security_human_approval_preserved": true,
+      "governance": {
+        "envelope_id": "e982f7e6fe8a10f2a27bbfe338722513dd40ff231c2ed9fdd02265b45e7634a0",
+        "pre_dispatch": {
+          "envelope_id": "e982f7e6fe8a10f2a27bbfe338722513dd40ff231c2ed9fdd02265b45e7634a0",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "approval-matrix:A0:stage-07",
+          "action": "REASONING_STAGE_DISPATCH",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "docs/handoff/pre-implementation-gate-report.md"
+          ],
+          "failure_route": null,
+          "security": null
+        },
+        "post_dispatch": {
+          "envelope_id": "e982f7e6fe8a10f2a27bbfe338722513dd40ff231c2ed9fdd02265b45e7634a0",
+          "outcome": "PASS",
+          "observed_scope": [
+            "docs/handoff/pre-implementation-gate-report.md"
+          ],
+          "observed_effects": [
+            "PROPOSED_OUTPUT"
+          ],
+          "evidence_references": [
+            "pending-run-record:d2225e9c61fc90c6aedf4556"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "approval-matrix:A0:stage-07",
+          "security": null
+        }
+      }
+    }
+  },
+  "transition": {
+    "stage_id": "07",
+    "result": "PASS",
+    "classification": null,
+    "next": "08",
+    "implementation_authorization": true,
+    "release_authorization": false
+  }
+}
