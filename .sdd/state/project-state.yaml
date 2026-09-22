@@ -6,7 +6,7 @@ project:
 lifecycle:
   current_stage: 08
   current_stage_name: IMPLEMENTATION_RUNNER
-  last_completed_stage: 09
+  last_completed_stage: '07'
   next_action: RUN_STAGE
 stages:
   '01':
@@ -32,15 +32,15 @@ stages:
     result: PASS
   08:
     status: IN_PROGRESS
-    result: COMPLETED
+    result: null
   09:
-    status: DONE
-    result: FAIL
+    status: TODO
+    result: null
   '10':
     status: TODO
     result: null
 authorizations:
-  implementation: false
+  implementation: true
   release: false
 blocking:
   is_blocked: false
