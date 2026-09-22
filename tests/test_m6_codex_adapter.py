@@ -50,6 +50,8 @@ class M6CodexAdapterTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name) / "repo"
         shutil.copytree(SOURCE / ".sdd", self.repo / ".sdd")
+        for convergence_file in (self.repo / ".sdd/convergence").glob("TC*.yaml"):
+            convergence_file.unlink()
         (self.repo / ".sdd/evidence/.stage08-pending-evidence-write.yaml").unlink(
             missing_ok=True
         )
@@ -1795,6 +1797,9 @@ class M6CodexAdapterTests(unittest.TestCase):
                 orch = Orchestrator(self.repo)
                 fake = FakeCodex(lambda *_: None)
                 runner = Stage08CodexRunner(orch, codex=fake)
+                before_lifecycle = dict(orch.project_state["lifecycle"])
+                before_stage08 = dict(orch.project_state["stages"]["08"])
+                before_stage09 = dict(orch.project_state["stages"]["09"])
 
                 with patch.object(runner, "execute_one") as execute_one:
                     with self.assertRaisesRegex(
@@ -1805,18 +1810,9 @@ class M6CodexAdapterTests(unittest.TestCase):
 
                 execute_one.assert_not_called()
                 self.assertEqual(fake.prompts, [])
-                self.assertEqual(
-                    orch.project_state["lifecycle"]["current_stage"], "08"
-                )
-                self.assertNotEqual(
-                    orch.project_state["stages"]["08"]["status"], "DONE"
-                )
-                self.assertNotEqual(
-                    orch.project_state["stages"]["08"]["result"], "COMPLETED"
-                )
-                self.assertNotEqual(
-                    orch.project_state["stages"]["09"]["status"], "IN_PROGRESS"
-                )
+                self.assertEqual(orch.project_state["lifecycle"], before_lifecycle)
+                self.assertEqual(orch.project_state["stages"]["08"], before_stage08)
+                self.assertEqual(orch.project_state["stages"]["09"], before_stage09)
 
     def test_run_until_complete_rejects_non_integer_max_tasks_before_execution(self):
         self._write_tasks('''
@@ -1835,6 +1831,9 @@ class M6CodexAdapterTests(unittest.TestCase):
                 orch = Orchestrator(self.repo)
                 fake = FakeCodex(lambda *_: None)
                 runner = Stage08CodexRunner(orch, codex=fake)
+                before_lifecycle = dict(orch.project_state["lifecycle"])
+                before_stage08 = dict(orch.project_state["stages"]["08"])
+                before_stage09 = dict(orch.project_state["stages"]["09"])
 
                 with patch.object(runner, "execute_one") as execute_one:
                     with self.assertRaisesRegex(
@@ -1845,18 +1844,9 @@ class M6CodexAdapterTests(unittest.TestCase):
 
                 execute_one.assert_not_called()
                 self.assertEqual(fake.prompts, [])
-                self.assertEqual(
-                    orch.project_state["lifecycle"]["current_stage"], "08"
-                )
-                self.assertNotEqual(
-                    orch.project_state["stages"]["08"]["status"], "DONE"
-                )
-                self.assertNotEqual(
-                    orch.project_state["stages"]["08"]["result"], "COMPLETED"
-                )
-                self.assertNotEqual(
-                    orch.project_state["stages"]["09"]["status"], "IN_PROGRESS"
-                )
+                self.assertEqual(orch.project_state["lifecycle"], before_lifecycle)
+                self.assertEqual(orch.project_state["stages"]["08"], before_stage08)
+                self.assertEqual(orch.project_state["stages"]["09"], before_stage09)
 
     def test_explicit_done_task_without_checkpoint_does_not_rerun_codex(self):
         self._write_tasks('''
@@ -1896,6 +1886,9 @@ class M6CodexAdapterTests(unittest.TestCase):
 
         fake = FakeCodex(callback)
         runner = Stage08CodexRunner(orch, codex=fake)
+        before_lifecycle = dict(orch.project_state["lifecycle"])
+        before_stage08 = dict(orch.project_state["stages"]["08"])
+        before_stage09 = dict(orch.project_state["stages"]["09"])
 
         result = runner.run_until_complete()
 
@@ -1925,19 +1918,17 @@ class M6CodexAdapterTests(unittest.TestCase):
             )
         )
         runner = Stage08CodexRunner(orch, codex=fake)
+        before_lifecycle = dict(orch.project_state["lifecycle"])
+        before_stage08 = dict(orch.project_state["stages"]["08"])
+        before_stage09 = dict(orch.project_state["stages"]["09"])
 
         with self.assertRaises(NoExecutableTaskError):
             runner.run_until_complete()
 
         self.assertEqual(fake.prompts, [])
-        self.assertEqual(orch.project_state["lifecycle"]["current_stage"], "08")
-        self.assertNotEqual(orch.project_state["stages"]["08"]["status"], "DONE")
-        self.assertNotEqual(
-            orch.project_state["stages"]["08"]["result"], "COMPLETED"
-        )
-        self.assertNotEqual(
-            orch.project_state["stages"]["09"]["status"], "IN_PROGRESS"
-        )
+        self.assertEqual(orch.project_state["lifecycle"], before_lifecycle)
+        self.assertEqual(orch.project_state["stages"]["08"], before_stage08)
+        self.assertEqual(orch.project_state["stages"]["09"], before_stage09)
 
     def test_select_task_uses_specific_error_when_no_executable_task_remains(self):
         self._write_tasks('''
