@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import shutil
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +17,27 @@ from sdd_orchestrator.verification_execution import (
 from sdd_orchestrator.verification_runtime import evaluate_regression_completion
 
 SOURCE = Path(__file__).resolve().parents[1]
+
+
+def _activate_sealed_stage08_verification(runner, root: Path, task: AtomicTask):
+    for relative in (
+        "docs/PRD.md",
+        "docs/spec.md",
+        "docs/Design.md",
+        "docs/handoff/pre-implementation-gate-report.md",
+        "AGENTS.md",
+        "tasks.md",
+    ):
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(SOURCE / relative, target)
+    subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "TC003 Fixture"], cwd=root, check=True)
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture baseline"], cwd=root, check=True, capture_output=True)
+    task.behavior_scope = "verification dispatch fixture compatibility"
+    runner._active_stage08_envelope = runner.assemble_execution_envelope(task)
 
 
 class TestProjectVerificationRuntime(unittest.TestCase):
@@ -48,6 +70,7 @@ class TestProjectVerificationRuntime(unittest.TestCase):
             shutil.copytree(SOURCE / '.sdd', root / '.sdd')
             runner = self._runner(root, sys.executable)
             task = AtomicTask('T001', 'x', 'TODO', '', [], ['pyproject.toml'], ['python -c "import sys"'])
+            _activate_sealed_stage08_verification(runner, root, task)
             seen = {}
 
             class Proc:

@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import shutil
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -10,6 +11,27 @@ from sdd_orchestrator.codex_adapter import Stage08CodexRunner, AtomicTask
 from sdd_orchestrator.core import Orchestrator
 
 SOURCE = Path(__file__).resolve().parents[1]
+
+
+def _activate_sealed_stage08_verification(runner, root: Path, task: AtomicTask):
+    for relative in (
+        "docs/PRD.md",
+        "docs/spec.md",
+        "docs/Design.md",
+        "docs/handoff/pre-implementation-gate-report.md",
+        "AGENTS.md",
+        "tasks.md",
+    ):
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(SOURCE / relative, target)
+    subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "TC003 Fixture"], cwd=root, check=True)
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture baseline"], cwd=root, check=True, capture_output=True)
+    task.behavior_scope = "verification dispatch fixture compatibility"
+    runner._active_stage08_envelope = runner.assemble_execution_envelope(task)
 
 
 class TestWindowsConsoleVerificationResolution(unittest.TestCase):
@@ -22,6 +44,7 @@ class TestWindowsConsoleVerificationResolution(unittest.TestCase):
             shutil.copytree(SOURCE / '.sdd', root / '.sdd')
             runner = self._runner(root)
             task = AtomicTask('T001', 'x', 'TODO', '', [], ['pyproject.toml'], ['todo --help'])
+            _activate_sealed_stage08_verification(runner, root, task)
             seen = {}
 
             class Proc:
@@ -51,6 +74,7 @@ class TestWindowsConsoleVerificationResolution(unittest.TestCase):
             shutil.copytree(SOURCE / '.sdd', root / '.sdd')
             runner = self._runner(root)
             task = AtomicTask('T001', 'x', 'TODO', '', [], ['pyproject.toml'], ['todo --help'])
+            _activate_sealed_stage08_verification(runner, root, task)
 
             with patch('sdd_orchestrator.codex_adapter.shutil.which', return_value=None), \
                  patch('sdd_orchestrator.codex_adapter.subprocess.run', side_effect=FileNotFoundError(2, 'not found')):
