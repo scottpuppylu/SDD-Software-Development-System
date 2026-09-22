@@ -4,10 +4,10 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: 08
-  current_stage_name: IMPLEMENTATION_RUNNER
+  current_stage: '07'
+  current_stage_name: PRE_IMPLEMENTATION_GATE
   last_completed_stage: '07'
-  next_action: RUN_STAGE
+  next_action: RERUN_STAGE
 stages:
   '01':
     status: DONE
@@ -28,8 +28,8 @@ stages:
     status: DONE
     result: COMPLETED
   '07':
-    status: DONE
-    result: PASS
+    status: IN_PROGRESS
+    result: null
   08:
     status: IN_PROGRESS
     result: null
@@ -40,7 +40,7 @@ stages:
     status: TODO
     result: null
 authorizations:
-  implementation: true
+  implementation: false
   release: false
 blocking:
   is_blocked: false
@@ -57,7 +57,7 @@ artifacts:
   handoff_report: null
 git:
   branch: telemetry-measurement-v2
-  head_commit: 2df4ce3b7b0a7a264a61b75ce60762c340f81f26
+  head_commit: 7673473f8e93566913d61b90c647457efc9306c4
   last_verified_commit: 0f60e06c978e6014dde7a4585a250b61fd4b38a6
 provenance:
   current_authority_package:
@@ -72,7 +72,7 @@ provenance:
   historical_phase01_06_reconstruction: NOT_AUTHORIZED
   existing_implementation_adopted: true
   retroactive_stage07_pass_created: false
-  stage08_authorization_created: true
+  stage08_authorization_created: false
   implementation_conformance_claimed: false
   test_pass_claimed: false
   implementation_recovery_gate_result: PASS
