@@ -15,5 +15,5 @@ acceptance_criteria:
 - fixture or expectation matches current authoritative contract
 - production behavior remains unchanged
 - targeted verification passes
-status: TODO
+status: DONE
 source_stage: 09
