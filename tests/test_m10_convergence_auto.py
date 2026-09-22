@@ -30,9 +30,30 @@ class M10Tests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.repo=Path(self.tmp.name)/'repo'
         shutil.copytree(SOURCE/'.sdd', self.repo/'.sdd')
+        for evidence_file in (self.repo/'.sdd/evidence').glob('*.json'):
+            evidence_file.unlink()
+        (self.repo/'.sdd/evidence/.stage08-pending-evidence-write.yaml').unlink(missing_ok=True)
+        for convergence_file in (self.repo/'.sdd/convergence').glob('TC*.yaml'):
+            convergence_file.unlink()
+        implementation_path = self.repo/'.sdd/state/implementation-state.yaml'
+        implementation = yaml.safe_load(implementation_path.read_text(encoding='utf-8'))
+        implementation['task_qualifications'] = {}
+        implementation['last_completed_task'] = None
+        implementation['current_task'] = None
+        implementation['next_task'] = None
+        implementation['last_verified_commit'] = None
+        implementation.setdefault('test_status', {})['overall'] = 'NOT RUN'
+        implementation['test_status']['required_checks'] = []
+        implementation['test_status']['last_run_at'] = None
+        implementation_path.write_text(yaml.safe_dump(implementation, sort_keys=False), encoding='utf-8')
         for rel,text in {
             'AGENTS.md':'# AGENTS\n', 'tasks.md':'# Tasks\n',
             'docs/PRD.md':'# PRD\nFR-001\n','docs/spec.md':'# Spec\nSPEC-001\n','docs/Design.md':'# Design\nDES-001\n'
+            ,'docs/handoff/pre-implementation-gate-report.md':(
+                '# Stage 07 Pre-Implementation Gate Report\n\n'
+                'RESULT = PASS\n'
+                'IMPLEMENTATION_AUTHORIZATION = GRANTED\n'
+            )
         }.items():
             p=self.repo/rel;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text, encoding="utf-8")
         git(self.repo,'init');git(self.repo,'config','user.email','t@e.com');git(self.repo,'config','user.name','T');git(self.repo,'add','.');git(self.repo,'commit','-m','base')
@@ -81,6 +102,44 @@ class FullAutoE2ETests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.repo=Path(self.tmp.name)/'repo'
         shutil.copytree(SOURCE/'.sdd', self.repo/'.sdd')
+        for convergence_file in (self.repo/'.sdd/convergence').glob('TC*.yaml'):
+            convergence_file.unlink()
+        for evidence_file in (self.repo/'.sdd/evidence').glob('*.json'):
+            evidence_file.unlink()
+        (self.repo/'.sdd/evidence/.stage08-pending-evidence-write.yaml').unlink(missing_ok=True)
+        implementation_path = self.repo/'.sdd/state/implementation-state.yaml'
+        implementation = yaml.safe_load(implementation_path.read_text(encoding='utf-8'))
+        implementation['task_qualifications'] = {}
+        implementation['last_completed_task'] = None
+        implementation['current_task'] = None
+        implementation['next_task'] = None
+        implementation['last_verified_commit'] = None
+        implementation.setdefault('test_status', {})['overall'] = 'NOT RUN'
+        implementation['test_status']['required_checks'] = []
+        implementation['test_status']['last_run_at'] = None
+        implementation_path.write_text(yaml.safe_dump(implementation, sort_keys=False), encoding='utf-8')
+        (self.repo/'tasks.md').write_text(
+            '# Tasks\n\n'
+            '### T001 - Implement app\n'
+            '- **Status:** TODO\n'
+            '- **Traceability:** FR-001 -> SPEC-001 -> DES-001\n'
+            '- **Allowed files:** `src/app.py`, `tests/test_app.py`\n'
+            '- **Implementation Scope:** Implement the app task within the declared files.\n'
+            '- **Verification Commands:** `python -m pytest -q`\n',
+            encoding='utf-8',
+        )
+        for rel,text in {
+            'AGENTS.md':'# AGENTS\n',
+            'docs/PRD.md':'# PRD\nFR-001\n',
+            'docs/spec.md':'# Spec\nSPEC-001\n',
+            'docs/Design.md':'# Design\nDES-001\n',
+            'docs/handoff/pre-implementation-gate-report.md':(
+                '# Stage 07 Pre-Implementation Gate Report\n\n'
+                'RESULT = PASS\n'
+                'IMPLEMENTATION_AUTHORIZATION = GRANTED\n'
+            ),
+        }.items():
+            p=self.repo/rel;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text, encoding='utf-8')
         git(self.repo,'init');git(self.repo,'config','user.email','t@e.com');git(self.repo,'config','user.name','T');git(self.repo,'add','.');git(self.repo,'commit','-m','sdd runtime')
     def tearDown(self): self.tmp.cleanup()
 
