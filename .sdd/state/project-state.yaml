@@ -4,9 +4,9 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: '09'
-  current_stage_name: VERIFICATION_AND_CONVERGENCE
-  last_completed_stage: '08'
+  current_stage: 08
+  current_stage_name: IMPLEMENTATION_RUNNER
+  last_completed_stage: 09
   next_action: RUN_STAGE
 stages:
   '01':
@@ -31,11 +31,11 @@ stages:
     status: DONE
     result: PASS
   08:
-    status: DONE
+    status: IN_PROGRESS
     result: COMPLETED
   09:
-    status: TODO
-    result: null
+    status: DONE
+    result: FAIL
   '10':
     status: TODO
     result: null
@@ -53,7 +53,7 @@ artifacts:
   agents: AGENTS.md
   tasks: tasks.md
   pre_implementation_gate_report: docs/handoff/pre-implementation-gate-report.md
-  verification_report: null
+  verification_report: docs/handoff/verification-report.md
   handoff_report: null
 git:
   branch: telemetry-measurement-v2

@@ -1,0 +1,17 @@
+task_id: TC008
+title: Align runner context integration fixture with current lifecycle referent
+objective: Align runner context integration fixture with current lifecycle referent
+  without changing current production governance semantics.
+traceability:
+- SPEC-001
+- DES-002
+allowed_paths:
+- tests/test_m41_runner_context_integration.py
+verification_commands:
+- .\.venv\Scripts\python.exe -m pytest -q tests/test_m41_runner_context_integration.py
+acceptance_criteria:
+- fixture or expectation matches current authoritative contract
+- production behavior remains unchanged
+- targeted verification passes
+status: TODO
+source_stage: 09

@@ -1,0 +1,17 @@
+task_id: TC005
+title: Align runner unauthorized-write assertion with current governance envelope
+objective: Align runner unauthorized-write assertion with current governance envelope
+  without changing current production governance semantics.
+traceability:
+- SPEC-001
+- DES-002
+allowed_paths:
+- tests/test_runner.py
+verification_commands:
+- .\.venv\Scripts\python.exe -m pytest -q tests/test_runner.py
+acceptance_criteria:
+- fixture or expectation matches current authoritative contract
+- production behavior remains unchanged
+- targeted verification passes
+status: TODO
+source_stage: 09

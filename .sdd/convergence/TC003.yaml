@@ -1,0 +1,19 @@
+task_id: TC003
+title: Align verification-dispatch fixtures with sealed Stage08 envelope
+objective: Align verification-dispatch fixtures with sealed Stage08 envelope without
+  changing current production governance semantics.
+traceability:
+- SPEC-001
+- DES-002
+allowed_paths:
+- tests/test_v1114_project_runtime.py
+- tests/test_v1115_windows_console_resolution.py
+verification_commands:
+- .\.venv\Scripts\python.exe -m pytest -q tests/test_v1114_project_runtime.py tests/test_v1115_windows_console_resolution.py
+  tests/test_m6_codex_adapter.py
+acceptance_criteria:
+- fixture or expectation matches current authoritative contract
+- production behavior remains unchanged
+- targeted verification passes
+status: TODO
+source_stage: 09

@@ -1,0 +1,231 @@
+{
+  "request_summary": {
+    "stage_id": "09",
+    "stage_name": "VERIFICATION_AND_CONVERGENCE",
+    "artifact_paths": [
+      ".sdd/state/implementation-state.yaml",
+      "AGENTS.md",
+      "docs/Design.md",
+      "docs/PRD.md",
+      "docs/spec.md",
+      "tasks.md"
+    ],
+    "semantic_input_keys": [],
+    "has_stage_instructions": true
+  },
+  "result": {
+    "status": "COMPLETED",
+    "artifacts": {
+      "docs/handoff/verification-report.md": "# Stage09 Verification Failure Report\n\n## Decision\n\nSTAGE09_RESULT = FAIL\nFAILURE_CLASS = IMPLEMENTATION_GAP\nBASELINE = fc986c1eea22250002c1cc98bb7fbfd06a946a1f\nAUTHORITATIVE_COMMAND = .\\\\.venv\\\\Scripts\\\\python.exe -m pytest -q tests\nPYTEST_EXIT_CODE = 1\nPYTEST_SUMMARY = 28 failed, 584 passed, 472 subtests passed in 1043.46s\nTERMINATION = NATURAL\nRUNTIME_DIRECTORY = C:\\Users\\user\\AppData\\Local\\Temp\\sdd-stage09-qualifying-40cce78cd72440b397d02a4083c4ebc2\n\nThe qualifying run completed with isolated TEMP/TMP, empty stderr, complete stdout, END_UTC, and no session-finalization failure. The failures are blocking compatibility/implementation gaps under clear current authority. They are routed to the bounded convergence tasks TC001 through TC008; no production or test repair occurred in Stage09.\n\n## Failure clusters\n\n- TC001: M10 convergence fixture omits current Stage07 report prerequisite.\n- TC002: Stage08 blocked-task/max-task fixture lifecycle expectations.\n- TC003: verification-dispatch fixtures omit sealed Stage08 envelope.\n- TC004: Stage10 release-context fixtures omit Stage09 PASS entry state.\n- TC005: runner unauthorized-write test expects older exception path.\n- TC006: Stage02-to-Stage03 fixture contract-state expectation.\n- TC007: Stage07 reconciliation fixture expects an obsolete null verification projection.\n- TC008: runner context integration lifecycle referent expectation.\n\nStage10 is ineligible. Stage07/Stage08 for each TC require separate later authority.\n"
+    },
+    "result": "FAIL",
+    "classification": "IMPLEMENTATION_GAP",
+    "remediation_reasons": [],
+    "convergence_tasks": [
+      {
+        "task_id": "TC001",
+        "title": "Align M10 convergence fixtures with sealed Stage07 prerequisite",
+        "objective": "Align M10 convergence fixtures with sealed Stage07 prerequisite without changing current production governance semantics.",
+        "traceability": [
+          "SPEC-001",
+          "DES-002"
+        ],
+        "allowed_paths": [
+          "tests/test_m10_convergence_auto.py"
+        ],
+        "verification_commands": [
+          ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m10_convergence_auto.py tests/test_m6_codex_adapter.py"
+        ],
+        "acceptance_criteria": [
+          "fixture or expectation matches current authoritative contract",
+          "production behavior remains unchanged",
+          "targeted verification passes"
+        ]
+      },
+      {
+        "task_id": "TC002",
+        "title": "Align Stage08 run-until-complete fixture lifecycle expectations",
+        "objective": "Align Stage08 run-until-complete fixture lifecycle expectations without changing current production governance semantics.",
+        "traceability": [
+          "SPEC-001",
+          "DES-002"
+        ],
+        "allowed_paths": [
+          "tests/test_m6_codex_adapter.py"
+        ],
+        "verification_commands": [
+          ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m6_codex_adapter.py"
+        ],
+        "acceptance_criteria": [
+          "fixture or expectation matches current authoritative contract",
+          "production behavior remains unchanged",
+          "targeted verification passes"
+        ]
+      },
+      {
+        "task_id": "TC003",
+        "title": "Align verification-dispatch fixtures with sealed Stage08 envelope",
+        "objective": "Align verification-dispatch fixtures with sealed Stage08 envelope without changing current production governance semantics.",
+        "traceability": [
+          "SPEC-001",
+          "DES-002"
+        ],
+        "allowed_paths": [
+          "tests/test_v1114_project_runtime.py",
+          "tests/test_v1115_windows_console_resolution.py"
+        ],
+        "verification_commands": [
+          ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_v1114_project_runtime.py tests/test_v1115_windows_console_resolution.py tests/test_m6_codex_adapter.py"
+        ],
+        "acceptance_criteria": [
+          "fixture or expectation matches current authoritative contract",
+          "production behavior remains unchanged",
+          "targeted verification passes"
+        ]
+      },
+      {
+        "task_id": "TC004",
+        "title": "Align Stage10 release-context fixtures with Stage09 entry gate",
+        "objective": "Align Stage10 release-context fixtures with Stage09 entry gate without changing current production governance semantics.",
+        "traceability": [
+          "SPEC-001",
+          "DES-002"
+        ],
+        "allowed_paths": [
+          "tests/test_v1122_stage10_release_context.py"
+        ],
+        "verification_commands": [
+          ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_v1122_stage10_release_context.py"
+        ],
+        "acceptance_criteria": [
+          "fixture or expectation matches current authoritative contract",
+          "production behavior remains unchanged",
+          "targeted verification passes"
+        ]
+      },
+      {
+        "task_id": "TC005",
+        "title": "Align runner unauthorized-write assertion with current governance envelope",
+        "objective": "Align runner unauthorized-write assertion with current governance envelope without changing current production governance semantics.",
+        "traceability": [
+          "SPEC-001",
+          "DES-002"
+        ],
+        "allowed_paths": [
+          "tests/test_runner.py"
+        ],
+        "verification_commands": [
+          ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_runner.py"
+        ],
+        "acceptance_criteria": [
+          "fixture or expectation matches current authoritative contract",
+          "production behavior remains unchanged",
+          "targeted verification passes"
+        ]
+      },
+      {
+        "task_id": "TC006",
+        "title": "Align Stage02 to Stage03 fixture contract state",
+        "objective": "Align Stage02 to Stage03 fixture contract state without changing current production governance semantics.",
+        "traceability": [
+          "SPEC-001",
+          "DES-002"
+        ],
+        "allowed_paths": [
+          "tests/test_stage02_product_convergence.py"
+        ],
+        "verification_commands": [
+          ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_stage02_product_convergence.py"
+        ],
+        "acceptance_criteria": [
+          "fixture or expectation matches current authoritative contract",
+          "production behavior remains unchanged",
+          "targeted verification passes"
+        ]
+      },
+      {
+        "task_id": "TC007",
+        "title": "Align Stage07 reconciliation fixture with preserved verification projection",
+        "objective": "Align Stage07 reconciliation fixture with preserved verification projection without changing current production governance semantics.",
+        "traceability": [
+          "SPEC-001",
+          "DES-002"
+        ],
+        "allowed_paths": [
+          "tests/test_v115_stage07_runtime_reconciliation.py"
+        ],
+        "verification_commands": [
+          ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_v115_stage07_runtime_reconciliation.py"
+        ],
+        "acceptance_criteria": [
+          "fixture or expectation matches current authoritative contract",
+          "production behavior remains unchanged",
+          "targeted verification passes"
+        ]
+      },
+      {
+        "task_id": "TC008",
+        "title": "Align runner context integration fixture with current lifecycle referent",
+        "objective": "Align runner context integration fixture with current lifecycle referent without changing current production governance semantics.",
+        "traceability": [
+          "SPEC-001",
+          "DES-002"
+        ],
+        "allowed_paths": [
+          "tests/test_m41_runner_context_integration.py"
+        ],
+        "verification_commands": [
+          ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m41_runner_context_integration.py"
+        ],
+        "acceptance_criteria": [
+          "fixture or expectation matches current authoritative contract",
+          "production behavior remains unchanged",
+          "targeted verification passes"
+        ]
+      }
+    ],
+    "metadata": {
+      "governance": {
+        "envelope_id": "274b170439ff75075655be712b9504a33f6b145393aa8b3a1169a43fb6a2ae9c",
+        "pre_dispatch": {
+          "envelope_id": "274b170439ff75075655be712b9504a33f6b145393aa8b3a1169a43fb6a2ae9c",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "approval-matrix:A0:stage-09",
+          "action": "REASONING_STAGE_DISPATCH",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "docs/handoff/verification-report.md"
+          ],
+          "failure_route": null,
+          "security": null
+        },
+        "post_dispatch": {
+          "envelope_id": "274b170439ff75075655be712b9504a33f6b145393aa8b3a1169a43fb6a2ae9c",
+          "outcome": "PASS",
+          "observed_scope": [
+            "docs/handoff/verification-report.md"
+          ],
+          "observed_effects": [
+            "PROPOSED_OUTPUT"
+          ],
+          "evidence_references": [
+            "pending-run-record:5a190f2c0a21cb4a33158b5c"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "approval-matrix:A0:stage-09",
+          "security": null
+        }
+      }
+    }
+  },
+  "transition": {
+    "stage_id": "09",
+    "result": "FAIL",
+    "classification": "IMPLEMENTATION_GAP",
+    "next": "08",
+    "implementation_authorization": false,
+    "release_authorization": false
+  }
+}
