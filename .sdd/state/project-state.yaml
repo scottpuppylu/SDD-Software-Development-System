@@ -4,10 +4,10 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: '07'
-  current_stage_name: PRE_IMPLEMENTATION_GATE
+  current_stage: 08
+  current_stage_name: IMPLEMENTATION_RUNNER
   last_completed_stage: '07'
-  next_action: RERUN_STAGE
+  next_action: RUN_STAGE
 stages:
   '01':
     status: DONE
@@ -28,8 +28,8 @@ stages:
     status: DONE
     result: COMPLETED
   '07':
-    status: IN_PROGRESS
-    result: null
+    status: DONE
+    result: PASS
   08:
     status: IN_PROGRESS
     result: null
@@ -40,7 +40,7 @@ stages:
     status: TODO
     result: null
 authorizations:
-  implementation: false
+  implementation: true
   release: false
 blocking:
   is_blocked: false

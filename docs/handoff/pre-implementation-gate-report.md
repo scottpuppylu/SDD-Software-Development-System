@@ -1,36 +1,42 @@
-# Stage 07 Pre-Implementation Gate Report - TC001
+# Stage 07 Pre-Implementation Gate Report - TC002
 
 ## Decision
 
 RESULT = PASS
 IMPLEMENTATION_AUTHORIZATION = GRANTED
-TARGET_TASK = TC001
-BASELINE = 2df4ce3b7b0a7a264a61b75ce60762c340f81f26
-EXECUTION_BOUND_HEAD = 2df4ce3b7b0a7a264a61b75ce60762c340f81f26
+TARGET_TASK = TC002
+BASELINE = 3de55fc0120add9f86c247b531689345c1af4a13
 REPAIR_CLASSIFICATION = TEST_FIXTURE_COMPATIBILITY_REPAIR
 REPAIR_OWNER = TEST_FIXTURE_OWNER
 
 ## Contract and scope
 
-TC001 is the bounded M10 convergence fixture compatibility repair. The current
-Stage 08 prerequisite remains the valid Stage 07 report artifact at
-docs/handoff/pre-implementation-gate-report.md; this gate does not weaken,
-bypass, or replace that requirement.
+TC002 is the bounded Stage08 lifecycle-fixture compatibility repair defined in
+`.sdd/convergence/TC002.yaml`. The only authorized implementation file is
+`tests/test_m6_codex_adapter.py`.
 
-AUTHORIZED_IMPLEMENTATION_FILES = tests/test_m10_convergence_auto.py
-VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_m10_convergence_auto.py
-TC001_VERIFICATION_CONTRACT_INDEPENDENT_OF_TC002 = YES
+VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_m6_codex_adapter.py
+TC002_VERIFICATION_CONTRACT_INDEPENDENT = YES
 
-Production behavior, governance behavior, Stage 07 prerequisite enforcement,
-Stage 08 authorization, and fail-closed semantics remain unchanged. TC002
-through TC008, Stage 09, Stage 10, and Upgrade Gate #2 are unauthorized.
+Current Stage08 behavior remains authoritative: invalid `max_tasks` is rejected
+before any task dispatch, and a blocked-task-only selection raises
+`NoExecutableTaskError` without calling the Stage08-to-Stage09 transition.
+The fixture must assert no new lifecycle mutation relative to its intended
+pre-invocation state; it must not require a hard-coded inherited `NOT DONE`
+value. Production lifecycle, input-validation, fail-closed, and governance
+behavior are unchanged.
+
+Production code, TC001 and TC003 through TC008 files, Stage09, Stage10, and
+Upgrade Gate #2 are unauthorized.
 
 ## Qualification findings
 
-The repaired TC001 contract is present in .sdd/convergence/TC001.yaml, has a
-single machine-ready verification command, and targets only the authorized
-fixture file. The external historical unqualified patch remains unapplied.
-The implementation graph and prior Stage 09 failure evidence are preserved.
+The TC002 contract has one bounded test path and one exact local executable
+verification command. The existing test setup copies lifecycle state and
+updates authorization/current-stage fields without resetting Stage08 completion
+fields. This is the root cause of the max-task parameterized and blocked-task
+expectation drift; the tested production paths perform no unauthorized
+transition.
 
 ARCH-AC-01 = PASS_TASK_CONTRACT_CONFORMANCE_ONLY
 ARCH-AC-02 = PASS_TASK_CONTRACT_CONFORMANCE_ONLY
@@ -42,7 +48,7 @@ ARCH-AC-07 = PASS_TASK_CONTRACT_CONFORMANCE_ONLY
 ARCH-AC-08 = PASS_TASK_CONTRACT_CONFORMANCE_ONLY
 ARCH-AC-09 = PASS_TASK_CONTRACT_CONFORMANCE_ONLY
 
-STAGE08_AUTHORIZED = YES_TC001_ONLY
-TC001_IMPLEMENTED = NO
-TC001_QUALIFIED = NO
-NEXT_STEP = SEALED_STAGE08_TC001_ONLY
+STAGE08_AUTHORIZED = YES_TC002_ONLY
+TC002_IMPLEMENTED = NO
+TC002_QUALIFIED = NO
+NEXT_STEP = SEALED_STAGE08_TC002_ONLY
