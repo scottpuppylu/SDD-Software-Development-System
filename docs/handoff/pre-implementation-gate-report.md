@@ -1,35 +1,35 @@
-# Stage 07 Pre-Implementation Gate Report - TC003
+# Stage 07 Pre-Implementation Gate Report - TC004
 
 ## Decision
 
 RESULT = PASS
 IMPLEMENTATION_AUTHORIZATION = GRANTED
-TARGET_TASK = TC003
-BASELINE = 1ef95448194574e6008f50f3d299109a0166ff4b
-REPAIR_CLASSIFICATION = TEST_FIXTURE_COMPATIBILITY_REPAIR
+TARGET_TASK = TC004
+BASELINE = 36ed52239f62eb3e79aafe0ba73f24f861ffa848
+REPAIR_CLASSIFICATION = RELEASE_CONTEXT_FIXTURE_COMPATIBILITY_REPAIR
 REPAIR_OWNER = TEST_FIXTURE_OWNER
 
 ## Contract and scope
 
-TC003 repairs only the verification-dispatch fixtures in `tests/test_v1114_project_runtime.py` and `tests/test_v1115_windows_console_resolution.py`. Current Stage08 verification dispatch requires the current sealed Stage08 envelope and must fail closed when it is absent. This production and governance behavior is authoritative and remains unchanged.
+TC004 repairs only `tests/test_v1122_stage10_release_context.py`. Stage10 requires `stage_09_result == PASS` before request construction. This is current authoritative fail-closed lifecycle behavior and remains unchanged.
 
-VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_v1114_project_runtime.py tests/test_v1115_windows_console_resolution.py tests/test_m6_codex_adapter.py
-TC003_VERIFICATION_CONTRACT_INDEPENDENT = YES
+VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_v1122_stage10_release_context.py
+TC004_VERIFICATION_CONTRACT_INDEPENDENT = YES
 
 ## Qualification findings
 
-Both TC003 test groups directly invoke `_run_verification` without establishing a legitimate active Stage08 envelope. The project-interpreter and Windows console-resolution assertions remain required; fixtures must establish the current sealed authorization before dispatch. The missing-envelope negative path remains fail-closed and must remain covered.
+The fixture writes a Stage09 report but its stale string substitutions do not establish `stages.09.result = PASS`. Consequently Stage10 request construction refuses entry before README, pyproject, Git identity, and bounded-context assertions execute. The test fixture must use the repository lifecycle API to establish a controlled, valid Stage09 PASS state in its isolated repository.
 
 Production behavior change required = NO
 Governance behavior change required = NO
-Stage07 prerequisite enforcement = PRESERVED
-Stage08 authorization enforcement = PRESERVED
+Stage09-to-Stage10 fail-closed entry requirement = PRESERVED
 
 ## Acceptance
 
-- project runtime test still proves the project interpreter is selected;
-- Windows console tests still prove executable resolution and missing-executable failure;
-- fixtures establish a current sealed Stage08 envelope before verification dispatch;
-- missing envelope remains a fail-closed error;
-- only the two TC003 test files are implementation scope;
-- TC001, TC002, TC004-TC008, Stage09, Stage10, and Upgrade Gate #2 are excluded.
+- fixture establishes a valid isolated Stage09 PASS using repository lifecycle semantics;
+- release profile, README, and pyproject assertions still execute;
+- live Git release identity assertion still executes;
+- bounded release-context assertion still executes;
+- no-Stage09-PASS entry remains refused;
+- only the TC004 test file is implementation scope;
+- TC001-TC003, TC005-TC008, Stage09, Stage10, and Upgrade Gate #2 are excluded.
