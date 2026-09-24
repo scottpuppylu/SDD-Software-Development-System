@@ -1,34 +1,37 @@
-# Stage 07 Pre-Implementation Gate Report - TC008
+# Stage 07 Pre-Implementation Gate Report - TC009
 
 ## Decision
 
 RESULT = PASS
 IMPLEMENTATION_AUTHORIZATION = GRANTED
-TARGET_TASK = TC008
-BASELINE = bc67c99abf44aadf61e65866bb2141f557cc615c
-REPAIR_CLASSIFICATION = TEST_ASSERTION_COMPATIBILITY_REPAIR
+TARGET_TASK = TC009
+BASELINE = 991f97182387b8d714e5f8996afdf8ce7067d8e7
+REPAIR_CLASSIFICATION = TEST_FIXTURE_COMPATIBILITY_REPAIR
 REPAIR_OWNER = TEST_FIXTURE_OWNER
+GOVERNANCE_PROFILE = SDD_STANDARD
 
 ## Contract and scope
 
-TC008 repairs only `tests/test_m41_runner_context_integration.py`. `StageRunner` owns the runner dispatch context and preserves the original request as the lifecycle referent through validation, convergence persistence, transition, and run-recording. `GovernanceEnvelopeValidator` owns dispatch provenance reconciliation. `Orchestrator` owns active implementation authorization in project-state; `RecoveryManager` plus Stage08 evidence own the durable verified-checkpoint projection. `Stage08CodexRunner` owns the execution-bound sealed envelope.
+TC009 repairs only `tests/test_m10_convergence_auto.py`. The current sealed Stage07 contract requires a current Stage07 PASS report, implementation authorization, the repository and execution-bound HEAD, and a sealed Stage08 envelope before implementation dispatch. `Orchestrator.record_stage_result("07", "PASS")` is the authoritative lifecycle state API; `Stage08CodexRunner.assemble_execution_envelope` is the authoritative sealed-envelope mechanism.
 
-VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_m41_runner_context_integration.py
-TC008_VERIFICATION_CONTRACT_INDEPENDENT = YES
+VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_m10_convergence_auto.py
+TC009_VERIFICATION_CONTRACT_INDEPENDENT = YES
 
 ## Qualification findings
 
-The integration test requires `result.metadata` to equal only its original caller data after a governed runner dispatch. Current authoritative `StageRunner` behavior preserves the existing `existing` entry, keeps the original request object as every lifecycle referent, and appends the required governance envelope provenance. The old equality assertion therefore mistakes required provenance enrichment for a runner-context mutation. The repair must assert preservation of original metadata and request referent while specifically validating the appended governance provenance; it must not treat durable verified checkpoint history as active authorization.
+The fresh Stage09 failure is a fixture-only prerequisite gap: the full mock Stage01-to-Stage10 pipeline reaches the current gate without establishing a current legal Stage07 PASS/implementation-authorization state, so the governed pipeline correctly returns BLOCKED. TC001's prior file repair remains valid; TC009 supplies the additional current prerequisite and does not revert or duplicate it.
 
-Production behavior change required = NO
+Sealed Stage07 prerequisite authoritative = YES
+Pipeline BLOCKED behavior authoritative = YES
+Production pipeline change required = NO
 Governance behavior change required = NO
-State projection behavior change required = NO
-Runner-context implementation change required = NO
+Over-governance avoided = YES
 
 ## Acceptance
 
-- test preserves the original request as the lifecycle referent through governed dispatch;
-- test preserves caller metadata while asserting current governance provenance is appended;
-- stale provenance cannot create implementation authorization and durable checkpoint is not confused with active authorization;
-- only tests/test_m41_runner_context_integration.py is implementation scope;
-- TC001-TC007, Recovery Gate, Stage09, Stage10, and Upgrade Gate #2 are excluded.
+- the fixture establishes the current Stage07 prerequisite through repository-authoritative lifecycle setup;
+- the sealed Stage08 gate remains enforced;
+- the full pipeline retains its DEPLOY assertion only after legitimate governed entry;
+- TC001 behavior remains valid;
+- only `tests/test_m10_convergence_auto.py` is implementation scope;
+- TC010, TC011, Stage08, Stage09, Stage10, Recovery Gate, and Upgrade Gate #2 are excluded.
