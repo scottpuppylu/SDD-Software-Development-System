@@ -39,13 +39,6 @@ def _prepare_stage10_repo(tmp_path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# Stage 09\nPASS\n", encoding="utf-8")
     (repo / "README.md").write_text("# Local CLI\nInstall locally.\n", encoding="utf-8")
-    state_path = repo / ".sdd/state/project-state.yaml"
-    state = state_path.read_text(encoding="utf-8")
-    state = state.replace('current_stage: "01"', 'current_stage: "10"')
-    state = state.replace('current_stage_name: PRODUCT_PROPOSAL', 'current_stage_name: HANDOFF_AND_RELEASE')
-    state = state.replace('"09": {status: TODO, result: null}', '"09": {status: DONE, result: PASS}')
-    state = state.replace('"10": {status: TODO, result: null}', '"10": {status: IN_PROGRESS, result: null}')
-    state_path.write_text(state, encoding="utf-8")
     (repo / "pyproject.toml").write_text('[project]\nname="todo-cli"\nversion="0.1.0"\n', encoding="utf-8")
     profile = repo / "docs/handoff/release-profile.md"
     profile.write_text(
@@ -60,6 +53,7 @@ def _prepare_stage10_repo(tmp_path: Path) -> Path:
     _git(repo, "config", "user.name", "Test")
     _git(repo, "add", ".")
     _git(repo, "commit", "-m", "release evidence")
+    Orchestrator(repo).record_stage_result("09", "PASS")
     return repo
 
 
