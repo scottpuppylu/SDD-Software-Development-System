@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "stage": "09",
+  "kind": "FRESH_POST_CONVERGENCE_QUALIFYING_RUN",
+  "result": "FAIL",
+  "failure_class": "IMPLEMENTATION_GAP",
+  "recovery_gate_checkpoint": "d703777716247ed469bd5c30d7ec55f930a1bc64",
+  "verification_baseline": "d703777716247ed469bd5c30d7ec55f930a1bc64",
+  "authoritative_commands": [".\\.venv\\Scripts\\python.exe -m pytest -q tests", "git diff --check", "git diff --cached --check", "git status --porcelain=v1"],
+  "durable_runner": {"used": true, "runtime_directory": "C:\\Users\\user\\AppData\\Local\\Temp\\sdd-stage09-qualifying-cf0aaef30fda4b5db120d1648f2f7e2a", "temp_tmp_isolated": true, "started_utc": "2026-09-24T02:56:35.7953764Z", "completed_utc": "2026-09-24T03:14:28.4945804Z", "duration_seconds": 1072.699204, "termination": "NATURAL", "exit_code": 1, "artifacts": {"command.txt": "33C4F04E289B9D5CD1290F9FF83499568AE4BA9DA2DA26126722A187F068816B", "stdout.log": "C229565254FFBAB400278E67D17019B0CF12775E12D32D8FEFCD8DED6AB6998E", "stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855", "result.json": "1A47F9A70239EC7F619786D521451DE03582433CE9FC40C24403EA8DCF845DFF"}, "qualifying_artifact_validation": "PASS"},
+  "pytest": {"exit_code": 1, "summary": "7 failed, 591 passed, 486 subtests passed in 1070.60s", "stderr_summary": "empty", "shared_temp_finalization_failure": false, "session_lifetime_truncation": false},
+  "git_integrity": {"diff_check_exit_code": 0, "cached_diff_check_exit_code": 0, "status_porcelain": "", "worktree_clean": true},
+  "failure_root_cause_clusters": [
+    {"id": "FULL_PIPELINE_FIXTURE_COMPATIBILITY", "tests": ["tests/test_m10_convergence_auto.py::FullAutoE2ETests::test_full_01_to_10_mock_pipeline_reaches_deploy"], "observation": "Mock pipeline returned BLOCKED where the test expected DEPLOY."},
+    {"id": "STAGE08_PENDING_EVIDENCE_FIXTURE_ISOLATION", "tests": ["tests/test_telemetry_stage08_task.py::Stage08TaskRecorderBoundaryTests::test_stage08_already_completed_skip_emits_no_terminal_event", "tests/test_telemetry_stage08_task.py::Stage08TaskRecorderBoundaryTests::test_stage08_historical_checkpoint_reconciliation_emits_no_terminal_event", "tests/test_telemetry_stage08_task.py::Stage08TaskRecorderBoundaryTests::test_stage08_retry_started_twice_emits_two_terminal_events"], "observation": "Copied pending Stage08 recovery state mismatched the isolated task/HEAD/paths and failed closed."},
+    {"id": "SEALED_STAGE08_VERIFICATION_FIXTURE_PREREQUISITE", "tests": ["tests/test_v1114_project_runtime.py::TestProjectVerificationRuntime::test_python_verification_uses_project_interpreter", "tests/test_v1115_windows_console_resolution.py::TestWindowsConsoleVerificationResolution::test_console_script_is_resolved_before_subprocess", "tests/test_v1115_windows_console_resolution.py::TestWindowsConsoleVerificationResolution::test_missing_executable_becomes_verification_failure_not_traceback"], "observation": "Fixture reached the active-implementation-authorization Stage08 entry gate before intended verification assertions."}
+  ],
+  "stage10_executed": false,
+  "upgrade_gate_2_started": false,
+  "recorded_at": "20260924T111428.4945804Z"
+}
