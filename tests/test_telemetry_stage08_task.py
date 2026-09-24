@@ -143,6 +143,13 @@ class Stage08TaskMeasurementContractTests(unittest.TestCase):
 class Stage08TaskRecorderBoundaryTests(unittest.TestCase):
     @staticmethod
     def _reset_qualification_fixture(repo):
+        # The source repository may carry a pending recovery record for a
+        # different task/HEAD. It is not part of a fresh isolated fixture;
+        # tests that deliberately exercise mismatched recovery create their
+        # own pending record after this reset.
+        (repo / ".sdd/evidence/.stage08-pending-evidence-write.yaml").unlink(
+            missing_ok=True
+        )
         path = repo / ".sdd/state/implementation-state.yaml"
         state = yaml.safe_load(path.read_text(encoding="utf-8"))
         state["last_completed_task"] = None
