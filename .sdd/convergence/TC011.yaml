@@ -1,0 +1,24 @@
+task_id: TC011
+title: Establish legitimate sealed Stage08 verification-dispatch fixture state
+objective: Establish current Stage07 implementation authorization and sealed
+  Stage08 envelope prerequisites in verification-dispatch fixtures without changing
+  production governance behavior.
+traceability:
+- SPEC-001
+- DES-002
+allowed_paths:
+- tests/test_v1114_project_runtime.py
+- tests/test_v1115_windows_console_resolution.py
+verification_commands:
+- .\.venv\Scripts\python.exe -m pytest -q tests/test_v1114_project_runtime.py tests/test_v1115_windows_console_resolution.py
+acceptance_criteria:
+- fixtures establish legitimate active implementation authorization before envelope assembly
+- project interpreter and Windows console-resolution assertions remain meaningful
+- missing executable remains a verification failure rather than a traceback
+- sealed-envelope and authorization prerequisites remain fail-closed
+- production behavior remains unchanged
+- targeted verification passes
+dependencies: []
+status: TODO
+source_stage: '09'
+governance_profile: SDD_STANDARD

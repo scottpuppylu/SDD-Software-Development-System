@@ -1,0 +1,21 @@
+task_id: TC010
+title: Isolate telemetry fixtures from inherited pending Stage08 recovery state
+objective: Ensure Stage08 telemetry boundary fixtures remove unrelated inherited
+  pending evidence-recovery state while preserving fail-closed recovery behavior.
+traceability:
+- SPEC-001
+- DES-002
+allowed_paths:
+- tests/test_telemetry_stage08_task.py
+verification_commands:
+- .\.venv\Scripts\python.exe -m pytest -q tests/test_telemetry_stage08_task.py
+acceptance_criteria:
+- isolated fixture has no unrelated pending Stage08 evidence-recovery record
+- mismatched pending recovery state remains fail-closed when deliberately present
+- original telemetry boundary assertions remain meaningful
+- production behavior remains unchanged
+- targeted verification passes
+dependencies: []
+status: TODO
+source_stage: '09'
+governance_profile: SDD_STANDARD

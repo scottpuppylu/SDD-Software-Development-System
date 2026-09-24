@@ -4,8 +4,8 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: 08
-  current_stage_name: IMPLEMENTATION_RUNNER
+  current_stage: 07
+  current_stage_name: PRE_IMPLEMENTATION_GATE
   last_completed_stage: 09
   next_action: RUN_STAGE
 stages:
@@ -28,8 +28,8 @@ stages:
     status: DONE
     result: COMPLETED
   '07':
-    status: DONE
-    result: PASS
+    status: IN_PROGRESS
+    result: null
   08:
     status: IN_PROGRESS
     result: null

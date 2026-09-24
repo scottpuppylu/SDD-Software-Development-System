@@ -1,0 +1,20 @@
+task_id: TC009
+title: Align full-pipeline fixture with current sealed Stage07 prerequisite
+objective: Establish the legitimate current Stage07 fixture state required for the
+  mock full-pipeline test without changing production lifecycle behavior.
+traceability:
+- SPEC-001
+- DES-002
+allowed_paths:
+- tests/test_m10_convergence_auto.py
+verification_commands:
+- .\.venv\Scripts\python.exe -m pytest -q tests/test_m10_convergence_auto.py
+acceptance_criteria:
+- mock pipeline establishes current Stage07 prerequisite state before Stage08 dispatch
+- full pipeline retains its DEPLOY assertion only after legitimate governed entry
+- production behavior remains unchanged
+- targeted verification passes
+dependencies: []
+status: TODO
+source_stage: '09'
+governance_profile: SDD_STANDARD
