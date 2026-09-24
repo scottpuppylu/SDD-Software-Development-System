@@ -6,7 +6,7 @@
 GATE_NAME = CURRENT_IMPLEMENTATION_RECOVERY_GATE
 AUTHORITY_DOMAIN = IMPLEMENTATION_RECOVERY_DECISION
 RESULT = PASS
-EVALUATED_BASELINE = 96f728e4cdb29fe7f19dd083983562dc41299af8
+EVALUATED_BASELINE = 25699c6994fb9aceae2dbb82e078d6403d39083c
 STAGE09_ENTRY_PERMITTED = YES
 IMPLEMENTATION_AUTHORIZATION = NO
 STAGE09_RESULT = NOT_EVALUATED
@@ -14,53 +14,35 @@ STAGE10_RESULT = NOT_EVALUATED
 RELEASE_AUTHORIZATION = NO
 ```
 
-This is a prospective recovery-provenance decision only. It permits Stage 09 entry for independent conformance verification; it does not create or infer a historical Stage 07 PASS, retrospectively authorize Stage 08, qualify implementation conformance, decide Stage 09, authorize Stage 10, release, deployment, or new implementation.
+This fresh decision evaluates the fully converged TC001–TC008 graph. It permits only a future independent Stage09 entry; it does not execute Stage09, create a Stage09 result, authorize Stage10, release, deployment, or new implementation.
 
-## Authority, eligibility, and purpose
+## Authority and entry contract
 
-The governing sources are `docs/project/whole-project-closure-authority-baseline.md`, `docs/project/pre-existing-implementation-recovery-amendment-draft.md`, `.sdd/stages.yaml` `PRE_EXISTING_IMPLEMENTATION_RECOVERY`, and AGENTS.md section 10. The Recovery Gate owns `IMPLEMENTATION_RECOVERY_DECISION`; its required decision artifact is this report.
+The owner is `CURRENT_IMPLEMENTATION_RECOVERY_GATE` under `.sdd/stages.yaml` `PRE_EXISTING_IMPLEMENTATION_RECOVERY`; the current decision artifact is this report. Required authority is the approved current package (`docs/proposal.md`, `docs/PRD.md`, `docs/spec.md`, `docs/Design.md`, `AGENTS.md`, `tasks.md`) plus `docs/project/pre-existing-implementation-recovery-amendment-draft.md`. The authority-state has no unresolved conflict or blocking TBD.
 
-The gate establishes that pre-existing implementation may now enter Stage 09 against a complete approved current authority baseline without fabricating historical authorization. Eligibility is satisfied:
+The gate preserves the historical project-specific Stage07 `NOT_FOUND` recovery premise, forbids retroactive Stage07/Stage08 authority, and evaluates only recovery provenance, evidence, checkpoints, current state, and repository integrity. A PASS means recovery prerequisites are satisfied and Stage09 entry is permitted; it does not mean implementation conformance or Stage09 PASS.
 
-- Project Authority explicitly approved the recovery amendment for the narrow pre-existing-implementation closure path.
-- `docs/project/project-authority-reconstruction.md` establishes the historical project-specific Stage 07 decision as `NOT_FOUND` after bounded inquiry.
-- Historical Stage 07 PASS and retroactive implementation authorization remain explicitly forbidden.
-- Recovery is confined to authority/conformance/closure provenance. It authorizes no new implementation or Stage 08 shortcut.
-- The complete current authority package exists and declares approved current authority: `docs/proposal.md`, `docs/PRD.md`, `docs/spec.md`, `docs/Design.md`, `AGENTS.md`, and `tasks.md`.
-- `.sdd/state/authority-state.yaml` contains no unresolved authority conflict or blocking TBD.
+## Implementation graph and evidence
 
-## Implementation, recovery, and repository integrity
+`TC001` through `TC008` are each `IMPLEMENTATION_QUALIFIED`, finalized, and backed by parseable PASS Stage08 evidence. Each record binds its matching task ID, Stage07 envelope, required verification outcome, and reachable implementation checkpoint. The checkpoints are, in order: `0cc2dfe249adb7be273de18d9c993b4f248265d4`, `8a97c3d349b662ec65465c999f05a1c81d17c20d`, `3b569fce96a4661c16047aab290d812da12bec3b`, `81701e534d295fd10041f55235df516ecd0b8911`, `09bacac623279554b308f35946689f71d333ff0c`, `30bb6e931eb7996c63c2bf5a0f6eba1427552f1c`, `d597f6b6ba4facfd411d44f939ce5d94c13e26ca`, and `6cbb7df678a671493520fa0f6abaddcc9bf61557`.
 
-`.sdd/state/implementation-state.yaml` schema `2.0` contains exactly 28 qualification records, `T001` through `T028`. Each is `IMPLEMENTATION_QUALIFIED`; `last_completed_task` is `T025`, `last_verified_commit` is `0f60e06c978e6014dde7a4585a250b61fd4b38a6`, and `current_task` and `next_task` are null. No pending implementation task, unresolved dependency, or active implementation recovery obligation remains.
+All checkpoints are reachable from the evaluated baseline. `last_verified_commit` is the durable, repository-backed TC008 checkpoint `6cbb7df678a671493520fa0f6abaddcc9bf61557`; it is not implementation authorization. No active convergence task, next task, pending implementation transaction, or unresolved convergence contract remains.
 
-Each qualification record was validated against its repository-backed evidence schema. All 28 evidence records bind the expected task identity, qualifying outcome, immutable implementation checkpoint, reachable repository evidence commit, and current committed evidence blob. This includes the historical post-checkpoint recovery attestations for `T012`, `T019`, and `T020`, which remain preserved as recovery evidence rather than being reclassified as ordinary Stage 08 evidence.
+## State and historical preservation
 
-For recent normal implementations, `T023`, `T024`, `T025`, `T026`, `T027`, and `T028` checkpoints exist, are reachable, and their non-evidence changed paths are within the corresponding task's allowed-file contract. The finalization commits for the completed current sequence remain separate from their implementation checkpoints where the normal workflow required it.
+Current projection has implementation authorization `false`, release authorization `false`, `current_task=null`, `next_task=null`, and route `RECOVERY_GATE`. Stage09 remains `TODO/null`; the historical Stage09 `FAIL / IMPLEMENTATION_GAP` report remains historical evidence only and is not represented as a fresh rerun result. Stage10 remains `TODO/null`.
 
-The worktree and index were clean at evaluation. No pending evidence-write record, active task cursor, blocked implementation state, stale execution lock, or incomplete implementation transaction exists. TASK-027 and TASK-028 durable phase journals are historical completed attempts: both terminate at `STAGE8_COMPLETE`, not `SAFE_PAUSE` or `REMEDIATION_REQUIRED`.
+The worktree and index were clean, `git diff --check` and `git diff --cached --check` passed, and no unauthorized drift was found. Historical Stage07/Stage08 evidence, convergence contracts, implementation checkpoints, finalization commits, and prior Stage09 evidence remain preserved.
 
-## Preservation findings
-
-- TASK-023 resource-policy, reservation, accounting, limits, and exhaustion controls are preserved; no recovery path bypasses them.
-- TASK-024 provider conformance, fail-closed dispatch, governed fallback, and promotion controls are preserved; recovery selects no provider or provider behavior.
-- TASK-025 remains a test-only fixture repair. The production DecisionGateway and durable A2 decisions are unchanged; Human Approval and fail-closed semantics remain governed.
-- TASK-026 through TASK-028 Work Package, local verification, phase-state/SAFE_PAUSE/resume, and observational telemetry implementations remain ordinary qualified task evidence. Recovery neither reinterprets nor controls them.
-- No Architecture Constitution redesign or Upgrade Wave capability is introduced by this decision. The recovery authority requires preservation, not a new `ARCH-AC-*` conformance decision.
-
-## Verification and Stage 09 consequence
-
-The Recovery Gate authority defines no recovery-specific pytest, build, lint, or typecheck command. Its required verification is authority, provenance, state, evidence, checkpoint, and repository-integrity inspection. Therefore no Stage 09 verification suite was run and no test result is being represented as a Stage 09 decision.
+## Stage09 consequence
 
 ```text
 RECOVERY_GATE_MACHINE_VERIFICATION_REQUIRED = NO
-RECOVERY_GATE_VERIFICATION = REPOSITORY_BACKED_AUTHORITY_AND_INTEGRITY_INSPECTION
-CURRENT_UNRESOLVED_RECOVERY_OBLIGATIONS = NONE
-HISTORICAL_NONQUALIFYING_ATTEMPTS = PRESERVED_AS_HISTORICAL_RECORDS
-SAFE_PAUSE_RESUME_CLOSURE = PASS_NO_ACTIVE_RESUMABLE_ATTEMPT
+RECOVERY_GATE_VERIFICATION = REPOSITORY_BACKED_AUTHORITY_EVIDENCE_CHECKPOINT_AND_INTEGRITY_INSPECTION
 STAGE09_ENTRY_ELIGIBLE = YES
 STAGE09_EXECUTED = NO
 STAGE10_EXECUTED = NO
 UPGRADE_GATE_2_STARTED = NO
 ```
 
-The next governed operation may be Stage 09 qualification. It remains independent and must return its own `PASS`, `FAIL`, or `INCOMPLETE` result before any Stage 10 entry.
+The future Stage09 run must use its authoritative full command and independently issue `PASS`, `FAIL`, or `INCOMPLETE`. A durable local runner with persisted stdout/stderr/exit status and isolated process-local `TEMP`/`TMP` is required for that later run; those controls do not change the Stage09 command.

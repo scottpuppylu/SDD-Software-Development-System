@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "gate": "CURRENT_IMPLEMENTATION_RECOVERY_GATE",
+  "authority_domain": "IMPLEMENTATION_RECOVERY_DECISION",
+  "result": "PASS",
+  "evaluated_baseline": "25699c6994fb9aceae2dbb82e078d6403d39083c",
+  "implementation_graph": {
+    "tasks": ["TC001", "TC002", "TC003", "TC004", "TC005", "TC006", "TC007", "TC008"],
+    "all_qualified": true,
+    "unresolved_tasks": []
+  },
+  "evidence_chain": {"valid": true, "invalid_items": []},
+  "checkpoint_ancestry": {"valid": true, "unreachable_checkpoints": [], "rewritten_checkpoints": []},
+  "last_verified_commit": "6cbb7df678a671493520fa0f6abaddcc9bf61557",
+  "current_state": {
+    "implementation_authorization": false,
+    "release_authorization": false,
+    "current_task": null,
+    "next_task": null,
+    "stage09": {"status": "TODO", "result": null},
+    "stage10": {"status": "TODO", "result": null}
+  },
+  "historical_stage09_fail_preserved": true,
+  "worktree_integrity": {"clean": true, "diff_check": "PASS", "cached_diff_check": "PASS"},
+  "stage09_entry_permitted": true,
+  "stage09_executed": false,
+  "stage10_executed": false,
+  "upgrade_gate_2_started": false,
+  "recorded_at": "20260924T104647.5535444Z"
+}
