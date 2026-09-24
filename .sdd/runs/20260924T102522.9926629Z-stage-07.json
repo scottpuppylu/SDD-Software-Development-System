@@ -1,0 +1,58 @@
+{
+  "request_summary": {
+    "stage_id": "07",
+    "stage_name": "PRE_IMPLEMENTATION_GATE",
+    "artifact_paths": [
+      ".sdd/state/authority-state.yaml",
+      ".sdd/state/project-state.yaml",
+      "AGENTS.md",
+      "docs/Design.md",
+      "docs/PRD.md",
+      "docs/spec.md",
+      "tasks.md"
+    ],
+    "semantic_input_keys": ["GIT_READINESS", "REPOSITORY_STRUCTURE", "TARGET_TASK"],
+    "has_stage_instructions": true
+  },
+  "result": {
+    "status": "COMPLETED",
+    "artifacts": {"docs/handoff/pre-implementation-gate-report.md": "# Stage 07 Pre-Implementation Gate Report - TC008\\n\\n## Decision\\n\\nRESULT = PASS\\nIMPLEMENTATION_AUTHORIZATION = GRANTED\\nTARGET_TASK = TC008\\nBASELINE = bc67c99abf44aadf61e65866bb2141f557cc615c\\nREPAIR_CLASSIFICATION = TEST_ASSERTION_COMPATIBILITY_REPAIR\\nREPAIR_OWNER = TEST_FIXTURE_OWNER\\n\\n## Contract and scope\\n\\nTC008 repairs only `tests/test_m41_runner_context_integration.py`. `StageRunner` owns runner dispatch context and preserves the original request as lifecycle referent; `GovernanceEnvelopeValidator` owns dispatch provenance reconciliation. `Orchestrator` owns active implementation authorization; `RecoveryManager` plus Stage08 evidence own durable verified-checkpoint projection; `Stage08CodexRunner` owns the execution-bound sealed envelope.\\n\\nVERIFICATION_COMMAND = .\\\\.venv\\\\Scripts\\\\python.exe -m pytest -q tests/test_m41_runner_context_integration.py\\nTC008_VERIFICATION_CONTRACT_INDEPENDENT = YES\\n\\n## Qualification findings\\n\\nThe old test requires metadata to equal only caller data after governed dispatch. Current behavior preserves caller metadata and the original request referent while appending required governance provenance. This is a stale assertion, not a runner-context or lifecycle-referent regression.\\n\\nProduction behavior change required = NO\\nGovernance behavior change required = NO\\nState projection behavior change required = NO\\nRunner-context implementation change required = NO\\n\\n## Acceptance\\n\\n- test preserves original request lifecycle referent;\\n- test asserts caller metadata preservation and appended governance provenance;\\n- stale provenance cannot grant implementation authorization;\\n- only tests/test_m41_runner_context_integration.py is implementation scope;\\n- TC001-TC007, Recovery Gate, Stage09, Stage10, and Upgrade Gate #2 are excluded.\\n"},
+    "result": "PASS",
+    "classification": null,
+    "remediation_reasons": [],
+    "convergence_tasks": [],
+    "metadata": {
+      "target_task": "TC008",
+      "authorized_baseline": "bc67c99abf44aadf61e65866bb2141f557cc615c",
+      "implementation_authorization": true,
+      "repair_classification": "TEST_ASSERTION_COMPATIBILITY_REPAIR",
+      "repair_owner": "TEST_FIXTURE_OWNER",
+      "runner_context_owner": "StageRunner / GovernanceEnvelopeValidator",
+      "lifecycle_referent_owner": "Orchestrator / StageRunner",
+      "verified_checkpoint_referent_owner": "RecoveryManager / Stage08 evidence",
+      "implementation_authorization_referent_owner": "Orchestrator project-state",
+      "execution_bound_referent_owner": "Stage08CodexRunner sealed execution envelope",
+      "verification_command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m41_runner_context_integration.py",
+      "allowed_files": ["tests/test_m41_runner_context_integration.py"],
+      "tc008_verification_contract_independent": true,
+      "production_behavior_change_required": false,
+      "governance_behavior_change_required": false,
+      "state_projection_behavior_change_required": false,
+      "runner_context_implementation_change_required": false,
+      "stage08_authorized": "YES_TC008_ONLY",
+      "stage08_executed": false,
+      "recovery_gate_executed": false,
+      "stage09_executed": false,
+      "stage10_executed": false,
+      "upgrade_gate_2_started": false
+    }
+  },
+  "transition": {
+    "stage_id": "07",
+    "result": "PASS",
+    "classification": null,
+    "next": "08",
+    "implementation_authorization": true,
+    "release_authorization": false
+  }
+}
