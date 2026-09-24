@@ -7,7 +7,7 @@ lifecycle:
   current_stage: 08
   current_stage_name: IMPLEMENTATION_RUNNER
   last_completed_stage: '07'
-  next_action: RUN_STAGE
+  next_action: RECOVERY_GATE
 stages:
   '01':
     status: DONE
@@ -34,13 +34,13 @@ stages:
     status: IN_PROGRESS
     result: null
   09:
-    status: DONE
-    result: FAIL
+    status: TODO
+    result: null
   '10':
     status: TODO
     result: null
 authorizations:
-  implementation: true
+  implementation: false
   release: false
 blocking:
   is_blocked: false
