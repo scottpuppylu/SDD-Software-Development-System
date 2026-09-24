@@ -1,0 +1,204 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "TC007",
+  "title": "Align Stage07 reconciliation fixture with preserved verification projection",
+  "status": "PASS",
+  "changed_paths": [
+    "tests/test_v115_stage07_runtime_reconciliation.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_v115_stage07_runtime_reconciliation.py",
+      "returncode": 0,
+      "stdout": ".......                                                                  [100%]\n============================== warnings summary ===============================\n.venv\\Lib\\site-packages\\_pytest\\cacheprovider.py:469\n  C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.venv\\Lib\\site-packages\\_pytest\\cacheprovider.py:469: PytestCacheWarning: could not create cache path C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.pytest_cache\\v\\cache\\nodeids: [WinError 183] ���ɮפw�s�b�ɡA�L�k�إ߸��ɮסC: 'C:\\\\Users\\\\user\\\\Documents\\\\ChatGPT\\\\SDD-Software-Development-System-v1.1.7\\\\.pytest_cache\\\\v\\\\cache'\n    config.cache.set(\"cache/nodeids\", sorted(self.cached_nodeids))\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n7 passed, 1 warning in 47.26s\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "TC007 assertion compatibility repair applied under sealed authorization.\n",
+    "stderr": ""
+  },
+  "recorded_at": "20260924T014632.311701Z",
+  "governance": {
+    "envelope_id": "2f9abc949fb68caf8fbb10150c808df263bb770d5577020b86def639c7a35dfa",
+    "approval_class": "A0",
+    "approval_reference": "stage07:507adbe60641a1d7df1d1995cc8fb0618d39f24737c97937fc499c5dfc1fdaa8",
+    "pre_dispatch": {
+      "envelope_id": "2f9abc949fb68caf8fbb10150c808df263bb770d5577020b86def639c7a35dfa",
+      "outcome": "AUTHORIZED",
+      "approval_class": "A0",
+      "approval_reference": "stage07:507adbe60641a1d7df1d1995cc8fb0618d39f24737c97937fc499c5dfc1fdaa8",
+      "action": "EXECUTE_STAGE08_TASK",
+      "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+      "scope": [
+        "tests/test_v115_stage07_runtime_reconciliation.py"
+      ],
+      "failure_route": null,
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "tests/test_v115_stage07_runtime_reconciliation.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.Stub"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:52b5c580049cb89f46302b7d3b7ccfd406ce6545698cc1c0133f19e7fc902c26:stage08-dispatch"
+      }
+    },
+    "post_dispatch": {
+      "envelope_id": "2f9abc949fb68caf8fbb10150c808df263bb770d5577020b86def639c7a35dfa",
+      "outcome": "PASS",
+      "observed_scope": [
+        "tests/test_v115_stage07_runtime_reconciliation.py"
+      ],
+      "observed_effects": [
+        "WORKSPACE_WRITE"
+      ],
+      "evidence_references": [
+        "pending-stage08-evidence:TC007"
+      ],
+      "failure_route": null,
+      "approval_class": "A0",
+      "approval_reference": "stage07:507adbe60641a1d7df1d1995cc8fb0618d39f24737c97937fc499c5dfc1fdaa8",
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "tests/test_v115_stage07_runtime_reconciliation.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.Stub"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:52b5c580049cb89f46302b7d3b7ccfd406ce6545698cc1c0133f19e7fc902c26:stage08-dispatch",
+        "outcome": "RECONCILED",
+        "actual_filesystem_paths": [
+          "tests/test_v115_stage07_runtime_reconciliation.py"
+        ],
+        "actual_network_destinations": [],
+        "actual_credential_references": [],
+        "actual_secret_references": [],
+        "actual_processes": [
+          "sdd_orchestrator.codex_cli.Stub"
+        ],
+        "evidence_reference": "pending-stage08-evidence:TC007"
+      }
+    },
+    "verification_dispatches": [
+      {
+        "level": "TARGET",
+        "legacy_required": true,
+        "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+        "envelope_id": "2b8fc59845405aa91a6f56f59d7030d86b1e432fc5dcf9330d09a2b35a804490",
+        "approval_class": "A0",
+        "approval_reference": "stage07:507adbe60641a1d7df1d1995cc8fb0618d39f24737c97937fc499c5dfc1fdaa8",
+        "pre_dispatch": {
+          "envelope_id": "2b8fc59845405aa91a6f56f59d7030d86b1e432fc5dcf9330d09a2b35a804490",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "stage07:507adbe60641a1d7df1d1995cc8fb0618d39f24737c97937fc499c5dfc1fdaa8",
+          "action": "EXECUTE_VERIFICATION_TOOL",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "tests/test_v115_stage07_runtime_reconciliation.py"
+          ],
+          "failure_route": null,
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "tests/test_v115_stage07_runtime_reconciliation.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:52b5c580049cb89f46302b7d3b7ccfd406ce6545698cc1c0133f19e7fc902c26:verify:0:verification-0"
+          }
+        },
+        "post_dispatch": {
+          "envelope_id": "2b8fc59845405aa91a6f56f59d7030d86b1e432fc5dcf9330d09a2b35a804490",
+          "outcome": "PASS",
+          "observed_scope": [],
+          "observed_effects": [
+            "TOOL_EXECUTION"
+          ],
+          "evidence_references": [
+            "verification-result:TC007:TARGET:0"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "stage07:507adbe60641a1d7df1d1995cc8fb0618d39f24737c97937fc499c5dfc1fdaa8",
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "tests/test_v115_stage07_runtime_reconciliation.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:52b5c580049cb89f46302b7d3b7ccfd406ce6545698cc1c0133f19e7fc902c26:verify:0:verification-0",
+            "outcome": "RECONCILED",
+            "actual_filesystem_paths": [],
+            "actual_network_destinations": [],
+            "actual_credential_references": [],
+            "actual_secret_references": [],
+            "actual_processes": [
+              "verification-execution"
+            ],
+            "evidence_reference": "verification-result:TC007:TARGET:0"
+          }
+        }
+      }
+    ],
+    "verification_plan": {
+      "schema_version": "1.0",
+      "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+      "provider_session_required": false,
+      "fast_count": 0,
+      "target_count": 1,
+      "full_count": 0,
+      "full_authorized": false,
+      "stage09_full_verification_preserved": true
+    }
+  }
+}

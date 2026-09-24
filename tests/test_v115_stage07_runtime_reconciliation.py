@@ -56,6 +56,7 @@ class V115RuntimeReconciliationTests(unittest.TestCase):
         state["blocking"]["reasons"] = ["OLD_STAGE02_PRODUCT_QUESTION"]
         state["git"]["branch"] = None
         state["git"]["head_commit"] = None
+        expected_verified_checkpoint = state["git"].get("last_verified_commit")
         self.orch._save_yaml(self.orch.project_state_path, state)
 
         evidence = self.controller._reconcile_pre_stage07_runtime_state()
@@ -66,7 +67,8 @@ class V115RuntimeReconciliationTests(unittest.TestCase):
         self.assertTrue(evidence["head_commit"])
         self.assertEqual(saved["git"]["branch"], evidence["branch"])
         self.assertEqual(saved["git"]["head_commit"], evidence["head_commit"])
-        self.assertIsNone(saved["git"]["last_verified_commit"])
+        self.assertEqual(saved["git"]["last_verified_commit"], expected_verified_checkpoint)
+        self.assertFalse(saved["authorizations"]["implementation"])
         self.assertFalse(saved["blocking"]["is_blocked"])
         self.assertEqual(saved["blocking"]["reasons"], [])
 
