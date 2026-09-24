@@ -6,6 +6,7 @@ import unittest
 
 from sdd_orchestrator.core import Orchestrator
 from sdd_orchestrator.executor import StaticExecutor, StageExecutionResult
+from sdd_orchestrator.governance_envelope import GovernanceEnvelopeError
 from sdd_orchestrator.result_serialization import project_status_report
 from sdd_orchestrator.runner import (
     GovernedRepositorySnapshot,
@@ -139,12 +140,14 @@ class StageRunnerTests(unittest.TestCase):
                 "src/backdoor.py": "not allowed",
             },
         ))
-        with self.assertRaises(StageExecutionValidationError):
+        with self.assertRaises(GovernanceEnvelopeError) as raised:
             runner.run(
                 executor,
                 "03",
                 semantic_inputs={"KNOWN_TECHNICAL_CONSTRAINTS_IF_ANY": "none"},
             )
+        self.assertEqual(raised.exception.code, "ACTUAL_SCOPE_EFFECT_MISMATCH")
+        self.assertEqual(raised.exception.route, "SECURITY_OR_AUTHORITY_OWNER")
 
     def test_stage_09_request_contains_source_and_tests(self):
         for rel in ["docs/PRD.md", "docs/spec.md", "docs/Design.md", "AGENTS.md", "tasks.md"]:
