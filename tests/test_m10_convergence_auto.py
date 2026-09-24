@@ -118,6 +118,22 @@ class FullAutoE2ETests(unittest.TestCase):
         implementation['test_status']['required_checks'] = []
         implementation['test_status']['last_run_at'] = None
         implementation_path.write_text(yaml.safe_dump(implementation, sort_keys=False), encoding='utf-8')
+        project_path = self.repo/'.sdd/state/project-state.yaml'
+        project = yaml.safe_load(project_path.read_text(encoding='utf-8'))
+        project['lifecycle'] = {
+            'current_stage': '01',
+            'current_stage_name': 'PRODUCT_PROPOSAL',
+            'last_completed_stage': None,
+            'next_action': 'RUN_STAGE',
+        }
+        for stage_id in ('01', '02', '03', '04', '05', '06', '07', '08', '09', '10'):
+            project['stages'][stage_id]['status'] = 'TODO'
+            project['stages'][stage_id]['result'] = None
+        project['stages']['01']['status'] = 'IN_PROGRESS'
+        project['authorizations']['implementation'] = False
+        project['authorizations']['release'] = False
+        project['blocking'] = {'is_blocked': False, 'reasons': []}
+        project_path.write_text(yaml.safe_dump(project, sort_keys=False), encoding='utf-8')
         (self.repo/'tasks.md').write_text(
             '# Tasks\n\n'
             '### T001 - Implement app\n'
@@ -151,7 +167,17 @@ class FullAutoE2ETests(unittest.TestCase):
             '04':[StageExecutionResult(status='COMPLETED',artifacts={'docs/Design.md':'# Design\nDES-001\n'})],
             '05':[StageExecutionResult(status='COMPLETED',artifacts={'AGENTS.md':'# AGENTS\nStage 07 PASS required.\n'})],
             '06':[StageExecutionResult(status='COMPLETED',artifacts={'tasks.md':'''# Tasks\n\n### T001 — Implement app\n- **Status:** TODO\n- **Traceability:** FR-001 → SPEC-001 → DES-001\n- **Allowed files:** `src/app.py`, `tests/test_app.py`\n- **Implementation Scope:** Implement the app task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n'''})],
-            '07':[StageExecutionResult(status='COMPLETED',result='PASS',artifacts={'docs/handoff/pre-implementation-gate-report.md':'PASS\n'})],
+            '07':[StageExecutionResult(
+                status='COMPLETED',
+                result='PASS',
+                artifacts={
+                    'docs/handoff/pre-implementation-gate-report.md': (
+                        'RESULT = PASS\n'
+                        'IMPLEMENTATION_AUTHORIZATION = GRANTED\n'
+                        'TARGET_TASK = T001\n'
+                    )
+                },
+            )],
             '09':[StageExecutionResult(status='COMPLETED',result='PASS',artifacts={'docs/handoff/verification-report.md':'PASS\n'})],
             '10':[StageExecutionResult(status='COMPLETED',result='READY',artifacts={'docs/handoff/handoff-report.md':'READY\n'})],
         }
