@@ -51,6 +51,11 @@ class Stage02ProductConvergenceTests(unittest.TestCase):
         prd = self.repo / "docs" / "PRD.md"
         prd.write_text("# PRD\n", encoding="utf-8")
         orch = Orchestrator(self.repo)
+        # The copied repository state records a previously completed Stage02.
+        # Establish the pre-completion state for this isolated entry-gate case
+        # instead of attributing that inherited completion to this invocation.
+        orch.project_state["stages"]["02"]["status"] = "TODO"
+        orch.project_state["stages"]["02"]["result"] = None
         check = orch.check_required_inputs(
             "03", {"KNOWN_TECHNICAL_CONSTRAINTS_IF_ANY"}
         )

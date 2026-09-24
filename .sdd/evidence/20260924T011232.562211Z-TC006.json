@@ -1,0 +1,204 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "TC006",
+  "title": "Align Stage02 to Stage03 fixture contract state",
+  "status": "PASS",
+  "changed_paths": [
+    "tests/test_stage02_product_convergence.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_stage02_product_convergence.py",
+      "returncode": 0,
+      "stdout": "..............                                            [100%]\n14 passed, 15 subtests passed in 2.68s\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "TC006 fixture repair already applied under sealed authorization.\n",
+    "stderr": ""
+  },
+  "recorded_at": "20260924T011232.562211Z",
+  "governance": {
+    "envelope_id": "79b8a6b060822ed7af8943ada39ff493afbd2001fc685f5fa6bccfad4a5aa334",
+    "approval_class": "A0",
+    "approval_reference": "stage07:c0966a9a523872da946d786c48c24e652b0659b2aa869c58b7417c543325c0af",
+    "pre_dispatch": {
+      "envelope_id": "79b8a6b060822ed7af8943ada39ff493afbd2001fc685f5fa6bccfad4a5aa334",
+      "outcome": "AUTHORIZED",
+      "approval_class": "A0",
+      "approval_reference": "stage07:c0966a9a523872da946d786c48c24e652b0659b2aa869c58b7417c543325c0af",
+      "action": "EXECUTE_STAGE08_TASK",
+      "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+      "scope": [
+        "tests/test_stage02_product_convergence.py"
+      ],
+      "failure_route": null,
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "tests/test_stage02_product_convergence.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.Stub"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:1ffd86aea6535b6c54cc99a5a39e8d559c1eaabf67a8ade8da7276ad15a79a9d:stage08-dispatch"
+      }
+    },
+    "post_dispatch": {
+      "envelope_id": "79b8a6b060822ed7af8943ada39ff493afbd2001fc685f5fa6bccfad4a5aa334",
+      "outcome": "PASS",
+      "observed_scope": [
+        "tests/test_stage02_product_convergence.py"
+      ],
+      "observed_effects": [
+        "WORKSPACE_WRITE"
+      ],
+      "evidence_references": [
+        "pending-stage08-evidence:TC006"
+      ],
+      "failure_route": null,
+      "approval_class": "A0",
+      "approval_reference": "stage07:c0966a9a523872da946d786c48c24e652b0659b2aa869c58b7417c543325c0af",
+      "security": {
+        "data_class": "INTERNAL",
+        "classification_reference": "AGENTS.md:14.4:data-classification",
+        "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+        "sandbox_class": "S1_WORKSPACE_WRITE",
+        "environment": "workspace",
+        "filesystem_paths": [
+          "tests/test_stage02_product_convergence.py"
+        ],
+        "network_destinations": [],
+        "network_purposes": [],
+        "credential_classes": [],
+        "credential_references": [],
+        "secret_references": [],
+        "processes": [
+          "sdd_orchestrator.codex_cli.Stub"
+        ],
+        "production_action": false,
+        "audit_reference": "security-audit:1ffd86aea6535b6c54cc99a5a39e8d559c1eaabf67a8ade8da7276ad15a79a9d:stage08-dispatch",
+        "outcome": "RECONCILED",
+        "actual_filesystem_paths": [
+          "tests/test_stage02_product_convergence.py"
+        ],
+        "actual_network_destinations": [],
+        "actual_credential_references": [],
+        "actual_secret_references": [],
+        "actual_processes": [
+          "sdd_orchestrator.codex_cli.Stub"
+        ],
+        "evidence_reference": "pending-stage08-evidence:TC006"
+      }
+    },
+    "verification_dispatches": [
+      {
+        "level": "TARGET",
+        "legacy_required": true,
+        "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+        "envelope_id": "61806984b870aa047830c06b521cf1b0e058ac72ebd47ae8fb9ef9b9fc64db21",
+        "approval_class": "A0",
+        "approval_reference": "stage07:c0966a9a523872da946d786c48c24e652b0659b2aa869c58b7417c543325c0af",
+        "pre_dispatch": {
+          "envelope_id": "61806984b870aa047830c06b521cf1b0e058ac72ebd47ae8fb9ef9b9fc64db21",
+          "outcome": "AUTHORIZED",
+          "approval_class": "A0",
+          "approval_reference": "stage07:c0966a9a523872da946d786c48c24e652b0659b2aa869c58b7417c543325c0af",
+          "action": "EXECUTE_VERIFICATION_TOOL",
+          "target": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7",
+          "scope": [
+            "tests/test_stage02_product_convergence.py"
+          ],
+          "failure_route": null,
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "tests/test_stage02_product_convergence.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:1ffd86aea6535b6c54cc99a5a39e8d559c1eaabf67a8ade8da7276ad15a79a9d:verify:0:verification-0"
+          }
+        },
+        "post_dispatch": {
+          "envelope_id": "61806984b870aa047830c06b521cf1b0e058ac72ebd47ae8fb9ef9b9fc64db21",
+          "outcome": "PASS",
+          "observed_scope": [],
+          "observed_effects": [
+            "TOOL_EXECUTION"
+          ],
+          "evidence_references": [
+            "verification-result:TC006:TARGET:0"
+          ],
+          "failure_route": null,
+          "approval_class": "A0",
+          "approval_reference": "stage07:c0966a9a523872da946d786c48c24e652b0659b2aa869c58b7417c543325c0af",
+          "security": {
+            "data_class": "INTERNAL",
+            "classification_reference": "AGENTS.md:14.4:data-classification",
+            "handling_policy_reference": "SDD_REMOTE_SANDBOX_SECURITY_CONTRACT.md",
+            "sandbox_class": "S1_WORKSPACE_WRITE",
+            "environment": "workspace",
+            "filesystem_paths": [
+              "tests/test_stage02_product_convergence.py"
+            ],
+            "network_destinations": [],
+            "network_purposes": [],
+            "credential_classes": [],
+            "credential_references": [],
+            "secret_references": [],
+            "processes": [
+              "verification-execution"
+            ],
+            "production_action": false,
+            "audit_reference": "security-audit:1ffd86aea6535b6c54cc99a5a39e8d559c1eaabf67a8ade8da7276ad15a79a9d:verify:0:verification-0",
+            "outcome": "RECONCILED",
+            "actual_filesystem_paths": [],
+            "actual_network_destinations": [],
+            "actual_credential_references": [],
+            "actual_secret_references": [],
+            "actual_processes": [
+              "verification-execution"
+            ],
+            "evidence_reference": "verification-result:TC006:TARGET:0"
+          }
+        }
+      }
+    ],
+    "verification_plan": {
+      "schema_version": "1.0",
+      "runtime_identity": "95d9b86233bf9618f90685704beea3216006e8873b2e9ceddd2cc7b1009ce1bb",
+      "provider_session_required": false,
+      "fast_count": 0,
+      "target_count": 1,
+      "full_count": 0,
+      "full_authorized": false,
+      "stage09_full_verification_preserved": true
+    }
+  }
+}
