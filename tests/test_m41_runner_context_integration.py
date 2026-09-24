@@ -268,9 +268,20 @@ class RunnerContextIntegrationTests(unittest.TestCase):
     def test_result_metadata_and_existing_lifecycle_referent_are_unchanged(self):
         request = make_request()
         result = StageExecutionResult(status="COMPLETED", metadata={"existing": True})
+        caller_metadata = copy.deepcopy(result.metadata)
         runner = HarnessRunner(request, compilation_mode=CompilationMode.OPTIMIZED)
         runner.run(AtomicExecutor(result=result))
-        self.assertEqual(result.metadata, {"existing": True})
+        self.assertEqual(result.metadata["existing"], caller_metadata["existing"])
+        governance = result.metadata.get("governance")
+        self.assertIsInstance(governance, dict)
+        self.assertRegex(governance.get("envelope_id", ""), r"^[0-9a-f]{64}$")
+        self.assertEqual(governance["pre_dispatch"]["outcome"], "AUTHORIZED")
+        self.assertEqual(
+            governance["pre_dispatch"]["action"], "REASONING_STAGE_DISPATCH"
+        )
+        self.assertEqual(governance["pre_dispatch"]["approval_class"], "A0")
+        self.assertEqual(governance["post_dispatch"]["outcome"], "PASS")
+        self.assertNotIn("implementation_authorization", governance)
         referent_calls = [call for call in runner.lifecycle_calls
                           if call[0] in {"validate", "convergence", "transition", "record"}]
         self.assertTrue(referent_calls)

@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "TC008",
+  "title": "Align runner context integration fixture with current lifecycle referent",
+  "status": "PASS",
+  "entry_head": "71a44e1640d001270b592d70f0069856cb202d70",
+  "stage07_envelope_id": "fda13fbe302242e322a29d186f377f95a635743eb27bb17fd6b29073dc857d33",
+  "changed_paths": ["tests/test_m41_runner_context_integration.py"],
+  "allowed_file_boundary": "VALID",
+  "verification": [{
+    "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m41_runner_context_integration.py",
+    "returncode": 0,
+    "summary": "12 passed, 1 warning, 2 subtests passed in 5.09s",
+    "passed": true
+  }],
+  "semantic_validation": {
+    "original_request_referent_preserved": true,
+    "caller_metadata_preserved": true,
+    "caller_metadata_values_unchanged": true,
+    "governance_provenance_appended": true,
+    "governance_provenance_values_valid": true,
+    "governance_provenance_not_treated_as_authorization": true,
+    "current_task_referent": "TC008",
+    "verified_checkpoint_referent": "d597f6b6ba4facfd411d44f939ce5d94c13e26ca",
+    "execution_bound_head": "71a44e1640d001270b592d70f0069856cb202d70",
+    "stale_context_authorization_blocked": true,
+    "runner_context_provenance_preserved": true,
+    "production_behavior_changed": false,
+    "governance_behavior_changed": false,
+    "state_projection_behavior_changed": false,
+    "runner_context_implementation_changed": false
+  },
+  "production_code_changed": false,
+  "governance_behavior_changed": false,
+  "governance": {
+    "stage07_envelope_id": "fda13fbe302242e322a29d186f377f95a635743eb27bb17fd6b29073dc857d33",
+    "execution_bound_head": "71a44e1640d001270b592d70f0069856cb202d70",
+    "implementation_scope": ["tests/test_m41_runner_context_integration.py"],
+    "stage09_reexecuted": false,
+    "stage10_executed": false,
+    "recovery_gate_executed": false,
+    "upgrade_gate_2_started": false
+  },
+  "recorded_at": "20260924T103204.2963462Z"
+}
