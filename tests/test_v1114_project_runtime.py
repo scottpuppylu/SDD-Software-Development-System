@@ -31,6 +31,9 @@ def _activate_sealed_stage08_verification(runner, root: Path, task: AtomicTask):
         target = root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE / relative, target)
+    # Establish the current Stage07 PASS and implementation authorization through
+    # the lifecycle owner before sealing the Stage08 verification envelope.
+    runner.orchestrator.record_stage_result("07", "PASS")
     subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=root, check=True)
     subprocess.run(["git", "config", "user.name", "TC003 Fixture"], cwd=root, check=True)
