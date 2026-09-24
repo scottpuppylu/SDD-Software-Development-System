@@ -1,14 +1,15 @@
 schema_version: '2.0'
 current_stage: 07
 current_branch: null
-last_completed_task: TC008
-current_task: TC009
+last_completed_task: TC009
+current_task: null
 next_task: null
-last_verified_commit: 6cbb7df678a671493520fa0f6abaddcc9bf61557
+last_verified_commit: 81b95bc0a6e659ede01149041309d5eb298abbef
 test_status:
   overall: PASS
-  required_checks: []
-  last_run_at: null
+  required_checks:
+  - .\.venv\Scripts\python.exe -m pytest -q tests/test_m10_convergence_auto.py
+  last_run_at: '2026-09-24T15:38:12Z'
 blocked_status:
   blocked: false
   reasons: []
@@ -561,3 +562,18 @@ task_qualifications:
       sequence: 36
       recorded_at: 20260924T103204.2963462Z
       source_head: 6cbb7df678a671493520fa0f6abaddcc9bf61557
+  TC009:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 81b95bc0a6e659ede01149041309d5eb298abbef
+    evidence:
+      path: .sdd/evidence/20260924T153812.4217508Z-TC009.json
+      kind: ORDINARY_STAGE08
+      record_sha256: EDAA0FD46637323E4BBB111B154A8229D5C893D3F82C43B14E578F444A751EAA
+      repository_commit: 81b95bc0a6e659ede01149041309d5eb298abbef
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-TC009-EDAA0FD46637
+      sequence: 37
+      recorded_at: 20260924T153812.4217508Z
+      source_head: 81b95bc0a6e659ede01149041309d5eb298abbef

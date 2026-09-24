@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "TC009",
+  "title": "Align full-pipeline fixture with current sealed Stage07 prerequisite",
+  "status": "PASS",
+  "stage07_envelope_id": "934e7da992d45ade1bf0f7684b33ed8910e4245720943f38936e9d24289d600d",
+  "stage07_execution_bound_head": "0af821b5ea482f64cea13f8090d5bc24fafd7d7a",
+  "implementation_checkpoint": "81b95bc0a6e659ede01149041309d5eb298abbef",
+  "changed_paths": ["tests/test_m10_convergence_auto.py"],
+  "implementation_diff_sha256": "fba863e7820938fe813a0489211833726abfe6c7655bad1015ccf432e34b7d40",
+  "verification": [{
+    "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m10_convergence_auto.py",
+    "returncode": 0,
+    "summary": "4 passed in 110.70s",
+    "passed": true
+  }],
+  "semantic_invariants": {
+    "legal_stage07_fixture_established": true,
+    "stage07_pass_recorded_via_authoritative_api": true,
+    "implementation_authorization_established": true,
+    "sealed_stage08_envelope_established": true,
+    "full_pipeline_reaches_deploy": true,
+    "fail_closed_blocked_behavior_preserved": true,
+    "tc001_behavior_preserved": true,
+    "production_behavior_changed": false,
+    "governance_behavior_changed": false
+  },
+  "repair_classification": "TEST_FIXTURE_COMPATIBILITY_REPAIR",
+  "governance_profile": "SDD_STANDARD",
+  "recorded_at": "20260924T153812.4217508Z"
+}
