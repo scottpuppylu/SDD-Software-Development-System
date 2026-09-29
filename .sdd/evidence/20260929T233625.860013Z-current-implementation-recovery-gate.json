@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "gate": "CURRENT_IMPLEMENTATION_RECOVERY_GATE",
+  "authority_domain": "IMPLEMENTATION_RECOVERY_DECISION",
+  "evaluated_baseline": "be7880ad637e9bea949f3dbbeb5d8732fb734e1a",
+  "result": "FAIL",
+  "failure_class": "RECOVERY_ELIGIBILITY_NOT_APPLICABLE",
+  "stage09_entry_permitted": false,
+  "implementation_authorization": false,
+  "release_authorization": false,
+  "implementation_graph_complete": true,
+  "all_convergence_tasks_qualified": true,
+  "no_unresolved_implementation_gaps": true,
+  "evidence_chain": [
+    ".sdd/evidence/20260924T153812.4217508Z-TC009.json",
+    ".sdd/evidence/20260924T155644.2073715Z-TC010.json",
+    ".sdd/evidence/20260924T081605.981214Z-TC011.json"
+  ],
+  "checkpoint_ancestry_valid": true,
+  "last_verified_commit": "840034da3c598729780524a7bce9528af31fae50",
+  "current_state_coherent_with_history": true,
+  "historical_stage09_fail_preserved": true,
+  "current_stage09_projection_valid": true,
+  "worktree_integrity_valid": true,
+  "recovery_eligibility": {
+    "implementation_predates_current_recovery_authority": false,
+    "historical_project_specific_stage07_decision_not_found": false,
+    "project_authority_recovery_approval": true,
+    "retroactive_stage07_pass_forbidden": true,
+    "retroactive_implementation_authorization_forbidden": true,
+    "recovery_is_not_ordinary_new_development": false
+  },
+  "stage09_executed": false,
+  "stage10_executed": false,
+  "upgrade_gate_2_started": false,
+  "recorded_at": "20260929T233625.860013Z"
+}

@@ -46,3 +46,22 @@ UPGRADE_GATE_2_STARTED = NO
 ```
 
 The future Stage09 run must use its authoritative full command and independently issue `PASS`, `FAIL`, or `INCOMPLETE`. A durable local runner with persisted stdout/stderr/exit status and isolated process-local `TEMP`/`TMP` is required for that later run; those controls do not change the Stage09 command.
+
+## Current Recovery Gate evaluation — 2026-09-30
+
+```text
+GATE_NAME = CURRENT_IMPLEMENTATION_RECOVERY_GATE
+AUTHORITY_DOMAIN = IMPLEMENTATION_RECOVERY_DECISION
+RESULT = FAIL
+EVALUATED_BASELINE = be7880ad637e9bea949f3dbbeb5d8732fb734e1a
+STAGE09_ENTRY_PERMITTED = NO
+IMPLEMENTATION_AUTHORIZATION = NO
+STAGE09_RESULT = NOT_EVALUATED
+STAGE10_RESULT = NOT_EVALUATED
+RELEASE_AUTHORIZATION = NO
+FAILURE_CLASS = RECOVERY_ELIGIBILITY_NOT_APPLICABLE
+```
+
+The required recovery provenance is not established. TC009, TC010, and TC011 are current-authority normal Stage07-to-Stage08 implementations with recorded Stage07 PASS decisions; they are not materially pre-existing implementation lacking a historical project-specific Stage07 decision. The configured `PRE_EXISTING_IMPLEMENTATION_RECOVERY` eligibility therefore fails its mandatory conditions `implementation materially predates current recovery authority` and `historical project-specific Stage07 decision == NOT_FOUND`.
+
+The implementation graph, new TC009–TC011 evidence chain, checkpoint ancestry, durable verified checkpoint, current authorization state, historical Stage09 failure preservation, and worktree integrity were independently checked and remain coherent. This FAIL does not authorize Stage09 and does not authorize any repair or new implementation.
