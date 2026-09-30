@@ -786,13 +786,13 @@ This section is a narrowly bounded Stage06 `EXECUTION_DECOMPOSITION` repair. Sta
 
 The repaired gap is `GOVERNANCE_CONTRACT_GAP`: the prior Stage09 entry stopped with `INCOMPLETE` because no exact repository-authoritative machine-verification command existed. That historical result remains unchanged. This section creates no Stage09 result, executes no Stage09 qualification, reopens no task, and allocates no task ID.
 
-The Current Implementation Recovery Gate `PASS` at commit `2d70c439ebbefe30c917116ea16b886747645bb4` remains the required Stage09 entry authority. Its result is preserved and is not rerun or reinterpreted by this repair.
+The Current Implementation Recovery Gate `PASS` at commit `2d70c439ebbefe30c917116ea16b886747645bb4` remains preserved as the conditional Stage09 entry authority only when `PRE_EXISTING_IMPLEMENTATION_RECOVERY` applies. It is not a prerequisite for the normal current-authority `Stage07 PASS -> Stage08 completed -> Stage09` route. Its result is not rerun or reinterpreted by this repair.
 
 ### 10.2 Entry prerequisites
 
 Before executing the commands below, Stage09 must independently establish all configured entry facts against one exact baseline:
 
-- the Recovery Gate remains `PASS` and applicable;
+- exactly one applicable entry route is satisfied: either (a) the normal current-authority route has a valid Stage07 `PASS`, implementation authorization valid for the executed Stage08 scope, successful Stage08 completion, required Stage08 evidence/checkpoint/finalization, and no unresolved implementation task; or (b) `PRE_EXISTING_IMPLEMENTATION_RECOVERY` applies and the Current Implementation Recovery Gate is `PASS`;
 - the implementation graph is complete, every required task qualification and dependency is intact, and no implementation task or transaction is active;
 - the branch, HEAD, runtime, authority package, worktree, index, evidence, checkpoints, state finalization, and recovery state are current and internally coherent;
 - no active `SAFE_PAUSE`, remediation-required phase, execution lock, unexplained dirty path, or unresolved recovery obligation exists; and
