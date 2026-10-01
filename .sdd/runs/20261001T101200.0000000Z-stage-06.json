@@ -1,0 +1,36 @@
+{
+  "request_summary": {
+    "stage_id": "06",
+    "stage_name": "IMPLEMENTATION_TASKS",
+    "operation": "DEFINE_SPEC017_RECOVERY_TARGET_RESOLUTION_REPAIR",
+    "baseline": "7480f6ef6659a17747f57cc1e478c34ed244db03",
+    "artifact_paths": [
+      ".sdd/convergence/TC013.yaml"
+    ]
+  },
+  "result": {
+    "status": "COMPLETED",
+    "classification": "EXECUTION_DECOMPOSITION_ONLY",
+    "owner": "STAGE06_EXECUTION_DECOMPOSITION",
+    "task_id": "TC013",
+    "task_count": 1,
+    "preservation": {
+      "runtime_code_changed": false,
+      "tests_changed": false,
+      "convergence_statuses_changed": false,
+      "historical_evidence_changed": false,
+      "implementation_state_changed": false,
+      "recovery_authorization_issued": false,
+      "recovery_executed": false,
+      "tc012_stage08_rerun": false,
+      "stage09_executed": false,
+      "stage10_executed": false
+    }
+  },
+  "transition": {
+    "stage_id": "06",
+    "result": "COMPLETED",
+    "next": "TC013_STAGE07_ENTRY",
+    "tc013_stage07_entry_ready": true
+  }
+}

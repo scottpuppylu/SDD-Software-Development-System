@@ -1,0 +1,52 @@
+task_id: TC013
+title: Separate SPEC-017 recovery target resolution from normal Stage08 selection
+objective: Add a recovery-specific exact historical convergence-task resolver so a valid
+  SPEC-017 recovery authorization can resolve TC008 through TC011, including DONE
+  tasks, without exposing any completed task to normal Stage08 implementation selection.
+root_cause: SHARED_SELECTOR_MISUSE. recover_post_checkpoint_evidence currently resolves
+  a recovery target through Stage08CodexRunner.tasks(), whose correct normal-execution
+  behavior excludes DONE convergence tasks.
+repair_classification: RECOVERY_TARGET_RESOLUTION_BOUNDARY_REPAIR
+allowed_paths:
+  - sdd_orchestrator/codex_adapter.py
+  - tests/test_m6_codex_adapter.py
+forbidden_scope:
+  - sdd_orchestrator/git_runtime.py
+  - sdd_orchestrator/evidence_writer.py
+  - .sdd/convergence/TC008.yaml
+  - .sdd/convergence/TC009.yaml
+  - .sdd/convergence/TC010.yaml
+  - .sdd/convergence/TC011.yaml
+  - .sdd/state/**
+  - .sdd/evidence/**
+  - tasks.md
+  - docs/**
+  - AGENTS.md
+  - tests/** except tests/test_m6_codex_adapter.py
+  - Recovery Gate
+  - normal Stage08 task selection semantics
+  - Stage09/Stage10 lifecycle behavior
+production_change_allowed: false
+governance_contract_change_allowed: false
+runtime_recovery_boundary_repair_allowed: true
+acceptance_criteria:
+  - TC008 remains DONE and IMPLEMENTATION_QUALIFIED.
+  - Stage08CodexRunner.tasks() continues to exclude TC008 from normal Stage08 selection.
+  - Stage08CodexRunner.select_task() cannot select TC008 for normal implementation execution.
+  - A valid SPEC-017 RecoveryAuthorization resolves TC008 through a recovery-only exact historical task resolver.
+  - TC009, TC010, and TC011 resolve through the same recovery-only contract.
+  - Missing or invalid recovery authorization fails closed before recovery target use.
+  - Wrong task ID, task-contract digest, checkpoint, original evidence reference, verification command, repository, branch, or baseline fails closed.
+  - The resolver neither changes task status nor adds a DONE task to normal Stage08 enumeration.
+  - No historical evidence, implementation-state record, implementation authorization, or recovery package is changed.
+  - Existing normal Stage08 selector behavior remains unchanged.
+verification_commands:
+  - .\.venv\Scripts\python.exe -m pytest -q tests/test_m6_codex_adapter.py
+dependencies:
+  - docs/spec.md#SPEC-017
+  - docs/Design.md#DES-017
+  - tasks.md#11.2-11.5
+  - tasks.md#11.8
+governance_profile: SDD_STRICT
+status: TODO
+source_stage: 06
