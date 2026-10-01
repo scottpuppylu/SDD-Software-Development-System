@@ -1,0 +1,34 @@
+{
+  "request_summary": {
+    "stage_id": "06",
+    "stage_name": "IMPLEMENTATION_TASKS",
+    "operation": "SPEC017_RECOVERY_EXECUTOR_AVAILABILITY_BLOCKER_RECORD",
+    "baseline": "e401726f8659be3be0069f91e7557ce4f6ef8a61",
+    "artifact_paths": [
+      "tasks.md"
+    ]
+  },
+  "result": {
+    "status": "BLOCKED",
+    "classification": "RECOVERY_EXECUTOR_TASK_REPRESENTATION_GAP",
+    "owner": "RUNTIME_IMPLEMENTATION_AND_APPLICABLE_STAGE03_04_06_OWNERS",
+    "affected_operations": [
+      "RECOVERY-TC008-ORDINARY-EVIDENCE-001"
+    ],
+    "fact": "Stage08CodexRunner.tasks excludes DONE convergence records before recover_post_checkpoint_evidence target lookup.",
+    "preservation": {
+      "convergence_task_statuses_changed": false,
+      "historical_evidence_rewritten": false,
+      "implementation_state_changed": false,
+      "validator_changed": false,
+      "recovery_executed": false,
+      "tc012_stage08_rerun": false
+    }
+  },
+  "transition": {
+    "stage_id": "06",
+    "result": "BLOCKED",
+    "next": "ROUTE_RECOVERY_EXECUTOR_REPRESENTATION_GAP_TO_OWNER",
+    "tc008_recovery_authorization_entry_ready": false
+  }
+}

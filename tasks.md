@@ -920,3 +920,9 @@ The reconciliation operation depends on all four recovery operations. It must no
 Each recovery operation uses `SDD_STANDARD` with the additional mandatory Project Authority recovery authorization and exact single-use authorization bindings required by SPEC-017/DES-017. `QUALIFICATION-STATE-RECONCILIATION-001` uses `SDD_STRICT` because it changes multiple protected qualification bindings and must validate the entire state atomically.
 
 TC012's Stage08 result, implementation checkpoint `6f3f91c005a17f70e6d4a808dc0aac5ea64358a9`, and evidence `.sdd/evidence/20261001T004229.839108Z-TC012.json` remain preserved. TC012 requires no Stage08 reexecution. Its finalization remains paused until all four recovery operations and the shared reconciliation have completed successfully.
+
+### 11.8 Current recovery-executor availability blocker
+
+The current `Stage08CodexRunner.recover_post_checkpoint_evidence()` resolves its target through `Stage08CodexRunner.tasks()`. That method excludes `.sdd/convergence/TC*.yaml` records with `status: DONE`; TC008 is therefore not currently resolvable to the executor even though `RecoveryManager` can read its contract for state validation. A TC008 recovery authorization issued now would fail at the executor's target-task lookup with `TASK_MISMATCH`.
+
+This is a runtime-operation representation blocker for TC008, not permission to reopen or rerun TC008. TC009 through TC011 remain separately defined recovery operations and are not made sequentially dependent on TC008. TC008 may not execute until an owning-authority flow defines and authorizes a bounded runtime remedy that makes its immutable completed convergence-task contract available to the recovery executor without changing its status, historical evidence, checkpoint, normal Stage08 selection semantics, or scope enforcement. Until then, `TC008_RECOVERY_AUTHORIZATION_ENTRY_READY=NO`.
