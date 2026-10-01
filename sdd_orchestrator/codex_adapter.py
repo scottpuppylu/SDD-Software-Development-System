@@ -328,6 +328,78 @@ class Stage08CodexRunner:
             )
         VerificationCommandPolicy.plan_for_task(task)
 
+    def _resolve_recovery_target(self, authorization: RecoveryAuthorization) -> AtomicTask:
+        """Resolve one authorization-bound historical task without widening Stage08 selection."""
+        try:
+            authorization.validate()
+        except Exception as exc:
+            raise CodexAdapterError("AUTHORITY_INVALID: recovery authorization is invalid") from exc
+
+        snapshot = self.git.snapshot(recent_limit=5)
+        if (
+            self.repo_root.as_posix() != Path(authorization.repository).resolve().as_posix()
+            or snapshot.branch != authorization.branch
+            or snapshot.head_commit != authorization.baseline_commit
+        ):
+            raise CodexAdapterError("AUTHORITY_INVALID: recovery repository binding mismatch")
+
+        task_id = authorization.task_id
+        task_path = self.repo_root / "tasks.md"
+        candidates = [
+            task for task in TaskFileParser(task_path.read_text(encoding="utf-8")).parse()
+            if task.task_id == task_id
+        ]
+        if task_id.startswith("TC"):
+            convergence_path = self.repo_root / ".sdd" / "convergence" / f"{task_id}.yaml"
+            if convergence_path.is_file() and not convergence_path.is_symlink():
+                payload = yaml.safe_load(convergence_path.read_text(encoding="utf-8")) or {}
+                if isinstance(payload, dict) and payload.get("task_id") == task_id:
+                    candidates.append(AtomicTask(
+                        task_id=task_id,
+                        title=str(payload.get("title", task_id)),
+                        status=str(payload.get("status", "TODO")).upper(),
+                        raw_markdown=yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
+                        traceability=list(payload.get("traceability", [])),
+                        allowed_paths=list(payload.get("allowed_paths", [])),
+                        verification_commands=list(payload.get("verification_commands", [])),
+                        behavior_scope=str(payload.get("objective", "")).strip(),
+                    ))
+        if len(candidates) != 1:
+            raise CodexAdapterError("TASK_MISMATCH: recovery target is missing or ambiguous")
+        task = candidates[0]
+        if task_contract_sha256(task) != authorization.task_contract_sha256:
+            raise CodexAdapterError("TASK_MISMATCH: recovery task contract digest mismatch")
+        if task.verification_commands != [authorization.verification_command]:
+            raise CodexAdapterError("COMMAND_MISMATCH: recovery verification command mismatch")
+
+        if task_id.startswith("TC"):
+            state = self.recovery._load_state()
+            record = (state.get("task_qualifications") or {}).get(task_id)
+            if not isinstance(record, dict):
+                raise CodexAdapterError("EVIDENCE_MISMATCH: historical qualification record is missing")
+            if record.get("implementation_checkpoint") != authorization.checkpoint_commit:
+                raise CodexAdapterError("CHECKPOINT_MISMATCH: historical checkpoint binding mismatch")
+            evidence = record.get("evidence") or {}
+            evidence_path = evidence.get("path") if isinstance(evidence, dict) else None
+            if not isinstance(evidence_path, str) or not evidence_path.startswith(".sdd/evidence/"):
+                raise CodexAdapterError("EVIDENCE_MISMATCH: historical evidence reference is invalid")
+            target = self.repo_root / evidence_path
+            if not target.is_file() or target.is_symlink():
+                raise CodexAdapterError("EVIDENCE_MISMATCH: historical evidence is unavailable")
+            try:
+                original_evidence = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                raise CodexAdapterError("EVIDENCE_MISMATCH: historical evidence is unreadable") from exc
+            if not isinstance(original_evidence, dict):
+                raise CodexAdapterError("EVIDENCE_MISMATCH: historical evidence has invalid shape")
+            commands = [
+                item.get("command") for item in original_evidence.get("verification", [])
+                if isinstance(item, dict)
+            ]
+            if original_evidence.get("task_id") != task_id or commands != [authorization.verification_command]:
+                raise CodexAdapterError("EVIDENCE_MISMATCH: historical evidence does not bind task and command")
+        return task
+
     def recover_post_checkpoint_evidence(
         self,
         authorization: RecoveryAuthorization,
@@ -336,15 +408,9 @@ class Stage08CodexRunner:
     ) -> RecoveryQualification:
         """Create new proof for an unchanged checkpoint; never update task state."""
         try:
-            authorization.validate()
-        except Exception:
-            return RecoveryQualification(False, "AUTHORITY_INVALID")
-        task = next(
-            (item for item in self.tasks() if item.task_id == authorization.task_id),
-            None,
-        )
-        if task is None:
-            return RecoveryQualification(False, "TASK_MISMATCH")
+            task = self._resolve_recovery_target(authorization)
+        except Exception as exc:
+            return RecoveryQualification(False, self._recovery_reason(exc))
         if self.repo_root.as_posix() != Path(authorization.repository).resolve().as_posix():
             return RecoveryQualification(False, "AUTHORITY_INVALID")
         if task_contract_sha256(task) != authorization.task_contract_sha256:

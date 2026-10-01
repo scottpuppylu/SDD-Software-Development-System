@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
+import hashlib
 import json
 import os
 import shutil
@@ -205,6 +207,125 @@ class M6CodexAdapterTests(unittest.TestCase):
         )
         self.assertTrue(resumed.qualifies, resumed.reason)
         self.assertEqual(resumed.evidence_file, result.evidence_file)
+
+    def test_recovery_target_resolution_keeps_done_convergence_tasks_out_of_normal_selection(self):
+        self._write_tasks('''
+### T001 ? Ordinary task
+- **Status:** TODO
+- **Allowed files:** `src/value.py`.
+- **Implementation Scope:** Ordinary task.
+- **Verification Commands:** `python -m pytest -q`.
+''')
+        convergence_root = self.repo / ".sdd" / "convergence"
+        evidence_root = self.repo / ".sdd" / "evidence"
+        commands = {
+            "TC008": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m41_runner_context_integration.py",
+            "TC009": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m10_convergence_auto.py",
+            "TC010": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_telemetry_stage08_task.py",
+            "TC011": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_v1114_project_runtime.py tests/test_v1115_windows_console_resolution.py",
+        }
+        contracts = {}
+        checkpoints = {}
+        for index, (task_id, command) in enumerate(commands.items(), start=8):
+            contract = {
+                "task_id": task_id,
+                "title": f"{task_id} historical recovery target",
+                "objective": "Exercise recovery-specific historical task resolution.",
+                "traceability": ["SPEC-017", "DES-017"],
+                "allowed_paths": [f"tests/test_{task_id.lower()}.py"],
+                "verification_commands": [command],
+                "status": "DONE" if task_id == "TC008" else "TODO",
+            }
+            contracts[task_id] = contract
+            checkpoints[task_id] = f"{index:040x}"
+            (convergence_root / f"{task_id}.yaml").write_text(
+                yaml.safe_dump(contract, sort_keys=False), encoding="utf-8"
+            )
+            (evidence_root / f"legacy-{task_id}.json").write_text(
+                json.dumps({
+                    "task_id": task_id,
+                    "verification": [{"command": command, "returncode": 0}],
+                }),
+                encoding="utf-8",
+            )
+        state_path = self.repo / ".sdd" / "state" / "implementation-state.yaml"
+        state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        state["schema_version"] = "2.0"
+        state["task_qualifications"] = {
+            task_id: {
+                "status": "IMPLEMENTATION_QUALIFIED",
+                "implementation_checkpoint": checkpoints[task_id],
+                "evidence": {
+                    "path": f".sdd/evidence/legacy-{task_id}.json",
+                    "kind": "ORDINARY_STAGE08",
+                },
+            }
+            for task_id in commands
+        }
+        state_path.write_text(yaml.safe_dump(state, sort_keys=False), encoding="utf-8")
+        run_git(self.repo, "add", ".")
+        run_git(self.repo, "commit", "-m", "test: add historical recovery contracts")
+
+        runner = Stage08CodexRunner(Orchestrator(self.repo), heartbeat_seconds=0)
+        normal_ids = {task.task_id for task in runner.tasks()}
+        self.assertNotIn("TC008", normal_ids)
+        self.assertTrue({"TC009", "TC010", "TC011"}.issubset(normal_ids))
+        with self.assertRaisesRegex(CodexAdapterError, "Task not found"):
+            runner.select_task("TC008")
+
+        authority_versions = tuple(
+            (path, runner._sha256((self.repo / path).read_text(encoding="utf-8")))
+            for path in runner.ENVELOPE_AUTHORITY_PATHS
+        )
+        now = datetime.now(timezone.utc)
+
+        def authorization(task_id):
+            raw = yaml.safe_dump(contracts[task_id], sort_keys=False, allow_unicode=True)
+            return RecoveryAuthorization(
+                authorization_id=f"RECOVERY-{task_id}", issuer="PROJECT_AUTHORITY",
+                capability=RECOVERY_CAPABILITY, task_id=task_id,
+                checkpoint_commit=checkpoints[task_id], repository=str(self.repo.resolve()),
+                branch=run_git(self.repo, "branch", "--show-current"),
+                baseline_commit=run_git(self.repo, "rev-parse", "HEAD"),
+                authority_versions=authority_versions,
+                task_contract_sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                verification_command=commands[task_id], allowed_evidence_prefix=".sdd/evidence/",
+                attempt_id=f"attempt-{task_id}", issued_at=now.isoformat(),
+                expires_at=(now + timedelta(hours=1)).isoformat(),
+            )
+
+        original_state = state_path.read_text(encoding="utf-8")
+        for task_id in commands:
+            self.assertEqual(runner._resolve_recovery_target(authorization(task_id)).task_id, task_id)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), original_state)
+
+        valid = authorization("TC008")
+        with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
+            runner._resolve_recovery_target(None)
+        with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
+            runner._resolve_recovery_target(replace(valid, status="CONSUMED"))
+        with self.assertRaisesRegex(CodexAdapterError, "TASK_MISMATCH"):
+            runner._resolve_recovery_target(replace(valid, task_id="TC999"))
+        with self.assertRaisesRegex(CodexAdapterError, "TASK_MISMATCH"):
+            runner._resolve_recovery_target(replace(valid, task_contract_sha256="0" * 64))
+        with self.assertRaisesRegex(CodexAdapterError, "CHECKPOINT_MISMATCH"):
+            runner._resolve_recovery_target(replace(valid, checkpoint_commit="f" * 40))
+        with self.assertRaisesRegex(CodexAdapterError, "COMMAND_MISMATCH"):
+            runner._resolve_recovery_target(replace(valid, verification_command="python -m pytest -q other"))
+        with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
+            runner._resolve_recovery_target(replace(valid, repository=str(self.repo / "other")))
+        with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
+            runner._resolve_recovery_target(replace(valid, branch="other"))
+        with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
+            runner._resolve_recovery_target(replace(valid, baseline_commit="e" * 40))
+
+        altered = yaml.safe_load(original_state)
+        altered["task_qualifications"]["TC008"]["evidence"]["path"] = ".sdd/evidence/missing.json"
+        state_path.write_text(yaml.safe_dump(altered, sort_keys=False), encoding="utf-8")
+        with self.assertRaisesRegex(CodexAdapterError, "EVIDENCE_MISMATCH"):
+            runner._resolve_recovery_target(valid)
+        state_path.write_text(original_state, encoding="utf-8")
+        self.assertEqual(state_path.read_text(encoding="utf-8"), original_state)
     def test_task_parser_extracts_scope_and_verification(self):
         text = '''\n### T001 — Add calculator\n- **Status:** TODO\n- **Traceability:** FR-001 → SPEC-001 → DES-001\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n'''
         task = TaskFileParser(text).parse()[0]
