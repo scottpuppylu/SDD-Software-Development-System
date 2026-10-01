@@ -1,0 +1,42 @@
+{
+  "request_summary": {
+    "stage_id": "06",
+    "stage_name": "IMPLEMENTATION_TASKS",
+    "operation": "SPEC017_HISTORICAL_EVIDENCE_RECOVERY_WORK_PACKAGE_DEFINITION",
+    "baseline": "6f3f91c005a17f70e6d4a808dc0aac5ea64358a9",
+    "artifact_paths": [
+      "tasks.md"
+    ]
+  },
+  "result": {
+    "status": "COMPLETED",
+    "classification": "EXECUTION_DECOMPOSITION_ONLY",
+    "owner": "STAGE06_EXECUTION_DECOMPOSITION",
+    "recovery_operation_count": 4,
+    "reconciliation_operation_count": 1,
+    "full_convergence_tasks_created": false,
+    "recovery_operations": [
+      "RECOVERY-TC008-ORDINARY-EVIDENCE-001",
+      "RECOVERY-TC009-ORDINARY-EVIDENCE-001",
+      "RECOVERY-TC010-ORDINARY-EVIDENCE-001",
+      "RECOVERY-TC011-ORDINARY-EVIDENCE-001"
+    ],
+    "reconciliation_operation": "QUALIFICATION-STATE-RECONCILIATION-001",
+    "preservation": {
+      "historical_evidence_rewritten": false,
+      "implementation_state_changed": false,
+      "validator_changed": false,
+      "implementation_or_tests_changed": false,
+      "recovery_executed": false,
+      "tc012_stage08_rerun": false,
+      "stage09_executed": false,
+      "stage10_executed": false
+    }
+  },
+  "transition": {
+    "stage_id": "06",
+    "result": "COMPLETED",
+    "next": "PROJECT_AUTHORITY_RECOVERY_AUTHORIZATION_FOR_TC008",
+    "tc008_recovery_authorization_entry_ready": true
+  }
+}

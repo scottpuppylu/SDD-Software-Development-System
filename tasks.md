@@ -851,3 +851,72 @@ A completed Stage09 decision must be recorded in `docs/handoff/verification-repo
 Only a repository-backed Stage09 `PASS` makes Stage10 entry eligible. `FAIL` and `INCOMPLETE` do not. Stage09 execution must stop before Stage10, V1 tagging/release, deployment, Upgrade Gate #2, or Upgrade Wave work unless a later operation supplies their separate authority.
 
 This contract repair itself requires only the Stage06 `tasks.md` authority checkpoint and its Stage06 run audit. It requires no implementation-state mutation or separate state-finalization commit. After that checkpoint, Stage09 may be freshly re-entered from the new complete baseline; Stage09 is not executed by this repair.
+
+## 11. Bounded SPEC-017 historical-evidence recovery work packages
+
+### 11.1 Authority, representation, and common boundary
+
+This section is a Stage06 `EXECUTION_DECOMPOSITION` work-package definition implementing the approved Stage03/Stage04 decision `LEGACY_COMPATIBILITY_FORBIDDEN` for the identified TC008 through TC011 ordinary-evidence records. It creates recovery-operation definitions only. It creates no implementation convergence task, does not alter any historical evidence or implementation checkpoint, does not issue a recovery authorization, and does not authorize execution.
+
+Each `RECOVERY-*` identifier below is a recovery-operation identifier, not a `TASK-*` or `TC*` implementation-task identifier. The repository's recovery executor resolves the existing named TC task contract and requires a separate, active, Project Authority `POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY` authorization bound to that exact task, checkpoint, baseline, authority versions, command, and single-use attempt. The only planned execution outputs are a new append-only `.sdd/evidence/*-<TC>-recovery-<attempt>.json` attestation, its authorized audit/pending artifacts, and an evidence-only checkpoint when the authorization permits it.
+
+Every recovery operation must execute the exact listed command freshly in an isolated view of its immutable checkpoint; capture its natural exit status, complete stdout/stderr, timestamps, environment, and explicit recovery execution provenance; preserve the original evidence and checkpoint; prove no implementation mutation; and record `PASS`, `FAIL`, or `NOT RUN` truthfully. It must not infer a historical `codex.returncode`, rerun normal Stage07 or Stage08, modify implementation/tests/authority/state, or invoke the Recovery Gate, Stage09, Stage10, or deployment.
+
+The four recovery operations are independent. They share no sequential dependency; each instead depends on its own Project Authority authorization and its unchanged checkpoint/evidence/task bindings.
+
+### 11.2 RECOVERY-TC008-ORDINARY-EVIDENCE-001
+
+- **Target task:** `TC008` — existing task contract `.sdd/convergence/TC008.yaml`.
+- **Original implementation checkpoint:** `6cbb7df678a671493520fa0f6abaddcc9bf61557`.
+- **Immutable original evidence:** `.sdd/evidence/20260924T103204.2963462Z-TC008.json`.
+- **Exact fresh verification command:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_m41_runner_context_integration.py`.
+- **Allowed outputs:** Only the authorization-bound append-only TC008 recovery attestation and explicitly authorized recovery audit/pending artifacts under `.sdd/evidence/`, plus its evidence-only checkpoint.
+- **Forbidden scope:** Original evidence; implementation checkpoint/history; `src/**`; `tests/**`; `tasks.md`; authority artifacts; `.sdd/state/**`; normal Stage07/Stage08; Recovery Gate; Stage09/Stage10.
+- **Authorization prerequisite:** A unique active Project Authority `POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY` authorization for this exact task/checkpoint/command.
+
+### 11.3 RECOVERY-TC009-ORDINARY-EVIDENCE-001
+
+- **Target task:** `TC009` — existing task contract `.sdd/convergence/TC009.yaml`.
+- **Original implementation checkpoint:** `81b95bc0a6e659ede01149041309d5eb298abbef`.
+- **Immutable original evidence:** `.sdd/evidence/20260924T153812.4217508Z-TC009.json`.
+- **Exact fresh verification command:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_m10_convergence_auto.py`.
+- **Allowed outputs:** Only the authorization-bound append-only TC009 recovery attestation and explicitly authorized recovery audit/pending artifacts under `.sdd/evidence/`, plus its evidence-only checkpoint.
+- **Forbidden scope:** Original evidence; implementation checkpoint/history; `src/**`; `tests/**`; `tasks.md`; authority artifacts; `.sdd/state/**`; normal Stage07/Stage08; Recovery Gate; Stage09/Stage10.
+- **Authorization prerequisite:** A unique active Project Authority `POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY` authorization for this exact task/checkpoint/command.
+
+### 11.4 RECOVERY-TC010-ORDINARY-EVIDENCE-001
+
+- **Target task:** `TC010` — existing task contract `.sdd/convergence/TC010.yaml`.
+- **Original implementation checkpoint:** `694cc04e42072b3819c97735421908de08ed3076`.
+- **Immutable original evidence:** `.sdd/evidence/20260924T155644.2073715Z-TC010.json`.
+- **Exact fresh verification command:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_telemetry_stage08_task.py`.
+- **Allowed outputs:** Only the authorization-bound append-only TC010 recovery attestation and explicitly authorized recovery audit/pending artifacts under `.sdd/evidence/`, plus its evidence-only checkpoint.
+- **Forbidden scope:** Original evidence; implementation checkpoint/history; `src/**`; `tests/**`; `tasks.md`; authority artifacts; `.sdd/state/**`; normal Stage07/Stage08; Recovery Gate; Stage09/Stage10.
+- **Authorization prerequisite:** A unique active Project Authority `POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY` authorization for this exact task/checkpoint/command.
+
+### 11.5 RECOVERY-TC011-ORDINARY-EVIDENCE-001
+
+- **Target task:** `TC011` — existing task contract `.sdd/convergence/TC011.yaml`.
+- **Original implementation checkpoint:** `840034da3c598729780524a7bce9528af31fae50`.
+- **Immutable original evidence:** `.sdd/evidence/20260924T081605.981214Z-TC011.json`.
+- **Exact fresh verification command:** `.\.venv\Scripts\python.exe -m pytest -q tests/test_v1114_project_runtime.py tests/test_v1115_windows_console_resolution.py`.
+- **Allowed outputs:** Only the authorization-bound append-only TC011 recovery attestation and explicitly authorized recovery audit/pending artifacts under `.sdd/evidence/`, plus its evidence-only checkpoint.
+- **Forbidden scope:** Original evidence; implementation checkpoint/history; `src/**`; `tests/**`; `tasks.md`; authority artifacts; `.sdd/state/**`; normal Stage07/Stage08; Recovery Gate; Stage09/Stage10.
+- **Authorization prerequisite:** A unique active Project Authority `POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY` authorization for this exact task/checkpoint/command.
+
+### 11.6 QUALIFICATION-STATE-RECONCILIATION-001
+
+This is one later state-only operation, not an implementation task. It may begin only after all four named recovery attestations are independently qualifying and repository-backed.
+
+- **Prerequisites:** Qualifying append-only recovery evidence for TC008, TC009, TC010, and TC011; all original evidence/checkpoints remain immutable and reachable; clean current baseline; no unresolved recovery attempt or evidence conflict; explicit authority for the state operation.
+- **Allowed file:** `.sdd/state/implementation-state.yaml` only.
+- **Required outcome:** Correct TC007 to its canonical evidence binding; bind TC008 through TC011 only to their qualifying recovery evidence; preserve all original evidence/checkpoint references as historical facts; preserve unaffected records and cursors except deterministic ancestry-latest projections; and complete full authoritative `_validate_v2` validation before any state checkpoint.
+- **Forbidden scope:** Evidence mutation; checkpoint/history mutation; validator behavior; tests/production code; verification execution; Stage07/Stage08; Recovery Gate; Stage09/Stage10; release/deployment.
+
+The reconciliation operation depends on all four recovery operations. It must not run after only a partial subset and must not treat a recovery attestation as an automatic state write.
+
+### 11.7 Governance and TC012 preservation
+
+Each recovery operation uses `SDD_STANDARD` with the additional mandatory Project Authority recovery authorization and exact single-use authorization bindings required by SPEC-017/DES-017. `QUALIFICATION-STATE-RECONCILIATION-001` uses `SDD_STRICT` because it changes multiple protected qualification bindings and must validate the entire state atomically.
+
+TC012's Stage08 result, implementation checkpoint `6f3f91c005a17f70e6d4a808dc0aac5ea64358a9`, and evidence `.sdd/evidence/20261001T004229.839108Z-TC012.json` remain preserved. TC012 requires no Stage08 reexecution. Its finalization remains paused until all four recovery operations and the shared reconciliation have completed successfully.
