@@ -150,6 +150,11 @@ class V1118Stage08Tests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name) / "repo"
         shutil.copytree(SOURCE / ".sdd", self.repo / ".sdd")
+        # The test-owned tasks.md below is the governed fixture contract for
+        # these scenarios.  Do not let copied active convergence tasks shadow
+        # those temporary allowed-file declarations.
+        for convergence_task in (self.repo / ".sdd/convergence").glob("TC*.yaml"):
+            convergence_task.unlink()
         (self.repo / ".sdd/evidence/.stage08-pending-evidence-write.yaml").unlink(
             missing_ok=True
         )
