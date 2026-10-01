@@ -4,10 +4,10 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: 08
-  current_stage_name: IMPLEMENTATION_RUNNER
+  current_stage: '07'
+  current_stage_name: PRE_IMPLEMENTATION_GATE
   last_completed_stage: '07'
-  next_action: RUN_STAGE
+  next_action: RERUN_STAGE
 stages:
   '01':
     status: DONE
@@ -28,8 +28,8 @@ stages:
     status: DONE
     result: COMPLETED
   '07':
-    status: DONE
-    result: PASS
+    status: IN_PROGRESS
+    result: null
   08:
     status: IN_PROGRESS
     result: null
@@ -40,7 +40,7 @@ stages:
     status: TODO
     result: null
 authorizations:
-  implementation: true
+  implementation: false
   release: false
 blocking:
   is_blocked: false
@@ -57,7 +57,7 @@ artifacts:
   handoff_report: null
 git:
   branch: telemetry-measurement-v2
-  head_commit: 36ed52239f62eb3e79aafe0ba73f24f861ffa848
+  head_commit: 0e0b2bbaa1d21b8d339622fc29e32db31e75ed7d
   last_verified_commit: 0f60e06c978e6014dde7a4585a250b61fd4b38a6
 provenance:
   current_authority_package:
