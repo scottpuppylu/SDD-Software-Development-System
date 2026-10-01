@@ -1,0 +1,32 @@
+task_id: TC012
+title: Align V1118 safe-pause fixtures with sealed Stage08 scope
+objective: Make the two V1118 fixture scenarios create and authorize their temporary implementation files through the test-owned governed fixture setup so the intended safe-pause and checkpoint-boundary assertions execute.
+root_cause: Fixture-created src/only.py and src/two.py are outside the sealed allowed-file scope presented to Stage08, causing authoritative scope enforcement to reject both scenarios before their assertions.
+repair_classification: TEST_FIXTURE_COMPATIBILITY_REPAIR
+allowed_paths:
+  - tests/test_v1118_safe_pause_and_evidence.py
+forbidden_scope:
+  - sdd_orchestrator/**
+  - src/**
+  - AGENTS.md
+  - docs/**
+  - tasks.md
+  - .sdd/state/**
+  - .sdd/evidence/**
+  - Recovery Gate
+  - Stage09/Stage10 lifecycle behavior
+production_change_allowed: false
+governance_change_allowed: false
+acceptance_criteria:
+  - test_controller_one_step_preserves_completed_transition_for_final_task reaches its intended assertion without weakening scope enforcement
+  - test_one_task_limit_returns_explicit_safe_stop_at_checkpoint_boundary reaches its intended assertion without weakening scope enforcement
+  - fixture-created files are represented through test-owned temporary repository setup and the sealed allowed-file declaration remains exact
+  - unauthorized-file rejection and sealed-envelope validation remain fail-closed
+  - no production or governance behavior changes
+verification_commands:
+  - .\.venv\Scripts\python.exe -m pytest -q tests/test_v1118_safe_pause_and_evidence.py
+dependencies:
+  - TC011
+governance_profile: SDD_STANDARD
+status: TODO
+source_stage: 09
