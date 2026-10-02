@@ -1,0 +1,183 @@
+task_id: TC014
+title: Implement repository-backed SPEC-017 recovery authorization lifecycle
+objective: >-
+  Implement the approved repository-backed SPEC-017 RecoveryAuthorization lifecycle
+  by extending the existing RecoveryAuthorization primitive with serialization,
+  repository storage, Project Authority issuance, runtime load and validation,
+  atomic one-time consumption, audit/status events, and authorization-ID-based
+  recovery execution.
+root_cause: >-
+  AUTHORIZATION_PERSISTENCE_AND_LOADING_GAP: the existing RecoveryAuthorization is
+  an in-memory domain value and the recovery executor can receive a caller-supplied
+  instance; no repository-backed issuance, lookup, lifecycle, or consumption
+  mechanism currently establishes execution authority.
+repair_classification: SPEC017_RECOVERY_AUTHORIZATION_LIFECYCLE
+allowed_implementation_paths:
+  - sdd_orchestrator/evidence_writer.py
+  - sdd_orchestrator/git_runtime.py
+  - sdd_orchestrator/codex_adapter.py
+allowed_test_paths:
+  - tests/test_v1118_safe_pause_and_evidence.py
+  - tests/test_m5_git_recovery.py
+  - tests/test_m6_codex_adapter.py
+forbidden_scope:
+  - normal Stage08 selector redesign
+  - TC008-TC011 convergence status mutation
+  - TC008-TC011 recovery package modification
+  - historical evidence rewrite
+  - implementation-state reconciliation
+  - TC013 reimplementation or finalization
+  - TC012 reimplementation or finalization
+  - validator weakening
+  - SafetyAuthorization replacement
+  - a new authorization subsystem outside the existing RecoveryAuthorization extension
+  - Stage09 execution or authority mutation
+  - Stage10 execution or authority mutation
+production_change_allowed: true
+governance_contract_change_allowed: false
+existing_primitive_reuse_required: true
+parallel_authorization_framework_allowed: false
+authorization_artifact:
+  artifact_type: RECOVERY_AUTHORIZATION_V1
+  schema_version: "1.0"
+  record_kind: SPEC017_RECOVERY_AUTHORIZATION
+  location: .sdd/authorizations/recovery/<authorization_id>.yaml
+  authorized_issuer: PROJECT_AUTHORITY
+  self_authorization_allowed: false
+  required_fields:
+    - schema_version
+    - record_kind
+    - authorization_id
+    - attempt_id
+    - issuer
+    - issuer_role
+    - issuer_approval_reference
+    - purpose
+    - status
+    - one_time
+    - issued_at
+    - expires_at
+    - repository
+    - branch
+    - baseline
+    - recovery_operation_id
+    - target_task_id
+    - task_contract_digest
+    - target_checkpoint
+    - target_original_evidence
+    - verification_command
+    - verification_command_source
+    - runtime_checkpoint
+    - runtime_evidence
+    - spec_version
+    - design_version
+    - authority_policy_version
+    - authority_versions
+    - allowed_artifact_paths
+    - prohibited_operations
+    - allow_persistence_only_resume
+    - checkpoint_conditions
+    - grant_digest
+    - status_events
+    - record_digest
+required_contracts:
+  issuance: >-
+    A repository-owned issuance API may persist exactly one authorization artifact
+    only for PROJECT_AUTHORITY after resolving its repository-backed approval
+    reference and validating all target bindings. It must reject executor
+    self-authorization and duplicate or overlapping ACTIVE grants for the same
+    protected semantic target, compute a canonical grant digest over immutable
+    grant fields, constrain the artifact path to the configured authorization
+    directory, and keep any required issuance checkpoint limited to that artifact.
+  repository_storage: >-
+    Validate the authorization path, enforce unique persistence and repository-backed
+    identity, derive and validate the authorization checkpoint as a descendant of the
+    authorized runtime baseline, limit its diff to the permitted governance artifact,
+    and prove runtime code-tree equivalence with runtime_checkpoint.
+  load: >-
+    Runtime accepts an authorization_id, or a recovery_operation_id only when exactly
+    one repository-backed authorization resolves. It must not trust a caller-supplied
+    RecoveryAuthorization instance, untracked YAML, environment data, chat input,
+    implicit task status, or caller-injected authorization fields.
+  validation: >-
+    Validate schema, record_digest, grant_digest, authorization identity and
+    uniqueness, PROJECT_AUTHORITY issuer and approval reference, purpose, ACTIVE
+    one-time status, expiry, repository, branch, authorized runtime baseline,
+    authorization-checkpoint ancestry, runtime code-tree equality, recovery operation,
+    target task and contract digest, historical checkpoint, original evidence, exact
+    command and command source, runtime checkpoint and evidence, SPEC/DES/policy
+    versions, allowed paths, prohibited operations, clean or explicitly allowed
+    worktree, and overlapping authorization state. Any mismatch fails closed.
+  consumption: >-
+    After every preflight binding passes and before the fresh verification child
+    process starts, atomically append a CONSUMED event, persist it, and checkpoint it
+    through the repository-authoritative flow. A consumed grant cannot launch again;
+    failure, timeout, or uncertain execution after consumption requires a new grant.
+    Persistence-only resume is permitted only when explicitly granted and the same
+    attempt's successful execution result is already durable without a new command.
+  audit: >-
+    Use only ACTIVE, CONSUMED, EXPIRED, and REVOKED authorization statuses. Execution
+    failure remains an attempt audit outcome. Status events bind sequence,
+    previous_event_digest, and event_digest; the append-only audit preserves issuance,
+    issuer and approval, bindings, validation, consumption, attempt, execution result,
+    recovery attestation path/digest/checkpoint, and expiry or revocation facts.
+  fail_closed: >-
+    Prevent executor self-authorization; task, checkpoint, evidence, command, baseline,
+    repository, and branch substitution; replay; expiry or revocation bypass;
+    overlapping ACTIVE grants; arbitrary object injection; authorization path escape;
+    derivation of normal Stage08 implementation authorization; and any change to
+    normal tasks() or select_task() behavior.
+status_model:
+  - ACTIVE
+  - CONSUMED
+  - EXPIRED
+  - REVOKED
+acceptance_criteria:
+  - Project Authority can issue one valid repository-backed recovery authorization.
+  - The authorization artifact is uniquely persisted at its validated governed path.
+  - Runtime loads the authorization by authorization ID.
+  - A valid authorization passes the complete validation contract.
+  - A missing authorization fails closed.
+  - A wrong issuer fails closed.
+  - A wrong issuer approval reference fails closed.
+  - A wrong purpose fails closed.
+  - A wrong target task fails closed.
+  - A wrong task-contract digest fails closed.
+  - A wrong historical checkpoint fails closed.
+  - A wrong original evidence reference fails closed.
+  - A wrong verification command fails closed.
+  - A wrong repository fails closed.
+  - A wrong branch fails closed.
+  - A wrong baseline fails closed.
+  - A wrong runtime code tree fails closed.
+  - An expired authorization fails closed.
+  - A revoked authorization fails closed.
+  - A CONSUMED authorization cannot replay.
+  - An overlapping ACTIVE authorization for the same protected target is rejected.
+  - The recovery executor cannot self-authorize.
+  - The status-event audit chain validates sequence and digest linkage.
+  - Issuance and consumption checkpoints do not alter the runtime code tree.
+  - Persistence-only resume follows the explicit same-attempt contract and never launches new verification.
+  - Normal Stage08 tasks() and select_task() behavior remains unchanged.
+  - The valid mechanism makes TC008 recovery authorization and execution entry possible without changing TC008 status.
+verification_commands:
+  - .\.venv\Scripts\python.exe -m pytest -q tests/test_v1118_safe_pause_and_evidence.py tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py
+dependencies:
+  - docs/spec.md#SPEC-017
+  - docs/Design.md#DES-017
+  - AGENTS.md section 9.1
+  - tasks.md sections 11.1-11.5
+  - .sdd/evidence/20261001T044244.555311Z-TC013.json
+runtime_checkpoint: 1945f30794ec19f703f9f79369d4af1926ad648f
+dependent_recovery_operations:
+  - RECOVERY-TC008-ORDINARY-EVIDENCE-001
+  - RECOVERY-TC009-ORDINARY-EVIDENCE-001
+  - RECOVERY-TC010-ORDINARY-EVIDENCE-001
+  - RECOVERY-TC011-ORDINARY-EVIDENCE-001
+governance_profile: SDD_STRICT
+governance_reason: >-
+  The task creates persistent Project-Authority security and governance state,
+  one-time consumption semantics, and runtime execution authority for protected
+  SPEC-017 recovery.
+status: TODO
+source_stage: 06

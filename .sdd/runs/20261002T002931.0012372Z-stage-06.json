@@ -1,0 +1,41 @@
+{
+  "request_summary": {
+    "stage_id": "06",
+    "stage_name": "IMPLEMENTATION_TASKS",
+    "operation": "DEFINE_SPEC017_REPOSITORY_BACKED_RECOVERY_AUTHORIZATION",
+    "baseline": "1945f30794ec19f703f9f79369d4af1926ad648f",
+    "artifact_paths": [
+      ".sdd/convergence/TC014.yaml"
+    ]
+  },
+  "result": {
+    "status": "COMPLETED",
+    "classification": "EXECUTION_DECOMPOSITION_ONLY",
+    "owner": "STAGE06_EXECUTION_DECOMPOSITION",
+    "task_id": "TC014",
+    "task_count": 1,
+    "preservation": {
+      "runtime_code_changed": false,
+      "tests_changed": false,
+      "convergence_statuses_changed": false,
+      "historical_evidence_changed": false,
+      "implementation_state_changed": false,
+      "recovery_authorization_issued": false,
+      "recovery_executed": false,
+      "tc013_stage08_reexecuted": false,
+      "tc012_stage08_reexecuted": false,
+      "tc013_state_finalization_executed": false,
+      "tc012_state_finalization_executed": false,
+      "stage07_executed": false,
+      "stage08_executed": false,
+      "stage09_executed": false,
+      "stage10_executed": false
+    }
+  },
+  "transition": {
+    "stage_id": "06",
+    "result": "COMPLETED",
+    "next": "TC014_STAGE07_ENTRY",
+    "tc014_stage07_entry_ready": true
+  }
+}
