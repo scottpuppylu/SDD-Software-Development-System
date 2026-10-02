@@ -22,6 +22,15 @@ from .system_controller import (
 )
 from .telemetry.recorder import TelemetryRecorder
 from .context_activation import resolve_context_compilation_mode
+from .developer_entry import (
+    DeveloperEntryError,
+    bootstrap_global_config,
+    detect_binding,
+    enable_repo,
+    rebind_repo,
+    start_message,
+    unbind_repo,
+)
 
 
 def _print(data):
@@ -163,7 +172,42 @@ def main():
     p_auto.add_argument("--heartbeat-seconds", type=int, default=30, help="Stage 08 heartbeat interval; 0 disables")
     p_auto.add_argument("--semantic", action="append", default=[], help="STAGE:KEY=VALUE")
 
+    p_bootstrap = sub.add_parser("bootstrap", help="Register the user-level SDD runtime")
+    p_bootstrap.add_argument("--config")
+    p_bootstrap.add_argument("--runtime-path")
+    for name, handler in (("enable", enable_repo), ("rebind", rebind_repo), ("unbind", unbind_repo)):
+        p_entry = sub.add_parser(name, help=f"{name} SDD binding for a repository")
+        p_entry.add_argument("--repo", required=True)
+        p_entry.add_argument("--config")
+        if name == "enable":
+            p_entry.add_argument("--init-git", action="store_true")
+    p_detect = sub.add_parser("binding", help="Detect the current SDD project binding")
+    p_detect.add_argument("--repo", default=".")
+    p_detect.add_argument("--config")
+
     args = parser.parse_args()
+    if args.command == "bootstrap":
+        path = bootstrap_global_config(args.config, args.runtime_path)
+        _print({"bootstrap": "PASS", "config_path": str(path), "message": start_message()})
+        return
+    if args.command in {"enable", "rebind", "unbind"}:
+        try:
+            if args.command == "enable":
+                result = enable_repo(args.repo, config_path=args.config, initialize_git=args.init_git)
+            elif args.command == "rebind":
+                result = rebind_repo(args.repo, config_path=args.config)
+            else:
+                result = unbind_repo(args.repo, config_path=args.config)
+        except DeveloperEntryError as exc:
+            raise SystemExit(f"SDD error: {exc}") from exc
+        _print(result)
+        return
+    if args.command == "binding":
+        try:
+            _print(detect_binding(args.repo, config_path=args.config))
+        except DeveloperEntryError as exc:
+            raise SystemExit(f"SDD error: {exc}") from exc
+        return
     repo = Path(args.repo)
     compilation_mode = resolve_context_compilation_mode()
 
@@ -378,5 +422,5 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (SDDOrchestratorError, ReasoningProviderError, GitRuntimeError, CodexAdapterError, DecisionGatewayError) as exc:
+    except (SDDOrchestratorError, ReasoningProviderError, GitRuntimeError, CodexAdapterError, DecisionGatewayError, DeveloperEntryError) as exc:
         raise SystemExit(f"SDD error: {exc}")
