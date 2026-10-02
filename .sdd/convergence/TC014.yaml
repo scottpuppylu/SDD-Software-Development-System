@@ -20,6 +20,13 @@ allowed_test_paths:
   - tests/test_v1118_safe_pause_and_evidence.py
   - tests/test_m5_git_recovery.py
   - tests/test_m6_codex_adapter.py
+allowed_paths:
+  - sdd_orchestrator/evidence_writer.py
+  - sdd_orchestrator/git_runtime.py
+  - sdd_orchestrator/codex_adapter.py
+  - tests/test_v1118_safe_pause_and_evidence.py
+  - tests/test_m5_git_recovery.py
+  - tests/test_m6_codex_adapter.py
 forbidden_scope:
   - normal Stage08 selector redesign
   - TC008-TC011 convergence status mutation
