@@ -78,7 +78,13 @@ from .stage08_phase_state import (
     classify_safe_pause,
 )
 from .task_parser import AtomicTask, SealedExecutionEnvelope, TaskFileParser
-from .git_runtime import GitRepository, RecoveryManager, GitRuntimeError
+from .git_runtime import (
+    authority_version_digest,
+    GitRepository,
+    RecoveryAuthorizationStore,
+    RecoveryManager,
+    GitRuntimeError,
+)
 from .telemetry.measurement import (
     measure_stage08_phase_events,
     measure_stage08_task,
@@ -153,6 +159,7 @@ class Stage08CodexRunner:
         self.repo_root = orchestrator.repo_root
         self.git = GitRepository(self.repo_root)
         self.recovery = RecoveryManager(self.repo_root)
+        self.recovery_authorizations = RecoveryAuthorizationStore(self.repo_root)
         self.codex = codex or CodexCLI()
         self.project_python = project_python
         self.heartbeat_seconds = max(0, int(heartbeat_seconds))
@@ -331,7 +338,9 @@ class Stage08CodexRunner:
     def _resolve_recovery_target(self, authorization: RecoveryAuthorization) -> AtomicTask:
         """Resolve one authorization-bound historical task without widening Stage08 selection."""
         try:
-            authorization.validate()
+            if not isinstance(authorization, RecoveryAuthorization):
+                raise TypeError("repository-loaded RecoveryAuthorization required")
+            authorization.validate(require_active=False)
         except Exception as exc:
             raise CodexAdapterError("AUTHORITY_INVALID: recovery authorization is invalid") from exc
 
@@ -339,7 +348,8 @@ class Stage08CodexRunner:
         if (
             self.repo_root.as_posix() != Path(authorization.repository).resolve().as_posix()
             or snapshot.branch != authorization.branch
-            or snapshot.head_commit != authorization.baseline_commit
+            or snapshot.head_commit is None
+            or not self.git.is_ancestor(authorization.baseline_commit, snapshot.head_commit)
         ):
             raise CodexAdapterError("AUTHORITY_INVALID: recovery repository binding mismatch")
 
@@ -402,12 +412,17 @@ class Stage08CodexRunner:
 
     def recover_post_checkpoint_evidence(
         self,
-        authorization: RecoveryAuthorization,
+        authorization_id: str,
         *,
         checkpoint_evidence: bool = False,
     ) -> RecoveryQualification:
-        """Create new proof for an unchanged checkpoint; never update task state."""
+        """Load one repository grant, consume it, and prove an unchanged checkpoint."""
+        if not isinstance(authorization_id, str) or not authorization_id.strip():
+            return RecoveryQualification(False, "AUTHORITY_INVALID")
         try:
+            authorization = self.recovery_authorizations.load(
+                authorization_id=authorization_id, require_active=False
+            )
             task = self._resolve_recovery_target(authorization)
         except Exception as exc:
             return RecoveryQualification(False, self._recovery_reason(exc))
@@ -418,18 +433,9 @@ class Stage08CodexRunner:
         if task.verification_commands != [authorization.verification_command]:
             return RecoveryQualification(False, "COMMAND_MISMATCH")
         prior_attempts = find_recovery_attempts(self.repo_root, authorization)
-        before = self.git.snapshot(recent_limit=5)
         prior_paths = {path for path, _ in prior_attempts}
-        unexplained_dirty = [path for path in before.dirty_paths if path not in prior_paths]
-        if (
-            not before.is_repository
-            or before.branch != authorization.branch
-            or before.head_commit != authorization.baseline_commit
-            or unexplained_dirty
-        ):
-            return RecoveryQualification(False, "AUTHORITY_INVALID")
         expected_authorities = tuple(
-            (path, self._sha256(self._read_for_envelope(path)))
+            (path, authority_version_digest(self.repo_root / path))
             for path in self.ENVELOPE_AUTHORITY_PATHS
         )
         if authorization.authority_versions != expected_authorities:
@@ -444,11 +450,33 @@ class Stage08CodexRunner:
             ):
                 return RecoveryQualification(False, "EVIDENCE_CONFLICT")
             prior = qualify_recovery_attestation(prior_payload, authorization, task)
-            if prior.qualifies and authorization.allow_persistence_resume:
+            if (
+                prior.qualifies
+                and authorization.status == "CONSUMED"
+                and authorization.allow_persistence_resume
+            ):
                 return RecoveryQualification(
                     True, "QUALIFYING", prior_path, None, True
                 )
             return RecoveryQualification(False, "AUTHORITY_INVALID", prior_path)
+        if authorization.status != "ACTIVE":
+            return RecoveryQualification(False, "AUTHORITY_INVALID")
+        try:
+            authorization, _ = self.recovery_authorizations.consume(
+                authorization.authorization_id
+            )
+        except Exception as exc:
+            return RecoveryQualification(False, self._recovery_reason(exc))
+
+        before = self.git.snapshot(recent_limit=5)
+        unexplained_dirty = [path for path in before.dirty_paths if path not in prior_paths]
+        if (
+            not before.is_repository
+            or before.branch != authorization.branch
+            or before.head_commit is None
+            or unexplained_dirty
+        ):
+            return RecoveryQualification(False, "AUTHORITY_INVALID")
 
         checkpoint = self.git.resolve_commit(authorization.checkpoint_commit)
         if checkpoint != authorization.checkpoint_commit:
@@ -720,7 +748,7 @@ class Stage08CodexRunner:
                 "Stage 08 envelope requires a valid Stage07 PASS report"
             )
         authority_versions = tuple(
-            (path, self._sha256(self._read_for_envelope(path)))
+            (path, authority_version_digest(self.repo_root / path))
             for path in self.ENVELOPE_AUTHORITY_PATHS
         )
         behavior_scope = task.behavior_scope

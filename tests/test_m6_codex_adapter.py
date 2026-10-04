@@ -23,12 +23,14 @@ from sdd_orchestrator.codex_adapter import (
     NoExecutableTaskError,
     VerificationCommandPolicy,
 )
-from sdd_orchestrator.git_runtime import GitRuntimeError
+from sdd_orchestrator.git_runtime import GitRuntimeError, authority_version_digest
 from sdd_orchestrator.evidence_writer import (
     RECOVERY_CAPABILITY,
     RecoveryAuthorization,
+    assemble_recovery_authorization,
     task_contract_sha256,
 )
+from sdd_orchestrator.git_runtime import ProjectAuthorityRecoveryAuthorizationIssuer
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -153,6 +155,12 @@ class M6CodexAdapterTests(unittest.TestCase):
         (self.repo / "src/value.py").write_text("VALUE = 999\n", encoding="utf-8")
         run_git(self.repo, "add", "src/value.py")
         run_git(self.repo, "commit", "-m", "docs: later baseline")
+        original_evidence = self.repo / ".sdd/evidence/original-T001.json"
+        runtime_evidence = self.repo / ".sdd/evidence/runtime-TC014.json"
+        original_evidence.write_text('{"task_id":"T001"}\n', encoding="utf-8")
+        runtime_evidence.write_text('{"task_id":"TC014","status":"PASS"}\n', encoding="utf-8")
+        run_git(self.repo, "add", "-f", str(original_evidence.relative_to(self.repo)), str(runtime_evidence.relative_to(self.repo)))
+        run_git(self.repo, "commit", "-m", "docs: repository-backed recovery bases")
         baseline = run_git(self.repo, "rev-parse", "HEAD")
         runner = Stage08CodexRunner(
             Orchestrator(self.repo), project_python=sys.executable, heartbeat_seconds=0
@@ -163,19 +171,36 @@ class M6CodexAdapterTests(unittest.TestCase):
             for path in runner.ENVELOPE_AUTHORITY_PATHS
         )
         now = datetime.now(timezone.utc)
-        authorization = RecoveryAuthorization(
-            authorization_id="RECOVERY-1", issuer="PROJECT_AUTHORITY",
-            capability=RECOVERY_CAPABILITY, task_id="T001",
-            checkpoint_commit=checkpoint, repository=str(self.repo.resolve()),
-            branch=run_git(self.repo, "branch", "--show-current"),
-            baseline_commit=baseline, authority_versions=authority_versions,
-            task_contract_sha256=task_contract_sha256(task),
-            verification_command=command, allowed_evidence_prefix=".sdd/evidence/",
-            attempt_id="attempt-1", issued_at=now.isoformat(),
-            expires_at=(now + timedelta(hours=1)).isoformat(),
-        )
+        approval_digest = authority_version_digest(self.repo / "AGENTS.md")
+        authorization, _, _ = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo).issue({
+            "authorization_id": "RECOVERY-1", "attempt_id": "attempt-1",
+            "issuer": "PROJECT_AUTHORITY", "issuer_role": "PROJECT_AUTHORITY",
+            "issuer_approval_reference": f"AGENTS.md#sha256:{approval_digest}",
+            "purpose": RECOVERY_CAPABILITY, "one_time": True,
+            "issued_at": now.isoformat(),
+            "expires_at": (now + timedelta(hours=1)).isoformat(),
+            "repository": str(self.repo.resolve()),
+            "branch": run_git(self.repo, "branch", "--show-current"),
+            "baseline": baseline, "recovery_operation_id": "RECOVERY-T001-001",
+            "target_task_id": "T001", "task_contract_digest": task_contract_sha256(task),
+            "target_checkpoint": checkpoint,
+            "target_original_evidence": ".sdd/evidence/original-T001.json",
+            "verification_command": command,
+            "verification_command_source": "tasks.md#T001",
+            "runtime_checkpoint": baseline,
+            "runtime_evidence": ".sdd/evidence/runtime-TC014.json",
+            "spec_version": "SPEC-017", "design_version": "DES-017",
+            "authority_policy_version": "AGENTS.md#9.1",
+            "authority_versions": authority_versions,
+            "allowed_artifact_paths": (
+                ".sdd/authorizations/recovery/RECOVERY-1.yaml", ".sdd/evidence/",
+            ),
+            "prohibited_operations": ("IMPLEMENTATION_MUTATION", "STATE_RECONCILIATION"),
+            "allow_persistence_only_resume": False,
+            "checkpoint_conditions": ("verification_pass", "scope_respected"),
+        })
         state_before = (self.repo / ".sdd/state/implementation-state.yaml").read_text()
-        result = runner.recover_post_checkpoint_evidence(authorization)
+        result = runner.recover_post_checkpoint_evidence(authorization.authorization_id)
         self.assertTrue(result.qualifies, result.reason)
         self.assertTrue(result.reconciliation_eligible)
         self.assertIsNone(result.evidence_checkpoint)
@@ -197,16 +222,12 @@ class M6CodexAdapterTests(unittest.TestCase):
             (self.repo / ".sdd/state/implementation-state.yaml").read_text(),
             state_before,
         )
-        consumed = runner.recover_post_checkpoint_evidence(authorization)
+        consumed = runner.recover_post_checkpoint_evidence(authorization.authorization_id)
         self.assertFalse(consumed.qualifies)
         self.assertEqual(consumed.reason, "AUTHORITY_INVALID")
-        resumable_values = dict(authorization.__dict__)
-        resumable_values["allow_persistence_resume"] = True
-        resumed = runner.recover_post_checkpoint_evidence(
-            RecoveryAuthorization(**resumable_values)
-        )
-        self.assertTrue(resumed.qualifies, resumed.reason)
-        self.assertEqual(resumed.evidence_file, result.evidence_file)
+        arbitrary = runner.recover_post_checkpoint_evidence(authorization)
+        self.assertFalse(arbitrary.qualifies)
+        self.assertEqual(arbitrary.reason, "AUTHORITY_INVALID")
 
     def test_recovery_target_resolution_keeps_done_convergence_tasks_out_of_normal_selection(self):
         self._write_tasks('''
@@ -277,22 +298,41 @@ class M6CodexAdapterTests(unittest.TestCase):
             (path, runner._sha256((self.repo / path).read_text(encoding="utf-8")))
             for path in runner.ENVELOPE_AUTHORITY_PATHS
         )
+        approval_digest = authority_version_digest(self.repo / "AGENTS.md")
         now = datetime.now(timezone.utc)
 
-        def authorization(task_id):
+        def authorization(task_id, **overrides):
             raw = yaml.safe_dump(contracts[task_id], sort_keys=False, allow_unicode=True)
-            return RecoveryAuthorization(
-                authorization_id=f"RECOVERY-{task_id}", issuer="PROJECT_AUTHORITY",
-                capability=RECOVERY_CAPABILITY, task_id=task_id,
-                checkpoint_commit=checkpoints[task_id], repository=str(self.repo.resolve()),
-                branch=run_git(self.repo, "branch", "--show-current"),
-                baseline_commit=run_git(self.repo, "rev-parse", "HEAD"),
-                authority_versions=authority_versions,
-                task_contract_sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
-                verification_command=commands[task_id], allowed_evidence_prefix=".sdd/evidence/",
-                attempt_id=f"attempt-{task_id}", issued_at=now.isoformat(),
-                expires_at=(now + timedelta(hours=1)).isoformat(),
-            )
+            grant = {
+                "authorization_id": f"RECOVERY-{task_id}",
+                "attempt_id": f"attempt-{task_id}",
+                "issuer": "PROJECT_AUTHORITY", "issuer_role": "PROJECT_AUTHORITY",
+                "issuer_approval_reference": f"AGENTS.md#sha256:{approval_digest}",
+                "purpose": RECOVERY_CAPABILITY, "one_time": True,
+                "issued_at": now.isoformat(),
+                "expires_at": (now + timedelta(hours=1)).isoformat(),
+                "repository": str(self.repo.resolve()),
+                "branch": run_git(self.repo, "branch", "--show-current"),
+                "baseline": run_git(self.repo, "rev-parse", "HEAD"),
+                "recovery_operation_id": f"RECOVERY-{task_id}-001",
+                "target_task_id": task_id,
+                "task_contract_digest": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                "target_checkpoint": checkpoints[task_id],
+                "target_original_evidence": state["task_qualifications"][task_id]["evidence"]["path"],
+                "verification_command": commands[task_id],
+                "verification_command_source": f".sdd/convergence/{task_id}.yaml",
+                "runtime_checkpoint": run_git(self.repo, "rev-parse", "HEAD"),
+                "runtime_evidence": ".sdd/evidence/runtime-TC014.json",
+                "spec_version": "SPEC-017", "design_version": "DES-017",
+                "authority_policy_version": "AGENTS.md#9.1",
+                "authority_versions": authority_versions,
+                "allowed_artifact_paths": (".sdd/evidence/",),
+                "prohibited_operations": ("IMPLEMENTATION_MUTATION",),
+                "allow_persistence_only_resume": False,
+                "checkpoint_conditions": ("verification_pass", "scope_respected"),
+            }
+            grant.update(overrides)
+            return assemble_recovery_authorization(grant)
 
         original_state = state_path.read_text(encoding="utf-8")
         for task_id in commands:
@@ -302,22 +342,25 @@ class M6CodexAdapterTests(unittest.TestCase):
         valid = authorization("TC008")
         with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
             runner._resolve_recovery_target(None)
-        with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
-            runner._resolve_recovery_target(replace(valid, status="CONSUMED"))
+        consumed_record = valid.append_status_event(
+            "CONSUMED", occurred_at=now.isoformat(), actor="RECOVERY_EXECUTOR",
+            reason="TEST",
+        )
+        self.assertEqual(runner._resolve_recovery_target(consumed_record).task_id, "TC008")
         with self.assertRaisesRegex(CodexAdapterError, "TASK_MISMATCH"):
-            runner._resolve_recovery_target(replace(valid, task_id="TC999"))
+            runner._resolve_recovery_target(authorization("TC008", target_task_id="TC999"))
         with self.assertRaisesRegex(CodexAdapterError, "TASK_MISMATCH"):
-            runner._resolve_recovery_target(replace(valid, task_contract_sha256="0" * 64))
+            runner._resolve_recovery_target(authorization("TC008", task_contract_digest="0" * 64))
         with self.assertRaisesRegex(CodexAdapterError, "CHECKPOINT_MISMATCH"):
-            runner._resolve_recovery_target(replace(valid, checkpoint_commit="f" * 40))
+            runner._resolve_recovery_target(authorization("TC008", target_checkpoint="f" * 40))
         with self.assertRaisesRegex(CodexAdapterError, "COMMAND_MISMATCH"):
-            runner._resolve_recovery_target(replace(valid, verification_command="python -m pytest -q other"))
+            runner._resolve_recovery_target(authorization("TC008", verification_command="python -m pytest -q other"))
         with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
-            runner._resolve_recovery_target(replace(valid, repository=str(self.repo / "other")))
+            runner._resolve_recovery_target(authorization("TC008", repository=str(self.repo / "other")))
         with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
-            runner._resolve_recovery_target(replace(valid, branch="other"))
+            runner._resolve_recovery_target(authorization("TC008", branch="other"))
         with self.assertRaisesRegex(CodexAdapterError, "AUTHORITY_INVALID"):
-            runner._resolve_recovery_target(replace(valid, baseline_commit="e" * 40))
+            runner._resolve_recovery_target(authorization("TC008", baseline="e" * 40))
 
         altered = yaml.safe_load(original_state)
         altered["task_qualifications"]["TC008"]["evidence"]["path"] = ".sdd/evidence/missing.json"

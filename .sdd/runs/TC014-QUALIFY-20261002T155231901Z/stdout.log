@@ -1,0 +1,9 @@
+.......................................................................................... [ 66%]
+.............................................                     [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\_pytest\cacheprovider.py:469
+  C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.venv\Lib\site-packages\_pytest\cacheprovider.py:469: PytestCacheWarning: could not create cache path C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.pytest_cache\v\cache\nodeids: [WinError 183] 當檔案已存在時，無法建立該檔案。: 'C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.pytest_cache\\v\\cache'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+135 passed, 1 warning, 61 subtests passed in 933.33s (0:15:33)

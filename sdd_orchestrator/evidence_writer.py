@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -22,6 +22,10 @@ EVIDENCE_OUTCOMES = frozenset({"PASS", "FAIL", "NOT RUN"})
 RECOVERY_CAPABILITY = "POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY"
 RECOVERY_RECORD_KIND = "POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY"
 RECOVERY_SCHEMA_VERSION = "2.0"
+RECOVERY_AUTHORIZATION_ARTIFACT_TYPE = "RECOVERY_AUTHORIZATION_V1"
+RECOVERY_AUTHORIZATION_RECORD_KIND = "SPEC017_RECOVERY_AUTHORIZATION"
+RECOVERY_AUTHORIZATION_SCHEMA_VERSION = "1.0"
+RECOVERY_AUTHORIZATION_STATUSES = frozenset({"ACTIVE", "CONSUMED", "EXPIRED", "REVOKED"})
 
 
 class InvalidEvidence(ValueError):
@@ -34,51 +38,157 @@ class EvidencePersistenceError(OSError):
 
 @dataclass(frozen=True)
 class RecoveryAuthorization:
+    schema_version: str
+    record_kind: str
     authorization_id: str
+    attempt_id: str
     issuer: str
-    capability: str
-    task_id: str
-    checkpoint_commit: str
+    issuer_role: str
+    issuer_approval_reference: str
+    purpose: str
+    status: str
+    one_time: bool
+    issued_at: str
+    expires_at: str | None
     repository: str
     branch: str
-    baseline_commit: str
-    authority_versions: tuple[tuple[str, str], ...]
-    task_contract_sha256: str
+    baseline: str
+    recovery_operation_id: str
+    target_task_id: str
+    task_contract_digest: str
+    target_checkpoint: str
+    target_original_evidence: str
     verification_command: str
-    allowed_evidence_prefix: str
-    attempt_id: str
-    issued_at: str
-    expires_at: str | None = None
-    status: str = "ACTIVE"
-    single_use: bool = True
-    allow_persistence_resume: bool = False
+    verification_command_source: str
+    runtime_checkpoint: str
+    runtime_evidence: str
+    spec_version: str
+    design_version: str
+    authority_policy_version: str
+    authority_versions: tuple[tuple[str, str], ...]
+    allowed_artifact_paths: tuple[str, ...]
+    prohibited_operations: tuple[str, ...]
+    allow_persistence_only_resume: bool
+    checkpoint_conditions: tuple[str, ...]
+    grant_digest: str
+    status_events: tuple[Mapping[str, Any], ...]
+    record_digest: str
 
-    def validate(self) -> None:
+    @property
+    def capability(self) -> str:
+        return self.purpose
+
+    @property
+    def task_id(self) -> str:
+        return self.target_task_id
+
+    @property
+    def checkpoint_commit(self) -> str:
+        return self.target_checkpoint
+
+    @property
+    def baseline_commit(self) -> str:
+        return self.baseline
+
+    @property
+    def task_contract_sha256(self) -> str:
+        return self.task_contract_digest
+
+    @property
+    def allowed_evidence_prefix(self) -> str:
+        return ".sdd/evidence/"
+
+    @property
+    def single_use(self) -> bool:
+        return self.one_time
+
+    @property
+    def allow_persistence_resume(self) -> bool:
+        return self.allow_persistence_only_resume
+
+    def grant_payload(self) -> dict[str, Any]:
+        record = self.to_record()
+        for key in ("grant_digest", "status_events", "record_digest", "status"):
+            record.pop(key, None)
+        return record
+
+    def to_record(self) -> dict[str, Any]:
+        record = asdict(self)
+        record["authority_versions"] = [list(item) for item in self.authority_versions]
+        record["allowed_artifact_paths"] = list(self.allowed_artifact_paths)
+        record["prohibited_operations"] = list(self.prohibited_operations)
+        record["checkpoint_conditions"] = list(self.checkpoint_conditions)
+        record["status_events"] = [dict(item) for item in self.status_events]
+        return record
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "RecoveryAuthorization":
+        values = dict(record)
+        values["authority_versions"] = tuple(
+            (str(item[0]), str(item[1])) for item in values.get("authority_versions", [])
+        )
+        for name in ("allowed_artifact_paths", "prohibited_operations", "checkpoint_conditions"):
+            values[name] = tuple(str(item) for item in values.get(name, []))
+        values["status_events"] = tuple(
+            dict(item) for item in values.get("status_events", [])
+        )
+        try:
+            return cls(**values)
+        except (TypeError, ValueError) as exc:
+            raise InvalidEvidence("SCHEMA_INVALID: malformed recovery authorization") from exc
+
+    def validate(self, *, require_active: bool = True) -> None:
         required = (
-            "authorization_id", "issuer", "capability", "task_id",
-            "checkpoint_commit", "repository", "branch", "baseline_commit",
-            "task_contract_sha256", "verification_command",
-            "allowed_evidence_prefix", "attempt_id", "issued_at",
+            "schema_version", "record_kind", "authorization_id", "attempt_id",
+            "issuer", "issuer_role", "issuer_approval_reference", "purpose",
+            "issued_at", "repository", "branch", "baseline",
+            "recovery_operation_id", "target_task_id", "task_contract_digest",
+            "target_checkpoint", "target_original_evidence", "verification_command",
+            "verification_command_source", "runtime_checkpoint", "runtime_evidence",
+            "spec_version", "design_version", "authority_policy_version",
+            "grant_digest", "record_digest",
         )
         if any(not str(getattr(self, name)).strip() for name in required):
             raise InvalidEvidence("AUTHORITY_INVALID: incomplete recovery authorization")
-        if self.issuer != "PROJECT_AUTHORITY" or self.capability != RECOVERY_CAPABILITY:
+        if (
+            self.schema_version != RECOVERY_AUTHORIZATION_SCHEMA_VERSION
+            or self.record_kind != RECOVERY_AUTHORIZATION_RECORD_KIND
+        ):
+            raise InvalidEvidence("SCHEMA_INVALID: unsupported recovery authorization schema")
+        if (
+            self.issuer != "PROJECT_AUTHORITY"
+            or self.issuer_role != "PROJECT_AUTHORITY"
+            or self.purpose != RECOVERY_CAPABILITY
+        ):
             raise InvalidEvidence("AUTHORITY_INVALID: recovery requires Project Authority")
-        if self.status != "ACTIVE" or not self.single_use:
+        if self.status not in RECOVERY_AUTHORIZATION_STATUSES or not self.one_time:
             raise InvalidEvidence("AUTHORITY_INVALID: authorization is inactive or not single-use")
-        if not re.fullmatch(r"[0-9a-f]{40}", self.checkpoint_commit):
+        if require_active and self.status != "ACTIVE":
+            raise InvalidEvidence("AUTHORITY_INVALID: authorization is not active")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", self.authorization_id):
+            raise InvalidEvidence("AUTHORITY_INVALID: unsafe authorization identity")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", self.attempt_id):
+            raise InvalidEvidence("AUTHORITY_INVALID: unsafe recovery attempt identity")
+        if not re.fullmatch(r"[0-9a-f]{40}", self.target_checkpoint):
             raise InvalidEvidence("CHECKPOINT_MISMATCH: full checkpoint commit is required")
-        if not re.fullmatch(r"[0-9a-f]{40}", self.baseline_commit):
+        if not re.fullmatch(r"[0-9a-f]{40}", self.baseline):
             raise InvalidEvidence("AUTHORITY_INVALID: full baseline commit is required")
-        if not re.fullmatch(r"[0-9a-f]{64}", self.task_contract_sha256):
+        if not re.fullmatch(r"[0-9a-f]{40}", self.runtime_checkpoint):
+            raise InvalidEvidence("AUTHORITY_INVALID: full runtime checkpoint is required")
+        if not re.fullmatch(r"[0-9a-f]{64}", self.task_contract_digest):
             raise InvalidEvidence("TASK_MISMATCH: task contract digest is invalid")
         if not self.authority_versions or any(
             not path.strip() or not re.fullmatch(r"[0-9a-f]{64}", digest)
             for path, digest in self.authority_versions
         ):
             raise InvalidEvidence("AUTHORITY_INVALID: authority versions are incomplete")
-        if self.allowed_evidence_prefix != ".sdd/evidence/":
-            raise InvalidEvidence("AUTHORITY_INVALID: recovery evidence scope is overbroad")
+        if not self.allowed_artifact_paths or any(
+            not str(path).startswith(".sdd/") or ".." in Path(path).parts
+            for path in self.allowed_artifact_paths
+        ):
+            raise InvalidEvidence("AUTHORITY_INVALID: recovery artifact scope is invalid")
+        if not self.prohibited_operations or not self.checkpoint_conditions:
+            raise InvalidEvidence("AUTHORITY_INVALID: recovery boundaries are incomplete")
         issued = _parse_utc(self.issued_at, "issued_at")
         if issued > datetime.now(timezone.utc):
             raise InvalidEvidence("AUTHORITY_INVALID: recovery authorization is not yet valid")
@@ -86,6 +196,81 @@ class RecoveryAuthorization:
             expires = _parse_utc(self.expires_at, "expires_at")
             if expires <= issued or datetime.now(timezone.utc) >= expires:
                 raise InvalidEvidence("AUTHORITY_INVALID: recovery authorization expired")
+        if not self.status_events:
+            raise InvalidEvidence("SCHEMA_INVALID: authorization status history is missing")
+        previous: str | None = None
+        for index, event in enumerate(self.status_events, start=1):
+            body = {key: value for key, value in event.items() if key != "event_digest"}
+            if event.get("sequence") != index or event.get("previous_event_digest") != previous:
+                raise InvalidEvidence("SCHEMA_INVALID: authorization audit chain is broken")
+            digest = canonical_sha256(body)
+            if event.get("event_digest") != digest:
+                raise InvalidEvidence("SCHEMA_INVALID: authorization event digest mismatch")
+            previous = digest
+        if self.status_events[-1].get("status") != self.status:
+            raise InvalidEvidence("SCHEMA_INVALID: authorization status projection is stale")
+        if self.grant_digest != canonical_sha256(self.grant_payload()):
+            raise InvalidEvidence("SCHEMA_INVALID: authorization grant digest mismatch")
+        record = self.to_record()
+        if self.record_digest != canonical_sha256({
+            key: value for key, value in record.items() if key != "record_digest"
+        }):
+            raise InvalidEvidence("SCHEMA_INVALID: authorization record digest mismatch")
+
+    def append_status_event(
+        self, status: str, *, occurred_at: str, actor: str, reason: str
+    ) -> "RecoveryAuthorization":
+        if status not in RECOVERY_AUTHORIZATION_STATUSES:
+            raise InvalidEvidence("SCHEMA_INVALID: unsupported authorization status")
+        if self.status != "ACTIVE":
+            raise InvalidEvidence("AUTHORITY_INVALID: only ACTIVE authorization may transition")
+        previous = self.status_events[-1]["event_digest"] if self.status_events else None
+        body = {
+            "sequence": len(self.status_events) + 1,
+            "status": status,
+            "occurred_at": occurred_at,
+            "actor": actor,
+            "reason": reason,
+            "previous_event_digest": previous,
+        }
+        event = {**body, "event_digest": canonical_sha256(body)}
+        updated = replace(
+            self, status=status, status_events=(*self.status_events, event), record_digest=""
+        )
+        return replace(updated, record_digest=canonical_sha256({
+            key: value for key, value in updated.to_record().items() if key != "record_digest"
+        }))
+
+
+def assemble_recovery_authorization(
+    grant: Mapping[str, Any],
+) -> RecoveryAuthorization:
+    """Canonicalize a Project-Authority grant; persistence remains store-owned."""
+    values = dict(grant)
+    issued_at = str(values.get("issued_at", ""))
+    event_body = {
+        "sequence": 1,
+        "status": "ACTIVE",
+        "occurred_at": issued_at,
+        "actor": "PROJECT_AUTHORITY",
+        "reason": "ISSUED",
+        "previous_event_digest": None,
+    }
+    record = {
+        **values,
+        "schema_version": RECOVERY_AUTHORIZATION_SCHEMA_VERSION,
+        "record_kind": RECOVERY_AUTHORIZATION_RECORD_KIND,
+        "status": "ACTIVE",
+        "status_events": [{**event_body, "event_digest": canonical_sha256(event_body)}],
+        "grant_digest": "",
+        "record_digest": "",
+    }
+    provisional = RecoveryAuthorization.from_record(record)
+    record["grant_digest"] = canonical_sha256(provisional.grant_payload())
+    record["record_digest"] = canonical_sha256({
+        key: value for key, value in record.items() if key != "record_digest"
+    })
+    return RecoveryAuthorization.from_record(record)
 
 
 @dataclass(frozen=True)
@@ -220,7 +405,7 @@ def qualify_recovery_attestation(
     task: AtomicTask,
 ) -> RecoveryQualification:
     try:
-        authorization.validate()
+        authorization.validate(require_active=False)
     except InvalidEvidence as exc:
         return RecoveryQualification(False, str(exc).split(":", 1)[0])
     checks = (
@@ -236,7 +421,7 @@ def qualify_recovery_attestation(
         (payload.get("exit_status") == 0, "VERIFICATION_FAILED"),
         (payload.get("complete") is True and payload.get("timed_out") is False, "VERIFICATION_INCOMPLETE"),
         (payload.get("implementation_mutated") is False, "IMPLEMENTATION_MUTATED"),
-        (payload.get("pre_head") == payload.get("post_head") == authorization.baseline_commit, "IMPLEMENTATION_MUTATED"),
+        (payload.get("pre_head") == payload.get("post_head"), "IMPLEMENTATION_MUTATED"),
     )
     for valid, reason in checks:
         if not valid:

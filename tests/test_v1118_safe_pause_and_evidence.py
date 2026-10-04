@@ -33,6 +33,7 @@ from sdd_orchestrator.evidence_writer import (
     EvidenceRegistry,
     InvalidEvidence,
     RecoveryAuthorization,
+    assemble_recovery_authorization,
     assemble_demonstration_manifest,
     canonical_sha256,
     qualify_recovery_attestation,
@@ -58,17 +59,30 @@ class PostCheckpointEvidenceTests(unittest.TestCase):
             ["src/a.py"], ["python -m pytest -q tests/test_a.py"], "recover",
         )
         now = datetime.now(timezone.utc)
-        self.authorization = RecoveryAuthorization(
-            authorization_id="REC-1", issuer="PROJECT_AUTHORITY",
-            capability=RECOVERY_CAPABILITY, task_id="T012",
-            checkpoint_commit="a" * 40, repository=str(self.repo), branch="main",
-            baseline_commit="b" * 40,
-            authority_versions=(("docs/spec.md", "c" * 64),),
-            task_contract_sha256=task_contract_sha256(self.task),
-            verification_command=self.task.verification_commands[0],
-            allowed_evidence_prefix=".sdd/evidence/", attempt_id="attempt-1",
-            issued_at=now.isoformat(), expires_at=(now + timedelta(hours=1)).isoformat(),
-        )
+        self.authorization = assemble_recovery_authorization({
+            "authorization_id": "REC-1", "attempt_id": "attempt-1",
+            "issuer": "PROJECT_AUTHORITY", "issuer_role": "PROJECT_AUTHORITY",
+            "issuer_approval_reference": "AGENTS.md#sha256:" + "d" * 64,
+            "purpose": RECOVERY_CAPABILITY, "one_time": True,
+            "issued_at": now.isoformat(),
+            "expires_at": (now + timedelta(hours=1)).isoformat(),
+            "repository": str(self.repo), "branch": "main", "baseline": "b" * 40,
+            "recovery_operation_id": "RECOVERY-T012-001",
+            "target_task_id": "T012", "target_checkpoint": "a" * 40,
+            "target_original_evidence": ".sdd/evidence/original-T012.json",
+            "authority_versions": (("docs/spec.md", "c" * 64),),
+            "task_contract_digest": task_contract_sha256(self.task),
+            "verification_command": self.task.verification_commands[0],
+            "verification_command_source": "tasks.md#T012",
+            "runtime_checkpoint": "b" * 40,
+            "runtime_evidence": ".sdd/evidence/runtime-TC014.json",
+            "spec_version": "SPEC-017", "design_version": "DES-017",
+            "authority_policy_version": "AGENTS.md#9.1",
+            "allowed_artifact_paths": (".sdd/evidence/", ".sdd/authorizations/recovery/REC-1.yaml"),
+            "prohibited_operations": ("IMPLEMENTATION_MUTATION",),
+            "allow_persistence_only_resume": False,
+            "checkpoint_conditions": ("verification_pass", "scope_respected"),
+        })
 
     def tearDown(self):
         self.tmp.cleanup()

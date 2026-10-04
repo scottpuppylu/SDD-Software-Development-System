@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -17,6 +18,9 @@ import yaml
 from .evidence_writer import (
     ImplementationQualificationBinding,
     InvalidEvidence,
+    RECOVERY_CAPABILITY,
+    RecoveryAuthorization,
+    assemble_recovery_authorization,
     implementation_qualification_binding,
 )
 from .task_parser import AtomicTask, TaskFileParser
@@ -24,6 +28,15 @@ from .task_parser import AtomicTask, TaskFileParser
 
 class GitRuntimeError(RuntimeError):
     pass
+
+
+def authority_version_digest(path: str | Path) -> str:
+    """Digest authority text using the Stage08 envelope's canonical text view.
+
+    ``Path.read_text`` uses universal-newline decoding: CRLF and LF therefore
+    bind identically, while BOMs and trailing-newline content remain observable.
+    """
+    return hashlib.sha256(Path(path).read_text(encoding="utf-8").encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -97,6 +110,18 @@ class GitRepository:
             raise GitRuntimeError("Recovery checkpoint must have exactly one parent")
         patch = self._run(["diff", "--binary", parent, commit, "--"]).stdout
         return hashlib.sha256(patch.encode("utf-8")).hexdigest()
+
+    def paths_identity(self, commit: str, paths: tuple[str, ...]) -> str:
+        """Content identity for an exact bounded set of repository paths."""
+        resolved = self.resolve_commit(commit)
+        if resolved is None:
+            raise GitRuntimeError(f"Checkpoint is unreachable: {commit}")
+        records: list[tuple[str, str | None]] = []
+        for path in paths:
+            records.append((Path(path).as_posix(), self.committed_blob_identity(path, resolved)))
+        return hashlib.sha256(
+            json.dumps(records, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
 
     def working_diff_digest(self, paths: list[str], *, baseline: str = "HEAD") -> str:
         """Content-bind tracked and untracked task dirtiness without mutating Git."""
@@ -288,6 +313,12 @@ class GitRepository:
                 and target.is_file()
             ):
                 force_add_paths.append(normalized_rel)
+            elif (
+                resolved_rel.parent == Path(".sdd/authorizations/recovery")
+                and re.fullmatch(r"[A-Za-z0-9_.-]+\.yaml", resolved_rel.name)
+                and target.is_file()
+            ):
+                force_add_paths.append(normalized_rel)
 
         before = self.snapshot()
         unrelated = [p for p in before.dirty_paths if not self._covered_by_paths(p, normalized)]
@@ -316,6 +347,248 @@ class GitRepository:
             if dirty_path == rel or dirty_path.startswith(rel + "/"):
                 return True
         return False
+
+
+class RecoveryAuthorizationStore:
+    """Repository-owned loader and one-time consumer for SPEC-017 grants."""
+
+    ROOT = Path(".sdd/authorizations/recovery")
+    RUNTIME_PATHS = (
+        "sdd_orchestrator/evidence_writer.py",
+        "sdd_orchestrator/git_runtime.py",
+        "sdd_orchestrator/codex_adapter.py",
+    )
+
+    def __init__(self, repo_root: str | Path):
+        self.repo_root = Path(repo_root).resolve()
+        self.git = GitRepository(self.repo_root)
+
+    @classmethod
+    def relative_path(cls, authorization_id: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", authorization_id):
+            raise GitRuntimeError("AUTHORITY_INVALID: unsafe authorization identity")
+        return (cls.ROOT / f"{authorization_id}.yaml").as_posix()
+
+    def _read(self, path: Path) -> RecoveryAuthorization:
+        if not path.is_file() or path.is_symlink():
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization artifact is unavailable")
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, yaml.YAMLError) as exc:
+            raise GitRuntimeError("SCHEMA_INVALID: authorization artifact is unreadable") from exc
+        if not isinstance(payload, Mapping):
+            raise GitRuntimeError("SCHEMA_INVALID: authorization artifact is malformed")
+        try:
+            return RecoveryAuthorization.from_record(payload)
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+
+    def _approval_reference_valid(self, reference: str) -> bool:
+        match = re.fullmatch(r"([^#]+)#sha256:([0-9a-f]{64})", reference)
+        if match is None:
+            return False
+        rel, digest = match.groups()
+        target = (self.repo_root / rel).resolve()
+        try:
+            target.relative_to(self.repo_root)
+        except ValueError:
+            return False
+        return (
+            target.is_file()
+            and self.git.is_tracked(Path(rel).as_posix())
+            and authority_version_digest(target) == digest
+        )
+
+    def _active_records(self) -> list[RecoveryAuthorization]:
+        root = self.repo_root / self.ROOT
+        records: list[RecoveryAuthorization] = []
+        if not root.exists():
+            return records
+        for path in sorted(root.glob("*.yaml")):
+            record = self._read(path)
+            record.validate(require_active=False)
+            if record.status == "ACTIVE":
+                records.append(record)
+        return records
+
+    def load(
+        self,
+        *,
+        authorization_id: str | None = None,
+        recovery_operation_id: str | None = None,
+        require_active: bool = True,
+    ) -> RecoveryAuthorization:
+        if (authorization_id is None) == (recovery_operation_id is None):
+            raise GitRuntimeError("AUTHORITY_INVALID: exactly one authorization lookup key is required")
+        if authorization_id is not None:
+            rel = self.relative_path(authorization_id)
+            candidates = [(rel, self._read(self.repo_root / rel))]
+        else:
+            candidates = [
+                (self.relative_path(item.authorization_id), item)
+                for item in self._active_records()
+                if item.recovery_operation_id == recovery_operation_id
+            ]
+        if len(candidates) != 1:
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization lookup is missing or ambiguous")
+        rel, authorization = candidates[0]
+        if rel != self.relative_path(authorization.authorization_id):
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization path identity mismatch")
+        try:
+            authorization.validate(require_active=require_active)
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+        snapshot = self.git.snapshot(recent_limit=2)
+        if (
+            not snapshot.is_repository
+            or snapshot.branch != authorization.branch
+            or str(self.repo_root) != str(Path(authorization.repository).resolve())
+            or snapshot.head_commit is None
+            or not self.git.is_ancestor(authorization.baseline, snapshot.head_commit)
+            or not self.git.is_ancestor(authorization.runtime_checkpoint, snapshot.head_commit)
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: repository/branch/baseline binding mismatch")
+        artifact_commit = self.git.latest_commit_for_path(rel)
+        if (
+            artifact_commit is None
+            or not self.git.is_ancestor(artifact_commit, snapshot.head_commit)
+            or self.git.committed_blob_identity(rel, artifact_commit)
+            != self.git.working_blob_identity(rel)
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization is not repository-backed")
+        if self.git.paths_identity(snapshot.head_commit, self.RUNTIME_PATHS) != self.git.paths_identity(
+            authorization.runtime_checkpoint, self.RUNTIME_PATHS
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: runtime code tree differs from authorized checkpoint")
+        if not self._approval_reference_valid(authorization.issuer_approval_reference):
+            raise GitRuntimeError("AUTHORITY_INVALID: issuer approval reference is invalid")
+        runtime_evidence = self.repo_root / authorization.runtime_evidence
+        original_evidence = self.repo_root / authorization.target_original_evidence
+        if (
+            not runtime_evidence.is_file()
+            or not original_evidence.is_file()
+            or not self.git.is_tracked(authorization.runtime_evidence)
+            or not self.git.is_tracked(authorization.target_original_evidence)
+        ):
+            raise GitRuntimeError("EVIDENCE_MISMATCH: bound evidence is unavailable")
+        current_authorities = tuple(
+            (path, authority_version_digest(self.repo_root / path))
+            for path, _ in authorization.authority_versions
+        )
+        if current_authorities != authorization.authority_versions:
+            raise GitRuntimeError("AUTHORITY_INVALID: authority version mismatch")
+        overlaps = [
+            item for item in self._active_records()
+            if item.authorization_id != authorization.authorization_id
+            and (
+                item.recovery_operation_id == authorization.recovery_operation_id
+                or (
+                    item.target_task_id == authorization.target_task_id
+                    and item.target_checkpoint == authorization.target_checkpoint
+                )
+            )
+        ]
+        if overlaps:
+            raise GitRuntimeError("AUTHORITY_INVALID: overlapping ACTIVE authorization")
+        return authorization
+
+    def _persist(self, authorization: RecoveryAuthorization, *, create: bool) -> str:
+        rel = self.relative_path(authorization.authorization_id)
+        target = self.repo_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if create and target.exists():
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization identity already exists")
+        encoded = yaml.safe_dump(
+            authorization.to_record(), sort_keys=False, allow_unicode=True
+        )
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w", dir=target.parent, prefix=".tmp-authorization-", suffix=".yaml",
+                delete=False, encoding="utf-8", newline="\n",
+            ) as handle:
+                temporary = Path(handle.name)
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, target)
+            temporary = None
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        return rel
+
+    def consume(self, authorization_id: str) -> tuple[RecoveryAuthorization, str]:
+        authorization = self.load(authorization_id=authorization_id, require_active=True)
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        consumed = authorization.append_status_event(
+            "CONSUMED", occurred_at=now, actor="RECOVERY_EXECUTOR",
+            reason="FRESH_VERIFICATION_DISPATCH",
+        )
+        rel = self._persist(consumed, create=False)
+        commit = self.git.checkpoint(
+            task_id=consumed.target_task_id,
+            summary=f"consume recovery authorization [{consumed.authorization_id}]",
+            paths=[rel],
+            commit_type="chore",
+            scope="recovery-authorization",
+        )
+        loaded = self.load(authorization_id=authorization_id, require_active=False)
+        if loaded.status != "CONSUMED":
+            raise GitRuntimeError("AUTHORITY_INVALID: consumption was not persisted")
+        return loaded, commit
+
+
+class ProjectAuthorityRecoveryAuthorizationIssuer:
+    """The only repository-owned creation boundary for RecoveryAuthorization."""
+
+    def __init__(self, repo_root: str | Path):
+        self.repo_root = Path(repo_root).resolve()
+        self.store = RecoveryAuthorizationStore(self.repo_root)
+        self.git = self.store.git
+
+    def issue(self, grant: Mapping[str, Any]) -> tuple[RecoveryAuthorization, str, str]:
+        snapshot = self.git.snapshot(recent_limit=2)
+        if not snapshot.is_repository or snapshot.head_commit is None or snapshot.dirty_paths:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance requires a clean repository")
+        values = dict(grant)
+        if values.get("issuer") != "PROJECT_AUTHORITY" or values.get("issuer_role") != "PROJECT_AUTHORITY":
+            raise GitRuntimeError("AUTHORITY_INVALID: only Project Authority may issue")
+        if values.get("repository") != str(self.repo_root) or values.get("branch") != snapshot.branch:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance repository binding mismatch")
+        if values.get("baseline") != snapshot.head_commit:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance baseline must be current HEAD")
+        if values.get("purpose") != RECOVERY_CAPABILITY or values.get("one_time") is not True:
+            raise GitRuntimeError("AUTHORITY_INVALID: invalid recovery capability grant")
+        authorization_id = str(values.get("authorization_id", ""))
+        rel = self.store.relative_path(authorization_id)
+        if (self.repo_root / rel).exists():
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization identity already exists")
+        if any(
+            item.recovery_operation_id == values.get("recovery_operation_id")
+            or (
+                item.target_task_id == values.get("target_task_id")
+                and item.target_checkpoint == values.get("target_checkpoint")
+            )
+            for item in self.store._active_records()
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: overlapping ACTIVE authorization")
+        authorization = assemble_recovery_authorization(values)
+        try:
+            authorization.validate(require_active=True)
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+        if not self.store._approval_reference_valid(authorization.issuer_approval_reference):
+            raise GitRuntimeError("AUTHORITY_INVALID: issuer approval reference is invalid")
+        rel = self.store._persist(authorization, create=True)
+        commit = self.git.checkpoint(
+            task_id=authorization.target_task_id,
+            summary=f"issue recovery authorization [{authorization.authorization_id}]",
+            paths=[rel],
+            commit_type="chore",
+            scope="recovery-authorization",
+        )
+        return self.store.load(authorization_id=authorization.authorization_id), rel, commit
 
 
 class RecoveryManager:

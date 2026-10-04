@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 import json
 import shutil
 import subprocess
@@ -7,8 +8,18 @@ import unittest
 from unittest import mock
 import yaml
 
-from sdd_orchestrator.git_runtime import GitRepository, RecoveryManager, GitRuntimeError
-from sdd_orchestrator.evidence_writer import ImplementationQualificationBinding
+from sdd_orchestrator.git_runtime import (
+    authority_version_digest,
+    GitRepository,
+    ProjectAuthorityRecoveryAuthorizationIssuer,
+    RecoveryAuthorizationStore,
+    RecoveryManager,
+    GitRuntimeError,
+)
+from sdd_orchestrator.evidence_writer import (
+    ImplementationQualificationBinding,
+    RECOVERY_CAPABILITY,
+)
 from sdd_orchestrator.task_parser import AtomicTask
 from sdd_orchestrator.errors import (
     FailureEnvelopeError, JsonFailureJournal, PartialOutput, RecoveryRoute, new_failure,
@@ -48,6 +59,164 @@ class M5GitTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def _recovery_grant(self, authorization_id="AUTH-TC008-001", **overrides):
+        for rel, text in {
+            "AGENTS.md": "# Approved Project Authority\n",
+            "sdd_orchestrator/evidence_writer.py": "# runtime evidence writer\n",
+            "sdd_orchestrator/git_runtime.py": "# runtime git owner\n",
+            "sdd_orchestrator/codex_adapter.py": "# runtime recovery executor\n",
+            ".sdd/evidence/original-TC008.json": '{"task_id":"TC008"}\n',
+            ".sdd/evidence/runtime-TC014.json": '{"task_id":"TC014","status":"PASS"}\n',
+        }.items():
+            path = self.repo / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "AGENTS.md", "sdd_orchestrator"],
+            cwd=self.repo, check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "add", "-f", ".sdd/evidence/original-TC008.json", ".sdd/evidence/runtime-TC014.json"],
+            cwd=self.repo, check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "test: recovery authorization basis"],
+            cwd=self.repo, check=True, capture_output=True,
+        )
+        baseline = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
+            capture_output=True, text=True,
+        ).stdout.strip()
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"], cwd=self.repo, check=True,
+            capture_output=True, text=True,
+        ).stdout.strip()
+        now = datetime.now(timezone.utc)
+        approval_digest = authority_version_digest(self.repo / "AGENTS.md")
+        grant = {
+            "authorization_id": authorization_id,
+            "attempt_id": f"attempt-{authorization_id}",
+            "issuer": "PROJECT_AUTHORITY", "issuer_role": "PROJECT_AUTHORITY",
+            "issuer_approval_reference": f"AGENTS.md#sha256:{approval_digest}",
+            "purpose": RECOVERY_CAPABILITY, "one_time": True,
+            "issued_at": now.isoformat(),
+            "expires_at": (now + timedelta(hours=1)).isoformat(),
+            "repository": str(self.repo.resolve()), "branch": branch, "baseline": baseline,
+            "recovery_operation_id": "RECOVERY-TC008-ORDINARY-EVIDENCE-001",
+            "target_task_id": "TC008", "task_contract_digest": "a" * 64,
+            "target_checkpoint": baseline,
+            "target_original_evidence": ".sdd/evidence/original-TC008.json",
+            "verification_command": "python -m pytest -q tests/test_tc008.py",
+            "verification_command_source": ".sdd/convergence/TC008.yaml",
+            "runtime_checkpoint": baseline,
+            "runtime_evidence": ".sdd/evidence/runtime-TC014.json",
+            "spec_version": "SPEC-017", "design_version": "DES-017",
+            "authority_policy_version": "AGENTS.md#9.1",
+            "authority_versions": (("AGENTS.md", approval_digest),),
+            "allowed_artifact_paths": (
+                f".sdd/authorizations/recovery/{authorization_id}.yaml", ".sdd/evidence/",
+            ),
+            "prohibited_operations": (
+                "IMPLEMENTATION_MUTATION", "HISTORICAL_EVIDENCE_MUTATION",
+                "IMPLEMENTATION_STATE_RECONCILIATION",
+            ),
+            "allow_persistence_only_resume": False,
+            "checkpoint_conditions": ("verification_pass", "scope_respected"),
+        }
+        grant.update(overrides)
+        return grant
+
+    def test_repository_backed_recovery_authorization_issue_load_and_consume(self):
+        grant = self._recovery_grant()
+        issuer = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo)
+        authorization, rel, issuance_commit = issuer.issue(grant)
+        store = RecoveryAuthorizationStore(self.repo)
+        loaded = store.load(authorization_id=authorization.authorization_id)
+        self.assertEqual(loaded, authorization)
+        self.assertEqual(store.load(
+            recovery_operation_id=authorization.recovery_operation_id
+        ).authorization_id, authorization.authorization_id)
+        self.assertEqual(GitRepository(self.repo).commit_paths(issuance_commit), [rel])
+        self.assertEqual(loaded.status, "ACTIVE")
+        self.assertEqual(len(loaded.status_events), 1)
+
+        consumed, consumption_commit = store.consume(loaded.authorization_id)
+        self.assertEqual(consumed.status, "CONSUMED")
+        self.assertEqual(len(consumed.status_events), 2)
+        self.assertEqual(
+            consumed.status_events[1]["previous_event_digest"],
+            consumed.status_events[0]["event_digest"],
+        )
+        self.assertEqual(GitRepository(self.repo).commit_paths(consumption_commit), [rel])
+        with self.assertRaisesRegex(GitRuntimeError, "not active"):
+            store.consume(loaded.authorization_id)
+
+    def test_recovery_authorization_rejects_overlap_bad_issuer_and_path_escape(self):
+        grant = self._recovery_grant()
+        issuer = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo)
+        with self.assertRaisesRegex(GitRuntimeError, "only Project Authority"):
+            issuer.issue({**grant, "issuer": "RECOVERY_EXECUTOR"})
+        issuer.issue(grant)
+        current = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
+            capture_output=True, text=True,
+        ).stdout.strip()
+        with self.assertRaisesRegex(GitRuntimeError, "overlapping ACTIVE"):
+            issuer.issue({
+                **grant, "authorization_id": "AUTH-TC008-002",
+                "attempt_id": "attempt-2", "baseline": current,
+            })
+        with self.assertRaisesRegex(GitRuntimeError, "unsafe authorization"):
+            RecoveryAuthorizationStore.relative_path("../escape")
+
+    def test_recovery_authorization_runtime_tree_and_approval_fail_closed(self):
+        grant = self._recovery_grant()
+        issuer = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo)
+        with self.assertRaisesRegex(GitRuntimeError, "approval reference"):
+            issuer.issue({**grant, "issuer_approval_reference": "AGENTS.md#sha256:" + "0" * 64})
+
+        authorization, _, _ = issuer.issue(grant)
+        runtime = self.repo / "sdd_orchestrator/codex_adapter.py"
+        runtime.write_text("# mutated runtime\n", encoding="utf-8")
+        subprocess.run(["git", "add", str(runtime.relative_to(self.repo))], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "test: mutate runtime"],
+            cwd=self.repo, check=True, capture_output=True,
+        )
+        with self.assertRaisesRegex(GitRuntimeError, "runtime code tree"):
+            RecoveryAuthorizationStore(self.repo).load(
+                authorization_id=authorization.authorization_id
+            )
+
+    def test_authority_version_digest_normalizes_newlines_but_not_content(self):
+        authority = self.repo / "docs/spec.md"
+        authority.parent.mkdir(parents=True, exist_ok=True)
+        authority.write_bytes(b"# SPEC-017\nimmutable authority\n")
+        subprocess.run(["git", "add", "docs/spec.md"], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "test: add authority digest fixture"],
+            cwd=self.repo, check=True, capture_output=True,
+        )
+        lf_digest = authority_version_digest(authority)
+        grant = self._recovery_grant(authority_versions=(("docs/spec.md", lf_digest),))
+        authorization, _, _ = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo).issue(grant)
+
+        authority.write_bytes(b"# SPEC-017\r\nimmutable authority\r\n")
+        self.assertEqual(authority_version_digest(authority), lf_digest)
+        self.assertEqual(
+            RecoveryAuthorizationStore(self.repo).load(
+                authorization_id=authorization.authorization_id
+            ).authorization_id,
+            authorization.authorization_id,
+        )
+
+        authority.write_bytes(b"# SPEC-017\nmodified authority\n")
+        self.assertNotEqual(authority_version_digest(authority), lf_digest)
+        with self.assertRaisesRegex(GitRuntimeError, "authority version mismatch"):
+            RecoveryAuthorizationStore(self.repo).load(
+                authorization_id=authorization.authorization_id
+            )
 
     def test_snapshot_reports_branch_head_and_dirty_paths(self):
         (self.repo / "README.md").write_text("changed\n", encoding="utf-8")
