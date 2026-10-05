@@ -1,0 +1,76 @@
+{
+  "schema_version": "2.0",
+  "record_kind": "POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY",
+  "attempt_id": "RECOVERY-ATTEMPT-TC009-20261005T065553888535Z",
+  "authorization_id": "RECOVERY-AUTH-TC009-20261005T065553888535Z",
+  "authorization_issuer": "PROJECT_AUTHORITY",
+  "task_id": "TC009",
+  "checkpoint_commit": "81b95bc0a6e659ede01149041309d5eb298abbef",
+  "checkpoint_parent": "0af821b5ea482f64cea13f8090d5bc24fafd7d7a",
+  "checkpoint_tree": "6cb032f61fd339b8a9d73cfff3e99a04f9ce9d17",
+  "checkpoint_changed_paths": [
+    "tests/test_m10_convergence_auto.py"
+  ],
+  "checkpoint_diff_sha256": "26137c66c53a826537df190181ef6bd80d5de5ca4e69ced2d50ddf3eb91827ca",
+  "authority_versions": [
+    [
+      "docs/PRD.md",
+      "3ce7acae7acfa966990eebc89fe1a18ac8426c67f6db618f0b7e27f560fd89cb"
+    ],
+    [
+      "docs/spec.md",
+      "b3d4f3c5d657fee1f2e1984f3c820c283d33f67120de81b38dee55dd7effc9aa"
+    ],
+    [
+      "docs/Design.md",
+      "5bf1f9beab6f91943672d9afd55af575e583377f31c4545143ca1b387c8f0d79"
+    ],
+    [
+      "AGENTS.md",
+      "4631d00d71e8d1e0636c6a555cc43a58ba3cd78cd85766915eea9f37b6353d48"
+    ],
+    [
+      "tasks.md",
+      "528650343aa31cddad8475511f5f6b5cb29a70e039c423797fb73be5b2db1814"
+    ]
+  ],
+  "task_contract_sha256": "16f78f50d8e793083371e1ae0b88d2eaba2418f88c7e93e5bdf4be4c63ba5165",
+  "verification_command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m10_convergence_auto.py",
+  "verification_command_sha256": "7071334bdf5136709604faba1deaa1ce53dc93262d8da0a54d5152e162113c68",
+  "verification_outcome": "PASS",
+  "exit_status": 0,
+  "complete": true,
+  "timed_out": false,
+  "stdout": "....                                                                     [100%]\n4 passed in 48.65s\n",
+  "stderr": "",
+  "started_at": "2026-10-05T06:58:32.298157Z",
+  "ended_at": "2026-10-05T06:59:25.541369Z",
+  "environment": {
+    "python": "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.venv\\Scripts\\python.exe",
+    "execution_mode": "HOST_OR_CONFIGURED_RUNTIME",
+    "working_tree": "ISOLATED_CHECKPOINT"
+  },
+  "runtime_context": [
+    {
+      "path": ".sdd/state/authority-state.yaml",
+      "sha256": "5e3b564e29600418990751b7662074a9c844ab0f626ad867962084bd45a75172",
+      "origin": "CURRENT_GOVERNED_RUNTIME_STATE"
+    },
+    {
+      "path": ".sdd/state/implementation-state.yaml",
+      "sha256": "82f4d9f0baf378ccafe6c1355870b382a3bb5ecc5e5418329d348784b8bd345b",
+      "origin": "HISTORICAL_CHECKPOINT"
+    },
+    {
+      "path": ".sdd/state/project-state.yaml",
+      "sha256": "ae55de0621bf568109d151e71808944201d0818f7be89757cae3357994d1500e",
+      "origin": "HISTORICAL_CHECKPOINT"
+    }
+  ],
+  "pre_head": "db46c0f3aeda25978115e1ced3b37e0bea49e834",
+  "post_head": "db46c0f3aeda25978115e1ced3b37e0bea49e834",
+  "implementation_mutated": false,
+  "isolated_dirty_paths": [],
+  "recorded_at": "2026-10-05T06:59:25.541369Z",
+  "record_sha256": "c284ce0989b6eedbb08f1faa84ced16d13152fd1ef2fa8c76467b94916c0f684"
+}
