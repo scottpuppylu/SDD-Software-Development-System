@@ -1,0 +1,156 @@
+task_id: TC017
+title: Repair state-side SPEC-017 recovery evidence checkpoint scope classification
+objective: >-
+  Make RecoveryManager state-side recovery evidence resolution compatible with
+  the same strict bound-original-evidence rule already used by the TC015 recovery
+  executor, so qualifying TC008 recovery evidence resolves against historical
+  checkpoint 6cbb7df678a671493520fa0f6abaddcc9bf61557, without weakening general
+  allowed_paths validation and without performing reconciliation.
+behavior_scope: >-
+  State-side recovery evidence checkpoint changed-path classification only, within
+  the recovery-kind branch of RecoveryManager._resolve_evidence() plus one new
+  private helper in sdd_orchestrator/git_runtime.py. Permit at most the single
+  exact original Stage08 evidence artifact named as target_original_evidence by
+  the repository-backed CONSUMED RecoveryAuthorization bound to the recovery
+  evidence. Do not change ordinary evidence resolution, authorization lifecycle,
+  reconciliation, the recovery executor, or Stage08 recovery architecture.
+task_class: RECOVERY_STATE_EVIDENCE_SCOPE_CLASSIFICATION_DEFECT
+repair_classification: RECOVERY_STATE_EVIDENCE_SCOPE_CLASSIFICATION_DEFECT
+root_cause: >-
+  RECOVERY_STATE_EVIDENCE_SCOPE_CLASSIFICATION_DEFECT:
+  RecoveryManager._resolve_evidence() (sdd_orchestrator/git_runtime.py) rejects
+  every recovery evidence checkpoint path outside task allowed_paths via
+  set(changed) - set(task.allowed_paths). Historical checkpoint
+  6cbb7df678a671493520fa0f6abaddcc9bf61557 also contains TC008's original
+  Stage08 evidence artifact .sdd/evidence/20260924T103204.2963462Z-TC008.json, so
+  the qualifying TC008 recovery evidence is rejected with "Recovery checkpoint
+  exceeds task allowed paths". TC015 added the exact bound-evidence rule
+  (_historical_checkpoint_scope_valid / _bound_atomic_stage08_evidence_valid) only
+  to the executor in sdd_orchestrator/codex_adapter.py; the state-side validator
+  never adopted an equivalent. The executor's exception is bound through the
+  authorization's target_original_evidence, which is not carried in the recovery
+  attestation payload, so the state side must resolve it from the
+  repository-backed authorization record named by the attestation's
+  authorization_id.
+blocked_operation: QUALIFICATION-STATE-RECONCILIATION-001
+blocked_operation_reference: tasks.md section 11.6
+affected_evidence:
+  task_id: TC008
+  historical_checkpoint: 6cbb7df678a671493520fa0f6abaddcc9bf61557
+  original_evidence: .sdd/evidence/20260924T103204.2963462Z-TC008.json
+  recovery_evidence: .sdd/evidence/20261005T053700.467476Z-TC008-recovery-RECOVERY-ATTEMPT-TC008-20261005T012644959809Z.json
+  recovery_evidence_checkpoint: 92f768ecdc0dba042802e310ee8e154999983dab
+  recovery_authorization: .sdd/authorizations/recovery/RECOVERY-AUTH-TC008-20261005T012644959809Z.yaml
+authority_decision: >-
+  A recovery evidence checkpoint is state-side scope-valid only when every changed
+  path is within task allowed_paths, or when exactly one extra path exists and it
+  is the single original ordinary Stage08 evidence artifact named as
+  target_original_evidence by the repository-backed CONSUMED RecoveryAuthorization
+  whose authorization_id, attempt_id, task, checkpoint, task-contract digest, and
+  verification command match the recovery attestation, and the artifact passes the
+  mirrored TC015 structural, identity, and content checks. No generic
+  .sdd/evidence/** or path-prefix exception, no task or commit-hash special case.
+allowed_paths:
+  - sdd_orchestrator/git_runtime.py
+  - tests/test_m5_git_recovery.py
+allowed_change_detail:
+  sdd_orchestrator/git_runtime.py: >-
+    Recovery-evidence changed-path check within RecoveryManager._resolve_evidence
+    plus one new private helper in the same file only.
+  tests/test_m5_git_recovery.py: >-
+    New or extended state-side recovery-evidence classification tests only.
+forbidden_scope:
+  - .sdd/state/** (no _write_state or reconcile_qualification against the live repository)
+  - .sdd/authorizations/**
+  - .sdd/runs/RECOVERY-*/**
+  - modifying any existing .sdd/evidence/** artifact
+  - .sdd/convergence/TC001.yaml through .sdd/convergence/TC016.yaml
+  - tasks.md
+  - docs/PRD.md
+  - docs/spec.md
+  - docs/Design.md
+  - AGENTS.md
+  - docs/handoff/**
+  - sdd_orchestrator/codex_adapter.py
+  - sdd_orchestrator/evidence_writer.py including implementation_qualification_binding and qualify_recovery_attestation
+  - any other production or test file
+  - RecoveryAuthorizationStore.load(), consume(), and _persist() semantics
+  - ProjectAuthorityRecoveryAuthorizationIssuer
+  - _validate_v2 structure
+  - reconcile_qualification
+  - the ordinary-evidence branch of _resolve_evidence
+  - recovery checkpoint tree-identity and diff-identity checks
+  - generic .sdd/evidence/** or path-prefix exceptions
+  - task or commit-hash special cases
+  - creating, consuming, or modifying any RecoveryAuthorization
+  - QUALIFICATION-STATE-RECONCILIATION-001 execution
+  - TC009/TC010 digest correction or TC007 correction
+  - TC012, TC013, TC014, TC015, or TC016 finalization
+  - Stage09 execution or authority mutation
+  - Stage10 execution or authority mutation
+  - redesign of RecoveryManager or Stage08 recovery architecture
+production_change_allowed: true
+governance_contract_change_allowed: false
+generic_evidence_allowlist_allowed: false
+implementation_plan:
+  - Keep the recovery-branch checks checkpoint_changed_paths == commit_paths(checkpoint), checkpoint tree identity, and checkpoint diff identity unchanged and in their current order.
+  - Replace the direct allowed_paths rejection with classification computing extra = sorted(set(changed) - set(task.allowed_paths)); if extra is empty accept as today; otherwise require len(extra) == 1 and _bound_original_evidence_valid(...) for extra[0]; anything else raises the existing GitRuntimeError("Recovery checkpoint exceeds task allowed paths").
+  - The helper mirrors TC015 _bound_atomic_stage08_evidence_valid and returns False on any missing, ambiguous, or mismatched input.
+  - 'Authorization record: read exactly .sdd/authorizations/recovery/<payload.authorization_id>.yaml via RecoveryAuthorizationStore.relative_path() and _read() with validate(require_active=False); require working blob equal to its committed blob with that commit an ancestor of HEAD; require status CONSUMED; do not use load(), whose runtime-tree binding correctly rejects historical authorizations after later runtime changes.'
+  - 'Bindings: authorization authorization_id, attempt_id, target_task_id, target_checkpoint, task_contract_digest, and verification_command equal the attestation authorization_id, attempt_id, task_id, checkpoint_commit, task_contract_sha256, and verification_command; recovery_operation_id starts with RECOVERY-<task_id>-.'
+  - 'Exact path: extra[0] equals target_original_evidence exactly and matches ^\.sdd/evidence/\d{8}T\d{6}(\.\d+)?Z-<task_id>\.json$.'
+  - 'Immutable content: the evidence blob at the checkpoint equals its blob at HEAD and its working blob.'
+  - 'Ordinary evidence content: schema_version 1.0, stage 08, matching task_id, status PASS, entry_head equal to the checkpoint single parent, non-empty stage07_envelope_id, verification commands equal to [authorization.verification_command], and sorted changed_paths equal to the remaining checkpoint paths, all covered by allowed_paths.'
+  - Do not compare task_contract_sha256(self._task(...)) with the authorization; RecoveryManager._task serializes with sort_keys=True while the executor uses sort_keys=False, so binding goes through the attestation-recorded digest, which equals the authorization digest.
+  - Add no generic .sdd/evidence/** or prefix exception and no task or commit-hash special case; make no other change.
+test_plan:
+  - 'Live repository read-only: RecoveryManager(SOURCE)._resolve_evidence(TC008 task, TC008 recovery evidence) returns POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY, checkpoint 6cbb7df678a671493520fa0f6abaddcc9bf61557, repository_commit 92f768ecdc0dba042802e310ee8e154999983dab, and the expected canonical record_sha256.'
+  - 'Live repository read-only: TC009, TC010, and TC011 recovery evidence still resolve with record digests c284ce0989b6eedbb08f1faa84ced16d13152fd1ef2fa8c76467b94916c0f684, fcbf9f05c499d1e513d9a70032ad8150dca8ad18cac25b6a4ad55171a83e7251, and 7118e428a154da4d5135eab45ca01d17a78070891268ae0ffb7cfc50f193c215; TC007 ordinary evidence still resolves to 249c6c35790e2ab70f2a2644e02fe133cf2a6a90a719452c6085a3c9edd85198; original TC008-TC011 ordinary evidence is still rejected with VERIFICATION_FAILED.'
+  - 'Negative cases in fixture repositories or patched inputs, never live state, each raising GitRuntimeError("Recovery checkpoint exceeds task allowed paths"): a different .sdd/evidence/*.json path; two extra paths (bound evidence plus another); evidence named for another task; digest or blob mismatch after the checkpoint; authorization missing, unreadable, uncommitted, or ACTIVE; authorization with mismatched attempt_id, task_id, checkpoint, task-contract digest, or command; target_original_evidence differing from the extra path; an unrelated .sdd governance file; an extra production or test path.'
+  - 'Regression: ordinary evidence resolution and recovery tree-identity and diff-identity checks behave identically; all existing tests/test_m5_git_recovery.py tests pass unchanged.'
+  - 'No side effects: before/after hashes prove no write to .sdd/state/**, .sdd/authorizations/**, or .sdd/evidence/** and no authorization load(), consume(), or issue on the live repository.'
+acceptance_criteria:
+  - 'AC1: TC008 qualifying recovery evidence resolves successfully against historical checkpoint 6cbb7df678a671493520fa0f6abaddcc9bf61557.'
+  - 'AC2: Only the single original evidence path named as target_original_evidence by the repository-backed CONSUMED authorization bound to that recovery evidence may exceed task allowed_paths, and only when every mirrored TC015 structural, identity, and content check passes.'
+  - 'AC3: Any other .sdd/evidence/** path, unrelated .sdd governance file, or extra production or test path in a historical checkpoint still fails closed.'
+  - 'AC4: Multiple extra paths, or a missing, ambiguous, unreadable, uncommitted, non-CONSUMED, or mismatched authorization, fail closed.'
+  - 'AC5: TC009, TC010, and TC011 recovery evidence resolution remains valid with unchanged canonical record digests.'
+  - 'AC6: Ordinary evidence resolution semantics remain unchanged; TC007 resolves to 249c6c35790e2ab70f2a2644e02fe133cf2a6a90a719452c6085a3c9edd85198, original TC008-TC011 ordinary evidence remains rejected, and all T-series and TC001-TC006 bindings resolve identically.'
+  - 'AC7: No .sdd/state/** mutation.'
+  - 'AC8: No recovery authorization is created, consumed, or modified, and RecoveryAuthorizationStore.load() semantics are unchanged.'
+  - 'AC9: No reconciliation is performed; no _write_state or reconcile_qualification against the live repository.'
+  - 'AC10: The single verification command passes deterministically and offline.'
+  - 'AC11: sdd_orchestrator/codex_adapter.py and sdd_orchestrator/evidence_writer.py are unchanged and executor TC015/TC016 behavior is unchanged.'
+  - 'AC12: The checkpoint diff contains only the two allowed files plus the task''s own atomic Stage08 evidence artifact.'
+verification_commands:
+  - .\.venv\Scripts\python.exe -m pytest -q tests/test_m5_git_recovery.py
+dependencies:
+  - docs/spec.md#SPEC-017
+  - docs/Design.md#DES-017
+  - AGENTS.md section 9.1
+  - tasks.md section 11.6
+  - .sdd/convergence/TC015.yaml
+  - .sdd/convergence/TC016.yaml
+  - .sdd/evidence/20261005T011024.2976679Z-TC015.json
+  - .sdd/evidence/20261005T063847.998603Z-TC016.json
+  - TC008 qualifying recovery evidence checkpoint 92f768ecdc0dba042802e310ee8e154999983dab
+  - TC009 qualifying recovery evidence checkpoint 4c5ace430c394fbe146a3d0d0d7038aab8c69433
+  - TC010 qualifying recovery evidence checkpoint 70d4367e961b8e4ca5eb694873e112656fb9e556
+  - TC011 qualifying recovery evidence checkpoint ce1ac3680a5a13be324bb1f3f20ff57324177548
+dependency_constraints:
+  tc015_required: true
+  tc016_required: true
+  reconciliation_execution_required: false
+  recovery_authorization_required: false
+risk_level: HIGH
+governance_profile: SDD_STRICT
+governance_reason: >-
+  This task changes a fail-closed state-validator boundary protecting
+  implementation-qualification bindings, mirroring the TC015 executor-side rule,
+  and unblocks a multi-task protected state rewrite. The rule is mirrored rather
+  than shared to avoid a circular import and to keep the TC015/TC016-certified
+  executor out of scope.
+stage07_required: true
+reconciliation_still_blocked: true
+status: TODO
+source_stage: 06
