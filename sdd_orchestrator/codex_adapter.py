@@ -775,6 +775,14 @@ class Stage08CodexRunner:
         )
         if bootstrap is not None and bootstrap.group(1) == bootstrap.group(2):
             return f"T{bootstrap.group(1)}"
+        legacy_test = re.fullmatch(r"test(?:\(sdd\))?: (.+)", subject)
+        if legacy_test is not None:
+            identifiers = set(re.findall(
+                r"(?<![A-Za-z0-9_-])TC\d{3}(?![A-Za-z0-9_-])",
+                legacy_test.group(1),
+            ))
+            if len(identifiers) == 1:
+                return next(iter(identifiers))
         return None
 
     @staticmethod

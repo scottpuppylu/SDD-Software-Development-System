@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "TC016",
+  "title": "Repair SPEC-017 historical checkpoint subject task identity recognition",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/codex_adapter.py",
+    "tests/test_m6_codex_adapter.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m6_codex_adapter.py",
+      "returncode": 0,
+      "stdout": "83 passed, 1 warning, 64 subtests passed in 964.08s (0:16:04)",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "TC016 bounded Stage08 implementation completed.",
+    "stderr": ""
+  },
+  "recorded_at": "20261005T063847.998603Z"
+}

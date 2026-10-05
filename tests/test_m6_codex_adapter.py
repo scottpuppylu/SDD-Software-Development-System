@@ -373,9 +373,9 @@ class M6CodexAdapterTests(unittest.TestCase):
     def test_historical_checkpoint_scope_accepts_only_exact_bound_stage08_evidence(self):
         repo = SOURCE
         runner = Stage08CodexRunner(Orchestrator(repo), heartbeat_seconds=0)
-        consumed = runner.recovery_authorizations.load(
-            authorization_id="RECOVERY-AUTH-TC008-20261005T002258330057Z",
-            require_active=False,
+        consumed = runner.recovery_authorizations._read(
+            repo / ".sdd/authorizations/recovery/"
+            "RECOVERY-AUTH-TC008-20261005T002258330057Z.yaml"
         )
         self.assertEqual(consumed.status, "CONSUMED")
 
@@ -440,8 +440,9 @@ class M6CodexAdapterTests(unittest.TestCase):
             valid_paths, task, wrong_operation, checkpoint, parent, current_head
         ))
         self.assertEqual(
-            runner.recovery_authorizations.load(
-                authorization_id=consumed.authorization_id, require_active=False
+            runner.recovery_authorizations._read(
+                repo / ".sdd/authorizations/recovery/"
+                "RECOVERY-AUTH-TC008-20261005T002258330057Z.yaml"
             ).status,
             "CONSUMED",
         )
@@ -496,6 +497,44 @@ class M6CodexAdapterTests(unittest.TestCase):
             "[T020-BOOTSTRAP-001]",
         ):
             self.assertIsNone(identify(invalid), invalid)
+
+    def test_tc016_legacy_subject_identity_and_normal_checkpoint_boundary(self):
+        identify = Stage08CodexRunner._checkpoint_subject_task_id
+        for subject, expected in (
+            ("test(sdd): repair TC009 full pipeline fixture", "TC009"),
+            ("test(sdd): isolate TC010 recovery fixture", "TC010"),
+            ("test: authorize TC011 verification fixtures", "TC011"),
+            ("test: TC009 regression for TC009", "TC009"),
+            ("fix(implementation): [TC008] existing repair", "TC008"),
+        ):
+            with self.subTest(subject=subject):
+                self.assertEqual(identify(subject), expected)
+        for subject in (
+            "test: unrelated change",
+            "test(sdd): touch TC009 and TC010",
+            "test(other): repair TC009 fixture",
+            "docs(sdd): repair TC009 fixture",
+            "chore(state): finalize TC009 post-Stage08 state",
+            "test(sdd): repair XTC009 fixture",
+            "test(sdd): repair TC0090 fixture",
+            "test(sdd): repair TC009-extra fixture",
+            "test(sdd): repair TC009_extra fixture",
+            "test(sdd): repair T009 fixture",
+            "test(sdd): repair TASK-009 fixture",
+            "Test(sdd): repair TC009 fixture",
+            "test(sdd):repair TC009 fixture",
+            "docs: test(sdd): repair TC009 fixture",
+            "test: TC009\nextra line",
+        ):
+            with self.subTest(subject=subject):
+                self.assertIsNone(identify(subject))
+        # The unchanged recovery caller compares the parsed identity to its task.
+        self.assertNotEqual(identify("test(sdd): repair TC009 fixture"), "TC010")
+        runner = Stage08CodexRunner(Orchestrator(self.repo), heartbeat_seconds=0)
+        with patch.object(runner.git, "commit_parents", return_value=["a" * 40]), patch.object(
+            runner.git, "commit_subject", return_value="test(sdd): repair TC009 fixture"
+        ):
+            self.assertIsNone(runner._validate_checkpoint_commit("b" * 40))
 
     def test_recovery_runtime_context_is_closed_and_missing_context_is_not_run(self):
         self._write_tasks('''
