@@ -11,5 +11,11 @@
   "runtime_checkpoint": "8e75c38962832fcb8f74cc91f7c323c02e5126f4",
   "runtime_evidence": ".sdd/evidence/20261004T234738.495022Z-TC014.json",
   "temp_root": "C:\\Users\\user\\AppData\\Local\\Temp\\sdd-recovery-TC008-RECOVERY-ATTEMPT-TC008-20261005T002258330057Z",
-  "started_utc": "2026-10-05T00:29:51.004147Z"
+  "started_utc": "2026-10-05T00:29:51.004147Z",
+  "preparation_checkpoint": "dc5ce2d6a53f088332f05a59a2963e27de92cf43",
+  "authorization_consumption_checkpoint": "cde7a4cdba5025d84b04f273cbbddd7f5695086a",
+  "post_consumption_head": "cde7a4cdba5025d84b04f273cbbddd7f5695086a",
+  "completed_utc": "2026-10-05T00:30:07.387359Z",
+  "exit_code": null,
+  "termination": null
 }
