@@ -1,0 +1,131 @@
+task_id: TC016
+title: Repair SPEC-017 historical checkpoint subject task identity recognition
+objective: >-
+  Make historical recovery checkpoint task recognition compatible with the
+  existing TC009, TC010, and TC011 checkpoint subjects without weakening task
+  identity validation, TASK_MISMATCH protection, or normal Stage08 checkpoint
+  subject validation.
+behavior_scope: >-
+  Historical recovery checkpoint subject task-identity recognition only, within
+  Stage08CodexRunner._checkpoint_subject_task_id(). Add one narrow, deterministic
+  legacy test-fixture subject form for TC convergence tasks. Do not change normal
+  Stage08 _validate_checkpoint_commit() subject validation, authorization
+  consumption ordering, recovery architecture, or any other recovery binding.
+task_class: RECOVERY_HISTORICAL_CHECKPOINT_SUBJECT_IDENTITY_DEFECT
+repair_classification: RECOVERY_HISTORICAL_CHECKPOINT_SUBJECT_IDENTITY_DEFECT
+root_cause: >-
+  RECOVERY_HISTORICAL_CHECKPOINT_SUBJECT_IDENTITY_DEFECT:
+  Stage08CodexRunner._checkpoint_subject_task_id()
+  (sdd_orchestrator/codex_adapter.py) recognizes only
+  "(feat|fix)(implementation): [<ID>] ..." and the T0xx BOOTSTRAP subject forms.
+  The historical TC009, TC010, and TC011 implementation checkpoints use
+  "test(sdd): ..." / "test: ..." subjects carrying an unbracketed TC identifier,
+  so the parser returns None. recover_post_checkpoint_evidence() performs this
+  subject check after RecoveryAuthorization consumption, so any recovery
+  authorization issued for TC009, TC010, or TC011 before this repair would be
+  consumed into a nonqualifying TASK_MISMATCH attempt without verification dispatch.
+affected_recoveries:
+  - recovery_operation_id: RECOVERY-TC009-ORDINARY-EVIDENCE-001
+    task_id: TC009
+    historical_checkpoint: 81b95bc0a6e659ede01149041309d5eb298abbef
+    checkpoint_subject: 'test(sdd): repair TC009 full pipeline fixture'
+  - recovery_operation_id: RECOVERY-TC010-ORDINARY-EVIDENCE-001
+    task_id: TC010
+    historical_checkpoint: 694cc04e42072b3819c97735421908de08ed3076
+    checkpoint_subject: 'test(sdd): isolate TC010 recovery fixture'
+  - recovery_operation_id: RECOVERY-TC011-ORDINARY-EVIDENCE-001
+    task_id: TC011
+    historical_checkpoint: 840034da3c598729780524a7bce9528af31fae50
+    checkpoint_subject: 'test: authorize TC011 verification fixtures'
+authority_decision: >-
+  A historical recovery checkpoint subject may identify a TC convergence task
+  through the legacy test-fixture form only when the full subject matches
+  "test(?:\(sdd\))?: <description>" and the description contains exactly one
+  distinct whole-token TC\d{3} identifier. The parsed identifier must still equal
+  the authorization-bound task, and every existing checkpoint, state-record,
+  evidence, scope, command, and authority binding remains fail-closed. No
+  commit-hash special case and no new T/TASK legacy recognition is authorized.
+allowed_paths:
+  - sdd_orchestrator/codex_adapter.py
+  - tests/test_m6_codex_adapter.py
+allowed_change_detail:
+  sdd_orchestrator/codex_adapter.py: >-
+    Body of Stage08CodexRunner._checkpoint_subject_task_id only.
+  tests/test_m6_codex_adapter.py: >-
+    New or extended checkpoint-subject identity and regression tests only.
+forbidden_scope:
+  - .sdd/state/** including the TC009/TC010 evidence digest swap
+  - .sdd/authorizations/**
+  - .sdd/runs/RECOVERY-*/**
+  - modifying any existing .sdd/evidence/** artifact
+  - .sdd/convergence/TC001.yaml through .sdd/convergence/TC015.yaml
+  - tasks.md
+  - docs/PRD.md
+  - docs/spec.md
+  - docs/Design.md
+  - AGENTS.md
+  - docs/handoff/**
+  - any other production or test file, including sdd_orchestrator/git_runtime.py and sdd_orchestrator/evidence_writer.py
+  - Stage08CodexRunner._validate_checkpoint_commit() normal Stage08 subject validation
+  - authorization consumption ordering or recovery architecture redesign
+  - commit-hash special cases
+  - new T or TASK legacy subject recognition
+  - creating, consuming, or modifying any RecoveryAuthorization
+  - TC009, TC010, or TC011 recovery execution
+  - implementation-state or qualification-state reconciliation
+  - TC012, TC013, TC014, or TC015 finalization
+  - Stage09 execution or authority mutation
+  - Stage10 execution or authority mutation
+production_change_allowed: true
+governance_contract_change_allowed: false
+implementation_plan:
+  - Preserve the existing three _checkpoint_subject_task_id branches and their order unchanged.
+  - Add one narrow legacy historical-fixture branch requiring a full-subject match of test(?:\(sdd\))?: (.+); type exactly test and scope only sdd or absent.
+  - Within the description, extract whole-token identifiers with (?<![A-Za-z0-9_-])TC\d{3}(?![A-Za-z0-9_-]); return the identifier only when exactly one distinct TC\d{3} token exists, otherwise return None.
+  - Recognize only TC identifiers in the legacy branch; do not add T\d+ or TASK-\d+ legacy recognition.
+  - Leave the caller unchanged so the parsed identifier must equal task.task_id and all checkpoint, state-record, authorization, scope, and evidence bindings remain enforced.
+  - Add no commit-hash special case, change no other function, reorder no checks, and do not change authorization consumption timing.
+test_plan:
+  - Extend test_recovery_checkpoint_subject_identity_is_structured_and_fail_closed to assert the three exact historical subjects resolve to TC009, TC010, and TC011 while preserving every existing positive and negative assertion.
+  - 'Add negative cases returning None: "test: unrelated change"; "test(sdd): touch TC009 and TC010"; "test(other): repair TC009 fixture"; "docs(sdd): repair TC009 fixture"; "chore(state): finalize TC009 post-Stage08 state"; "test(sdd): repair XTC009 fixture"; "test(sdd): repair TC0090 fixture"; "test(sdd): repair TC009-extra fixture"; "test(sdd): repair T009 fixture"; "test(sdd): repair TASK-009 fixture"; "Test(sdd): repair TC009 fixture"; "test(sdd):repair TC009 fixture"; "docs: test(sdd): repair TC009 fixture".'
+  - Add a mismatch case proving a test(sdd) subject naming TC009 still yields TASK_MISMATCH for a TC010-bound recovery, using the existing recovery fixture or direct comparison without consuming any real repository authorization.
+  - Keep existing TC008 / TC015 historical-checkpoint scope, consumed-authorization, and replay-protection tests passing unchanged.
+  - Add one assertion that normal Stage08 _validate_checkpoint_commit() still rejects a test(sdd) subject naming TC009.
+acceptance_criteria:
+  - 'AC1: "test(sdd): repair TC009 full pipeline fixture" resolves to TC009.'
+  - 'AC2: "test(sdd): isolate TC010 recovery fixture" resolves to TC010.'
+  - 'AC3: "test: authorize TC011 verification fixtures" resolves to TC011.'
+  - 'AC4: All existing implementation/bootstrap subject forms resolve identically and every existing negative assertion still returns None.'
+  - 'AC5: Unrelated, malformed, wrong-type, wrong-scope, multi-task, partial-token, non-TC, case-variant, and prefixed subjects return None.'
+  - 'AC6: TC008 recovery behavior is not regressed; "fix(implementation): [TC008] ..." resolves to TC008 and TC015 scope-classification and replay-protection tests pass.'
+  - 'AC7: The single verification command passes deterministically, offline, without repository-state side effects.'
+  - 'AC8: No RecoveryAuthorization is created, consumed, or modified; .sdd/authorizations/** is unchanged.'
+  - 'AC9: No .sdd/state/** file changes.'
+  - 'AC10: Normal Stage08 _validate_checkpoint_commit(), tasks(), and select_task() semantics are unchanged.'
+  - 'AC11: No commit-hash special case and no new T/TASK legacy recognition exists.'
+  - 'AC12: The checkpoint diff contains only the two allowed files plus the task''s own atomic Stage08 evidence artifact.'
+verification_commands:
+  - .\.venv\Scripts\python.exe -m pytest -q tests/test_m6_codex_adapter.py
+dependencies:
+  - docs/spec.md#SPEC-017
+  - docs/Design.md#DES-017
+  - AGENTS.md section 9.1
+  - .sdd/convergence/TC015.yaml
+  - .sdd/evidence/20261005T011024.2976679Z-TC015.json
+  - TC008 qualifying recovery evidence checkpoint 92f768ecdc0dba042802e310ee8e154999983dab
+dependency_constraints:
+  tc015_required: true
+  tc009_tc010_tc011_recovery_execution_required: false
+  recovery_authorization_required: false
+risk_level: MEDIUM
+governance_profile: SDD_STRICT
+governance_reason: >-
+  This task changes fail-closed task-identity recognition at a protected SPEC-017
+  recovery execution boundary. The change is restricted to a single narrow branch,
+  and recognized TC identifiers remain bound to the state record, authorization
+  checkpoint, task allowed_paths scope, and original evidence. Repository history
+  contains exactly three subjects matching the legacy form, TC009, TC010, and TC011.
+stage07_required: true
+tc009_authorization_still_blocked: true
+status: TODO
+source_stage: 06
