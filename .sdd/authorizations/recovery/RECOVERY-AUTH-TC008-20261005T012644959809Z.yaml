@@ -6,7 +6,7 @@ issuer: PROJECT_AUTHORITY
 issuer_role: PROJECT_AUTHORITY
 issuer_approval_reference: AGENTS.md#sha256:4631d00d71e8d1e0636c6a555cc43a58ba3cd78cd85766915eea9f37b6353d48
 purpose: POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY
-status: ACTIVE
+status: CONSUMED
 one_time: true
 issued_at: '2026-10-05T01:26:44.959809+00:00'
 expires_at: '2026-10-06T01:26:44.959809+00:00'
@@ -73,4 +73,11 @@ status_events:
   reason: ISSUED
   previous_event_digest: null
   event_digest: 32d13c066977626fa70184dd0fb8274b2f5322856a8d9b3181dacc665cd0661c
-record_digest: 5a4a55455f8aed8293b676e289eeea743e84d997bf43032b05b6481731c89575
+- sequence: 2
+  status: CONSUMED
+  occurred_at: '2026-10-05T05:36:49.883183Z'
+  actor: RECOVERY_EXECUTOR
+  reason: FRESH_VERIFICATION_DISPATCH
+  previous_event_digest: 32d13c066977626fa70184dd0fb8274b2f5322856a8d9b3181dacc665cd0661c
+  event_digest: c1a077f081789e1d1cc19514cae64fb053a0fba44febffab83c8f95135ab18dc
+record_digest: 032867f1a900cbfd45db61e31299c4b3c543b2bd36c2ea4272eec96c9a3276a7
