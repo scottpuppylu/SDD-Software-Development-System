@@ -1,0 +1,433 @@
+................................................FF.F...................................... [ 66%]
+.............................................                     [100%]
+================================== FAILURES ===================================
+_ M5GitTests.test_recovery_authorization_rejects_overlap_bad_issuer_and_path_escape _
+
+self = <test_m5_git_recovery.M5GitTests testMethod=test_recovery_authorization_rejects_overlap_bad_issuer_and_path_escape>
+
+    def test_recovery_authorization_rejects_overlap_bad_issuer_and_path_escape(self):
+        grant = self._recovery_grant()
+        issuer = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo)
+        with self.assertRaisesRegex(GitRuntimeError, "only Project Authority"):
+            issuer.issue({**grant, "issuer": "RECOVERY_EXECUTOR"})
+>       issuer.issue(grant)
+
+tests\test_m5_git_recovery.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+sdd_orchestrator\git_runtime.py:591: in issue
+    return self.store.load(authorization_id=authorization.authorization_id), rel, commit
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sdd_orchestrator.git_runtime.RecoveryAuthorizationStore object at 0x0000021F7B016250>
+authorization_id = 'AUTH-TC008-001', recovery_operation_id = None
+require_active = True
+
+    def load(
+        self,
+        *,
+        authorization_id: str | None = None,
+        recovery_operation_id: str | None = None,
+        require_active: bool = True,
+    ) -> RecoveryAuthorization:
+        if (authorization_id is None) == (recovery_operation_id is None):
+            raise GitRuntimeError("AUTHORITY_INVALID: exactly one authorization lookup key is required")
+        if authorization_id is not None:
+            rel = self.relative_path(authorization_id)
+            candidates = [(rel, self._read(self.repo_root / rel))]
+        else:
+            candidates = [
+                (self.relative_path(item.authorization_id), item)
+                for item in self._active_records()
+                if item.recovery_operation_id == recovery_operation_id
+            ]
+        if len(candidates) != 1:
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization lookup is missing or ambiguous")
+        rel, authorization = candidates[0]
+        if rel != self.relative_path(authorization.authorization_id):
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization path identity mismatch")
+        try:
+            authorization.validate(require_active=require_active)
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+        snapshot = self.git.snapshot(recent_limit=2)
+        if (
+            not snapshot.is_repository
+            or snapshot.branch != authorization.branch
+            or str(self.repo_root) != str(Path(authorization.repository).resolve())
+            or snapshot.head_commit is None
+            or not self.git.is_ancestor(authorization.baseline, snapshot.head_commit)
+            or not self.git.is_ancestor(authorization.runtime_checkpoint, snapshot.head_commit)
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: repository/branch/baseline binding mismatch")
+        artifact_commit = self.git.latest_commit_for_path(rel)
+        if (
+            artifact_commit is None
+            or not self.git.is_ancestor(artifact_commit, snapshot.head_commit)
+            or self.git.committed_blob_identity(rel, artifact_commit)
+            != self.git.working_blob_identity(rel)
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization is not repository-backed")
+        if self.git.paths_identity(snapshot.head_commit, self.RUNTIME_PATHS) != self.git.paths_identity(
+            authorization.runtime_checkpoint, self.RUNTIME_PATHS
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: runtime code tree differs from authorized checkpoint")
+        if not self._approval_reference_valid(authorization.issuer_approval_reference):
+            raise GitRuntimeError("AUTHORITY_INVALID: issuer approval reference is invalid")
+        runtime_evidence = self.repo_root / authorization.runtime_evidence
+        original_evidence = self.repo_root / authorization.target_original_evidence
+        if (
+            not runtime_evidence.is_file()
+            or not original_evidence.is_file()
+            or not self.git.is_tracked(authorization.runtime_evidence)
+            or not self.git.is_tracked(authorization.target_original_evidence)
+        ):
+            raise GitRuntimeError("EVIDENCE_MISMATCH: bound evidence is unavailable")
+        current_authorities = tuple(
+            (path, authority_version_digest(self.repo_root / path))
+            for path, _ in authorization.authority_versions
+        )
+        if current_authorities != authorization.authority_versions:
+>           raise GitRuntimeError("AUTHORITY_INVALID: authority version mismatch")
+E           sdd_orchestrator.git_runtime.GitRuntimeError: AUTHORITY_INVALID: authority version mismatch
+
+sdd_orchestrator\git_runtime.py:479: GitRuntimeError
+---------------------------- Captured stderr call -----------------------------
+warning: in the working copy of '.sdd/convergence/TC006.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC007.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC008.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC009.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC010.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC011.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC012.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC013.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC014.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/decisions/HD-A2-ARCH-IDENTIFIER-RESOLUTION-001.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/decisions/HD-A2-PRD-NAMESPACE-CORRECTION-002.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T081605.981214Z-TC011.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T103204.2963462Z-TC008.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T104647.5535444Z-current-implementation-recovery-gate.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T111428.4945804Z-stage09-post-convergence.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T153812.4217508Z-TC009.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T155644.2073715Z-TC010.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260929T233625.860013Z-current-implementation-recovery-gate.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20261001T001252.4497407Z-stage09-normal-route.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-01.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-02.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-03.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-04.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-05.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-06.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-07.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-08.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-09.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-10.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260921T052156.659658Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260922T030303.845257Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260922T113606.296755Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T080640.403094Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T102522.9926629Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T152518.9282231Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T155021.7716554Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T091156.5243005Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T091706.2408035Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T101200.0000000Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T103000.0000000Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261002T002931.0012372Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261002T010906.5104460Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/stages.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/state/project-state.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/system.yaml', LF will be replaced by CRLF the next time Git touches it
+_ M5GitTests.test_recovery_authorization_runtime_tree_and_approval_fail_closed _
+
+self = <test_m5_git_recovery.M5GitTests testMethod=test_recovery_authorization_runtime_tree_and_approval_fail_closed>
+
+    def test_recovery_authorization_runtime_tree_and_approval_fail_closed(self):
+        grant = self._recovery_grant()
+        issuer = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo)
+        with self.assertRaisesRegex(GitRuntimeError, "approval reference"):
+            issuer.issue({**grant, "issuer_approval_reference": "AGENTS.md#sha256:" + "0" * 64})
+    
+>       authorization, _, _ = issuer.issue(grant)
+                              ^^^^^^^^^^^^^^^^^^^
+
+tests\test_m5_git_recovery.py:180: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+sdd_orchestrator\git_runtime.py:591: in issue
+    return self.store.load(authorization_id=authorization.authorization_id), rel, commit
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sdd_orchestrator.git_runtime.RecoveryAuthorizationStore object at 0x0000021F7B016D50>
+authorization_id = 'AUTH-TC008-001', recovery_operation_id = None
+require_active = True
+
+    def load(
+        self,
+        *,
+        authorization_id: str | None = None,
+        recovery_operation_id: str | None = None,
+        require_active: bool = True,
+    ) -> RecoveryAuthorization:
+        if (authorization_id is None) == (recovery_operation_id is None):
+            raise GitRuntimeError("AUTHORITY_INVALID: exactly one authorization lookup key is required")
+        if authorization_id is not None:
+            rel = self.relative_path(authorization_id)
+            candidates = [(rel, self._read(self.repo_root / rel))]
+        else:
+            candidates = [
+                (self.relative_path(item.authorization_id), item)
+                for item in self._active_records()
+                if item.recovery_operation_id == recovery_operation_id
+            ]
+        if len(candidates) != 1:
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization lookup is missing or ambiguous")
+        rel, authorization = candidates[0]
+        if rel != self.relative_path(authorization.authorization_id):
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization path identity mismatch")
+        try:
+            authorization.validate(require_active=require_active)
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+        snapshot = self.git.snapshot(recent_limit=2)
+        if (
+            not snapshot.is_repository
+            or snapshot.branch != authorization.branch
+            or str(self.repo_root) != str(Path(authorization.repository).resolve())
+            or snapshot.head_commit is None
+            or not self.git.is_ancestor(authorization.baseline, snapshot.head_commit)
+            or not self.git.is_ancestor(authorization.runtime_checkpoint, snapshot.head_commit)
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: repository/branch/baseline binding mismatch")
+        artifact_commit = self.git.latest_commit_for_path(rel)
+        if (
+            artifact_commit is None
+            or not self.git.is_ancestor(artifact_commit, snapshot.head_commit)
+            or self.git.committed_blob_identity(rel, artifact_commit)
+            != self.git.working_blob_identity(rel)
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization is not repository-backed")
+        if self.git.paths_identity(snapshot.head_commit, self.RUNTIME_PATHS) != self.git.paths_identity(
+            authorization.runtime_checkpoint, self.RUNTIME_PATHS
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: runtime code tree differs from authorized checkpoint")
+        if not self._approval_reference_valid(authorization.issuer_approval_reference):
+            raise GitRuntimeError("AUTHORITY_INVALID: issuer approval reference is invalid")
+        runtime_evidence = self.repo_root / authorization.runtime_evidence
+        original_evidence = self.repo_root / authorization.target_original_evidence
+        if (
+            not runtime_evidence.is_file()
+            or not original_evidence.is_file()
+            or not self.git.is_tracked(authorization.runtime_evidence)
+            or not self.git.is_tracked(authorization.target_original_evidence)
+        ):
+            raise GitRuntimeError("EVIDENCE_MISMATCH: bound evidence is unavailable")
+        current_authorities = tuple(
+            (path, authority_version_digest(self.repo_root / path))
+            for path, _ in authorization.authority_versions
+        )
+        if current_authorities != authorization.authority_versions:
+>           raise GitRuntimeError("AUTHORITY_INVALID: authority version mismatch")
+E           sdd_orchestrator.git_runtime.GitRuntimeError: AUTHORITY_INVALID: authority version mismatch
+
+sdd_orchestrator\git_runtime.py:479: GitRuntimeError
+---------------------------- Captured stderr call -----------------------------
+warning: in the working copy of '.sdd/convergence/TC006.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC007.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC008.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC009.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC010.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC011.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC012.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC013.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC014.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/decisions/HD-A2-ARCH-IDENTIFIER-RESOLUTION-001.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/decisions/HD-A2-PRD-NAMESPACE-CORRECTION-002.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T081605.981214Z-TC011.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T103204.2963462Z-TC008.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T104647.5535444Z-current-implementation-recovery-gate.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T111428.4945804Z-stage09-post-convergence.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T153812.4217508Z-TC009.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T155644.2073715Z-TC010.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260929T233625.860013Z-current-implementation-recovery-gate.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20261001T001252.4497407Z-stage09-normal-route.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-01.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-02.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-03.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-04.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-05.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-06.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-07.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-08.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-09.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-10.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260921T052156.659658Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260922T030303.845257Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260922T113606.296755Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T080640.403094Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T102522.9926629Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T152518.9282231Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T155021.7716554Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T091156.5243005Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T091706.2408035Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T101200.0000000Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T103000.0000000Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261002T002931.0012372Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261002T010906.5104460Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/stages.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/state/project-state.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/system.yaml', LF will be replaced by CRLF the next time Git touches it
+_ M5GitTests.test_repository_backed_recovery_authorization_issue_load_and_consume _
+
+self = <test_m5_git_recovery.M5GitTests testMethod=test_repository_backed_recovery_authorization_issue_load_and_consume>
+
+    def test_repository_backed_recovery_authorization_issue_load_and_consume(self):
+        grant = self._recovery_grant()
+        issuer = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo)
+>       authorization, rel, issuance_commit = issuer.issue(grant)
+                                              ^^^^^^^^^^^^^^^^^^^
+
+tests\test_m5_git_recovery.py:134: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+sdd_orchestrator\git_runtime.py:591: in issue
+    return self.store.load(authorization_id=authorization.authorization_id), rel, commit
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sdd_orchestrator.git_runtime.RecoveryAuthorizationStore object at 0x0000021F7B0EBE30>
+authorization_id = 'AUTH-TC008-001', recovery_operation_id = None
+require_active = True
+
+    def load(
+        self,
+        *,
+        authorization_id: str | None = None,
+        recovery_operation_id: str | None = None,
+        require_active: bool = True,
+    ) -> RecoveryAuthorization:
+        if (authorization_id is None) == (recovery_operation_id is None):
+            raise GitRuntimeError("AUTHORITY_INVALID: exactly one authorization lookup key is required")
+        if authorization_id is not None:
+            rel = self.relative_path(authorization_id)
+            candidates = [(rel, self._read(self.repo_root / rel))]
+        else:
+            candidates = [
+                (self.relative_path(item.authorization_id), item)
+                for item in self._active_records()
+                if item.recovery_operation_id == recovery_operation_id
+            ]
+        if len(candidates) != 1:
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization lookup is missing or ambiguous")
+        rel, authorization = candidates[0]
+        if rel != self.relative_path(authorization.authorization_id):
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization path identity mismatch")
+        try:
+            authorization.validate(require_active=require_active)
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+        snapshot = self.git.snapshot(recent_limit=2)
+        if (
+            not snapshot.is_repository
+            or snapshot.branch != authorization.branch
+            or str(self.repo_root) != str(Path(authorization.repository).resolve())
+            or snapshot.head_commit is None
+            or not self.git.is_ancestor(authorization.baseline, snapshot.head_commit)
+            or not self.git.is_ancestor(authorization.runtime_checkpoint, snapshot.head_commit)
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: repository/branch/baseline binding mismatch")
+        artifact_commit = self.git.latest_commit_for_path(rel)
+        if (
+            artifact_commit is None
+            or not self.git.is_ancestor(artifact_commit, snapshot.head_commit)
+            or self.git.committed_blob_identity(rel, artifact_commit)
+            != self.git.working_blob_identity(rel)
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization is not repository-backed")
+        if self.git.paths_identity(snapshot.head_commit, self.RUNTIME_PATHS) != self.git.paths_identity(
+            authorization.runtime_checkpoint, self.RUNTIME_PATHS
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: runtime code tree differs from authorized checkpoint")
+        if not self._approval_reference_valid(authorization.issuer_approval_reference):
+            raise GitRuntimeError("AUTHORITY_INVALID: issuer approval reference is invalid")
+        runtime_evidence = self.repo_root / authorization.runtime_evidence
+        original_evidence = self.repo_root / authorization.target_original_evidence
+        if (
+            not runtime_evidence.is_file()
+            or not original_evidence.is_file()
+            or not self.git.is_tracked(authorization.runtime_evidence)
+            or not self.git.is_tracked(authorization.target_original_evidence)
+        ):
+            raise GitRuntimeError("EVIDENCE_MISMATCH: bound evidence is unavailable")
+        current_authorities = tuple(
+            (path, authority_version_digest(self.repo_root / path))
+            for path, _ in authorization.authority_versions
+        )
+        if current_authorities != authorization.authority_versions:
+>           raise GitRuntimeError("AUTHORITY_INVALID: authority version mismatch")
+E           sdd_orchestrator.git_runtime.GitRuntimeError: AUTHORITY_INVALID: authority version mismatch
+
+sdd_orchestrator\git_runtime.py:479: GitRuntimeError
+---------------------------- Captured stderr call -----------------------------
+warning: in the working copy of '.sdd/convergence/TC006.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC007.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC008.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC009.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC010.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC011.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC012.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC013.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/convergence/TC014.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/decisions/HD-A2-ARCH-IDENTIFIER-RESOLUTION-001.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/decisions/HD-A2-PRD-NAMESPACE-CORRECTION-002.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T081605.981214Z-TC011.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T103204.2963462Z-TC008.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T104647.5535444Z-current-implementation-recovery-gate.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T111428.4945804Z-stage09-post-convergence.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T153812.4217508Z-TC009.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260924T155644.2073715Z-TC010.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20260929T233625.860013Z-current-implementation-recovery-gate.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/evidence/20261001T001252.4497407Z-stage09-normal-route.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-01.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-02.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-03.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-04.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-05.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-06.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-07.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-08.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-09.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/instructions/stage-10.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260921T052156.659658Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260922T030303.845257Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260922T113606.296755Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T080640.403094Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T102522.9926629Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T152518.9282231Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20260924T155021.7716554Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T091156.5243005Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T091706.2408035Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T101200.0000000Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261001T103000.0000000Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261002T002931.0012372Z-stage-06.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/runs/20261002T010906.5104460Z-stage-07.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/stages.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/state/project-state.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.sdd/system.yaml', LF will be replaced by CRLF the next time Git touches it
+============================== warnings summary ===============================
+.venv\Lib\site-packages\_pytest\cacheprovider.py:469
+  C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.venv\Lib\site-packages\_pytest\cacheprovider.py:469: PytestCacheWarning: could not create cache path C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.pytest_cache\v\cache\nodeids: [WinError 183] 當檔案已存在時，無法建立該檔案。: 'C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.pytest_cache\\v\\cache'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+.venv\Lib\site-packages\_pytest\cacheprovider.py:423
+  C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.venv\Lib\site-packages\_pytest\cacheprovider.py:423: PytestCacheWarning: could not create cache path C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.pytest_cache\v\cache\lastfailed: [WinError 183] 當檔案已存在時，無法建立該檔案。: 'C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.pytest_cache\\v\\cache'
+    config.cache.set("cache/lastfailed", self.lastfailed)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_m5_git_recovery.py::M5GitTests::test_recovery_authorization_rejects_overlap_bad_issuer_and_path_escape
+FAILED tests/test_m5_git_recovery.py::M5GitTests::test_recovery_authorization_runtime_tree_and_approval_fail_closed
+FAILED tests/test_m5_git_recovery.py::M5GitTests::test_repository_backed_recovery_authorization_issue_load_and_consume
+3 failed, 132 passed, 2 warnings, 61 subtests passed in 1903.78s (0:31:43)

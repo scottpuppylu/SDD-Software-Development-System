@@ -1,0 +1,15 @@
+﻿{
+    "attempt_id":  "TC014-QUALIFY-20261002T142255633Z",
+    "command":  ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_v1118_safe_pause_and_evidence.py tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py",
+    "cwd":  "C:/Users/user/Documents/ChatGPT/SDD-Software-Development-System-v1.1.7",
+    "baseline_head":  "d58cc61f7ac28c2d46055693e6f8a4edcda64e8a",
+    "sealed_envelope_id":  "a1db0edde42c16c042dea62ca07b3e2f1c1823321862aa7ed2a3265348e913c9",
+    "started_utc":  "2026-10-02T06:22:55.8349175Z",
+    "completed_utc":  "2026-10-02T06:22:56.5165739Z",
+    "duration_seconds":  0.68165639999999994,
+    "exit_code":  null,
+    "termination":  "NATURAL",
+    "stdout_path":  "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.sdd\\runs\\TC014-QUALIFY-20261002T142255633Z\\stdout.log",
+    "stderr_path":  "C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.sdd\\runs\\TC014-QUALIFY-20261002T142255633Z\\stderr.log",
+    "temp_root":  "C:\\Users\\user\\AppData\\Local\\Temp\\sdd-tc014-TC014-QUALIFY-20261002T142255633Z"
+}

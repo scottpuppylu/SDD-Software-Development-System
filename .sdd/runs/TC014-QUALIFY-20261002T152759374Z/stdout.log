@@ -1,0 +1,277 @@
+..........................................................................F............... [ 66%]
+........................F....................                     [100%]
+================================== FAILURES ===================================
+_ M6CodexAdapterTests.test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation _
+
+self = <test_m6_codex_adapter.M6CodexAdapterTests testMethod=test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation>
+
+        def test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation(self):
+            command = "python -m pytest -q tests/test_recovery_target.py"
+            self._write_tasks(f'''\n## TASK-001 - Recovery target
+    - **Status:** TODO
+    - **Traceability:** SPEC-017 -> DES-017 -> TASK-001
+    - **Allowed files:** `src/value.py`, `tests/test_recovery_target.py`.
+    - **Allowed implementation scope:** recover exact checkpoint evidence.
+    - **Verification Commands:** `{command}`.
+    ''')
+            (self.repo / "src").mkdir(exist_ok=True)
+            (self.repo / "tests").mkdir(exist_ok=True)
+            (self.repo / "src/value.py").write_text("VALUE = 1\n", encoding="utf-8")
+            (self.repo / "tests/test_recovery_target.py").write_text(
+                "from src.value import VALUE\n\ndef test_value():\n    assert VALUE == 1\n",
+                encoding="utf-8",
+            )
+            run_git(self.repo, "add", ".")
+            run_git(self.repo, "commit", "-m", "chore: recovery setup")
+            (self.repo / "src/value.py").write_text("VALUE = 2\n", encoding="utf-8")
+            (self.repo / "tests/test_recovery_target.py").write_text(
+                "from pathlib import Path\n"
+                "from src.value import VALUE\n\n"
+                "def test_value():\n"
+                "    assert VALUE == 2\n"
+                "    assert Path('.sdd/state/authority-state.yaml').is_file()\n"
+                "    assert Path('.sdd/state/implementation-state.yaml').is_file()\n"
+                "    assert Path('.sdd/state/project-state.yaml').is_file()\n"
+                "    assert not Path('.sdd/arbitrary-secret.txt').exists()\n",
+                encoding="utf-8",
+            )
+            run_git(self.repo, "add", "src/value.py", "tests/test_recovery_target.py")
+            run_git(
+                self.repo, "commit", "-m",
+                "feat: implement TASK-001 recovery target [T001-BOOTSTRAP-001]",
+            )
+            checkpoint = run_git(self.repo, "rev-parse", "HEAD")
+            (self.repo / "src/value.py").write_text("VALUE = 999\n", encoding="utf-8")
+            run_git(self.repo, "add", "src/value.py")
+            run_git(self.repo, "commit", "-m", "docs: later baseline")
+            original_evidence = self.repo / ".sdd/evidence/original-T001.json"
+            runtime_evidence = self.repo / ".sdd/evidence/runtime-TC014.json"
+            original_evidence.write_text('{"task_id":"T001"}\n', encoding="utf-8")
+            runtime_evidence.write_text('{"task_id":"TC014","status":"PASS"}\n', encoding="utf-8")
+            run_git(self.repo, "add", "-f", str(original_evidence.relative_to(self.repo)), str(runtime_evidence.relative_to(self.repo)))
+            run_git(self.repo, "commit", "-m", "docs: repository-backed recovery bases")
+            baseline = run_git(self.repo, "rev-parse", "HEAD")
+            runner = Stage08CodexRunner(
+                Orchestrator(self.repo), project_python=sys.executable, heartbeat_seconds=0
+            )
+            task = runner.select_task("T001")
+            authority_versions = tuple(
+                (path, runner._sha256((self.repo / path).read_text(encoding="utf-8")))
+                for path in runner.ENVELOPE_AUTHORITY_PATHS
+            )
+            now = datetime.now(timezone.utc)
+            approval_digest = hashlib.sha256((self.repo / "AGENTS.md").read_bytes()).hexdigest()
+>           authorization, _, _ = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo).issue({
+                "authorization_id": "RECOVERY-1", "attempt_id": "attempt-1",
+                "issuer": "PROJECT_AUTHORITY", "issuer_role": "PROJECT_AUTHORITY",
+                "issuer_approval_reference": f"AGENTS.md#sha256:{approval_digest}",
+                "purpose": RECOVERY_CAPABILITY, "one_time": True,
+                "issued_at": now.isoformat(),
+                "expires_at": (now + timedelta(hours=1)).isoformat(),
+                "repository": str(self.repo.resolve()),
+                "branch": run_git(self.repo, "branch", "--show-current"),
+                "baseline": baseline, "recovery_operation_id": "RECOVERY-T001-001",
+                "target_task_id": "T001", "task_contract_digest": task_contract_sha256(task),
+                "target_checkpoint": checkpoint,
+                "target_original_evidence": ".sdd/evidence/original-T001.json",
+                "verification_command": command,
+                "verification_command_source": "tasks.md#T001",
+                "runtime_checkpoint": baseline,
+                "runtime_evidence": ".sdd/evidence/runtime-TC014.json",
+                "spec_version": "SPEC-017", "design_version": "DES-017",
+                "authority_policy_version": "AGENTS.md#9.1",
+                "authority_versions": authority_versions,
+                "allowed_artifact_paths": (
+                    ".sdd/authorizations/recovery/RECOVERY-1.yaml", ".sdd/evidence/",
+                ),
+                "prohibited_operations": ("IMPLEMENTATION_MUTATION", "STATE_RECONCILIATION"),
+                "allow_persistence_only_resume": False,
+                "checkpoint_conditions": ("verification_pass", "scope_respected"),
+            })
+
+tests\test_m6_codex_adapter.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sdd_orchestrator.git_runtime.ProjectAuthorityRecoveryAuthorizationIssuer object at 0x000001F2A6509A70>
+grant = {'authorization_id': 'RECOVERY-1', 'attempt_id': 'attempt-1', 'issuer': 'PROJECT_AUTHORITY', 'issuer_role': 'PROJECT_AUTHORITY', ...}
+
+    def issue(self, grant: Mapping[str, Any]) -> tuple[RecoveryAuthorization, str, str]:
+        snapshot = self.git.snapshot(recent_limit=2)
+        if not snapshot.is_repository or snapshot.head_commit is None or snapshot.dirty_paths:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance requires a clean repository")
+        values = dict(grant)
+        if values.get("issuer") != "PROJECT_AUTHORITY" or values.get("issuer_role") != "PROJECT_AUTHORITY":
+            raise GitRuntimeError("AUTHORITY_INVALID: only Project Authority may issue")
+        if values.get("repository") != str(self.repo_root) or values.get("branch") != snapshot.branch:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance repository binding mismatch")
+        if values.get("baseline") != snapshot.head_commit:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance baseline must be current HEAD")
+        if values.get("purpose") != RECOVERY_CAPABILITY or values.get("one_time") is not True:
+            raise GitRuntimeError("AUTHORITY_INVALID: invalid recovery capability grant")
+        authorization_id = str(values.get("authorization_id", ""))
+        rel = self.store.relative_path(authorization_id)
+        if (self.repo_root / rel).exists():
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization identity already exists")
+        if any(
+            item.recovery_operation_id == values.get("recovery_operation_id")
+            or (
+                item.target_task_id == values.get("target_task_id")
+                and item.target_checkpoint == values.get("target_checkpoint")
+            )
+            for item in self.store._active_records()
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: overlapping ACTIVE authorization")
+        authorization = assemble_recovery_authorization(values)
+        try:
+            authorization.validate(require_active=True)
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+        if not self.store._approval_reference_valid(authorization.issuer_approval_reference):
+>           raise GitRuntimeError("AUTHORITY_INVALID: issuer approval reference is invalid")
+E           sdd_orchestrator.git_runtime.GitRuntimeError: AUTHORITY_INVALID: issuer approval reference is invalid
+
+sdd_orchestrator\git_runtime.py:582: GitRuntimeError
+_ V1116GeneratedVerificationArtifactTests.test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation _
+
+self = <test_m6_codex_adapter.V1116GeneratedVerificationArtifactTests testMethod=test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation>
+
+        def test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation(self):
+            command = "python -m pytest -q tests/test_recovery_target.py"
+            self._write_tasks(f'''\n## TASK-001 - Recovery target
+    - **Status:** TODO
+    - **Traceability:** SPEC-017 -> DES-017 -> TASK-001
+    - **Allowed files:** `src/value.py`, `tests/test_recovery_target.py`.
+    - **Allowed implementation scope:** recover exact checkpoint evidence.
+    - **Verification Commands:** `{command}`.
+    ''')
+            (self.repo / "src").mkdir(exist_ok=True)
+            (self.repo / "tests").mkdir(exist_ok=True)
+            (self.repo / "src/value.py").write_text("VALUE = 1\n", encoding="utf-8")
+            (self.repo / "tests/test_recovery_target.py").write_text(
+                "from src.value import VALUE\n\ndef test_value():\n    assert VALUE == 1\n",
+                encoding="utf-8",
+            )
+            run_git(self.repo, "add", ".")
+            run_git(self.repo, "commit", "-m", "chore: recovery setup")
+            (self.repo / "src/value.py").write_text("VALUE = 2\n", encoding="utf-8")
+            (self.repo / "tests/test_recovery_target.py").write_text(
+                "from pathlib import Path\n"
+                "from src.value import VALUE\n\n"
+                "def test_value():\n"
+                "    assert VALUE == 2\n"
+                "    assert Path('.sdd/state/authority-state.yaml').is_file()\n"
+                "    assert Path('.sdd/state/implementation-state.yaml').is_file()\n"
+                "    assert Path('.sdd/state/project-state.yaml').is_file()\n"
+                "    assert not Path('.sdd/arbitrary-secret.txt').exists()\n",
+                encoding="utf-8",
+            )
+            run_git(self.repo, "add", "src/value.py", "tests/test_recovery_target.py")
+            run_git(
+                self.repo, "commit", "-m",
+                "feat: implement TASK-001 recovery target [T001-BOOTSTRAP-001]",
+            )
+            checkpoint = run_git(self.repo, "rev-parse", "HEAD")
+            (self.repo / "src/value.py").write_text("VALUE = 999\n", encoding="utf-8")
+            run_git(self.repo, "add", "src/value.py")
+            run_git(self.repo, "commit", "-m", "docs: later baseline")
+            original_evidence = self.repo / ".sdd/evidence/original-T001.json"
+            runtime_evidence = self.repo / ".sdd/evidence/runtime-TC014.json"
+            original_evidence.write_text('{"task_id":"T001"}\n', encoding="utf-8")
+            runtime_evidence.write_text('{"task_id":"TC014","status":"PASS"}\n', encoding="utf-8")
+            run_git(self.repo, "add", "-f", str(original_evidence.relative_to(self.repo)), str(runtime_evidence.relative_to(self.repo)))
+            run_git(self.repo, "commit", "-m", "docs: repository-backed recovery bases")
+            baseline = run_git(self.repo, "rev-parse", "HEAD")
+            runner = Stage08CodexRunner(
+                Orchestrator(self.repo), project_python=sys.executable, heartbeat_seconds=0
+            )
+            task = runner.select_task("T001")
+            authority_versions = tuple(
+                (path, runner._sha256((self.repo / path).read_text(encoding="utf-8")))
+                for path in runner.ENVELOPE_AUTHORITY_PATHS
+            )
+            now = datetime.now(timezone.utc)
+            approval_digest = hashlib.sha256((self.repo / "AGENTS.md").read_bytes()).hexdigest()
+>           authorization, _, _ = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo).issue({
+                "authorization_id": "RECOVERY-1", "attempt_id": "attempt-1",
+                "issuer": "PROJECT_AUTHORITY", "issuer_role": "PROJECT_AUTHORITY",
+                "issuer_approval_reference": f"AGENTS.md#sha256:{approval_digest}",
+                "purpose": RECOVERY_CAPABILITY, "one_time": True,
+                "issued_at": now.isoformat(),
+                "expires_at": (now + timedelta(hours=1)).isoformat(),
+                "repository": str(self.repo.resolve()),
+                "branch": run_git(self.repo, "branch", "--show-current"),
+                "baseline": baseline, "recovery_operation_id": "RECOVERY-T001-001",
+                "target_task_id": "T001", "task_contract_digest": task_contract_sha256(task),
+                "target_checkpoint": checkpoint,
+                "target_original_evidence": ".sdd/evidence/original-T001.json",
+                "verification_command": command,
+                "verification_command_source": "tasks.md#T001",
+                "runtime_checkpoint": baseline,
+                "runtime_evidence": ".sdd/evidence/runtime-TC014.json",
+                "spec_version": "SPEC-017", "design_version": "DES-017",
+                "authority_policy_version": "AGENTS.md#9.1",
+                "authority_versions": authority_versions,
+                "allowed_artifact_paths": (
+                    ".sdd/authorizations/recovery/RECOVERY-1.yaml", ".sdd/evidence/",
+                ),
+                "prohibited_operations": ("IMPLEMENTATION_MUTATION", "STATE_RECONCILIATION"),
+                "allow_persistence_only_resume": False,
+                "checkpoint_conditions": ("verification_pass", "scope_respected"),
+            })
+
+tests\test_m6_codex_adapter.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sdd_orchestrator.git_runtime.ProjectAuthorityRecoveryAuthorizationIssuer object at 0x000001F2A65EB0B0>
+grant = {'authorization_id': 'RECOVERY-1', 'attempt_id': 'attempt-1', 'issuer': 'PROJECT_AUTHORITY', 'issuer_role': 'PROJECT_AUTHORITY', ...}
+
+    def issue(self, grant: Mapping[str, Any]) -> tuple[RecoveryAuthorization, str, str]:
+        snapshot = self.git.snapshot(recent_limit=2)
+        if not snapshot.is_repository or snapshot.head_commit is None or snapshot.dirty_paths:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance requires a clean repository")
+        values = dict(grant)
+        if values.get("issuer") != "PROJECT_AUTHORITY" or values.get("issuer_role") != "PROJECT_AUTHORITY":
+            raise GitRuntimeError("AUTHORITY_INVALID: only Project Authority may issue")
+        if values.get("repository") != str(self.repo_root) or values.get("branch") != snapshot.branch:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance repository binding mismatch")
+        if values.get("baseline") != snapshot.head_commit:
+            raise GitRuntimeError("AUTHORITY_INVALID: issuance baseline must be current HEAD")
+        if values.get("purpose") != RECOVERY_CAPABILITY or values.get("one_time") is not True:
+            raise GitRuntimeError("AUTHORITY_INVALID: invalid recovery capability grant")
+        authorization_id = str(values.get("authorization_id", ""))
+        rel = self.store.relative_path(authorization_id)
+        if (self.repo_root / rel).exists():
+            raise GitRuntimeError("AUTHORITY_INVALID: authorization identity already exists")
+        if any(
+            item.recovery_operation_id == values.get("recovery_operation_id")
+            or (
+                item.target_task_id == values.get("target_task_id")
+                and item.target_checkpoint == values.get("target_checkpoint")
+            )
+            for item in self.store._active_records()
+        ):
+            raise GitRuntimeError("AUTHORITY_INVALID: overlapping ACTIVE authorization")
+        authorization = assemble_recovery_authorization(values)
+        try:
+            authorization.validate(require_active=True)
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
+        if not self.store._approval_reference_valid(authorization.issuer_approval_reference):
+>           raise GitRuntimeError("AUTHORITY_INVALID: issuer approval reference is invalid")
+E           sdd_orchestrator.git_runtime.GitRuntimeError: AUTHORITY_INVALID: issuer approval reference is invalid
+
+sdd_orchestrator\git_runtime.py:582: GitRuntimeError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\_pytest\cacheprovider.py:469
+  C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.venv\Lib\site-packages\_pytest\cacheprovider.py:469: PytestCacheWarning: could not create cache path C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.pytest_cache\v\cache\nodeids: [WinError 183] 當檔案已存在時，無法建立該檔案。: 'C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.pytest_cache\\v\\cache'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+.venv\Lib\site-packages\_pytest\cacheprovider.py:423
+  C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.venv\Lib\site-packages\_pytest\cacheprovider.py:423: PytestCacheWarning: could not create cache path C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7\.pytest_cache\v\cache\lastfailed: [WinError 183] 當檔案已存在時，無法建立該檔案。: 'C:\\Users\\user\\Documents\\ChatGPT\\SDD-Software-Development-System-v1.1.7\\.pytest_cache\\v\\cache'
+    config.cache.set("cache/lastfailed", self.lastfailed)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_m6_codex_adapter.py::M6CodexAdapterTests::test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation
+FAILED tests/test_m6_codex_adapter.py::V1116GeneratedVerificationArtifactTests::test_post_checkpoint_recovery_executes_exact_command_without_state_reconciliation
+2 failed, 133 passed, 2 warnings, 61 subtests passed in 994.09s (0:16:34)
