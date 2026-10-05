@@ -1,0 +1,54 @@
+{
+  "request_summary": {
+    "stage_id": "07",
+    "stage_name": "PRE_IMPLEMENTATION_GATE",
+    "target_task": "TC015",
+    "baseline": "2a27d6d1647cf9305cdeb11b24007c68f76285f8",
+    "artifact_paths": [
+      ".sdd/convergence/TC015.yaml",
+      "docs/handoff/pre-implementation-gate-report.md",
+      ".sdd/state/project-state.yaml"
+    ],
+    "semantic_input_keys": [
+      "GIT_READINESS",
+      "REPOSITORY_STRUCTURE",
+      "TARGET_TASK",
+      "SPEC017_HISTORICAL_CHECKPOINT_SCOPE_CLASSIFICATION"
+    ]
+  },
+  "result": {
+    "status": "COMPLETED",
+    "result": "PASS",
+    "classification": null,
+    "metadata": {
+      "target_task": "TC015",
+      "authorized_baseline": "2a27d6d1647cf9305cdeb11b24007c68f76285f8",
+      "implementation_authorization": true,
+      "governance_profile": "SDD_STRICT",
+      "repair_classification": "RECOVERY_HISTORICAL_CHECKPOINT_SCOPE_CLASSIFICATION_DEFECT",
+      "allowed_files": [
+        "sdd_orchestrator/codex_adapter.py",
+        "tests/test_m6_codex_adapter.py"
+      ],
+      "verification_command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m6_codex_adapter.py",
+      "verification_contract_independent": true,
+      "atomic_evidence_identity_bound": true,
+      "generic_evidence_allowlist_allowed": false,
+      "old_tc008_authorization_reusable": false,
+      "recovery_authorization_issued": false,
+      "recovery_executed": false,
+      "stage08_executed": false,
+      "implementation_state_mutated": false,
+      "qualification_state_reconciled": false,
+      "stage09_executed": false,
+      "stage10_executed": false
+    }
+  },
+  "transition": {
+    "stage_id": "07",
+    "result": "PASS",
+    "next": "08",
+    "implementation_authorization": true,
+    "release_authorization": false
+  }
+}

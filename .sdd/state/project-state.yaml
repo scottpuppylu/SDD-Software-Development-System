@@ -57,7 +57,7 @@ artifacts:
   handoff_report: null
 git:
   branch: telemetry-measurement-v2
-  head_commit: 216a7f216e02935321b3016ff75b18bb7f210973
+  head_commit: 2a27d6d1647cf9305cdeb11b24007c68f76285f8
   last_verified_commit: 0f60e06c978e6014dde7a4585a250b61fd4b38a6
 provenance:
   current_authority_package:

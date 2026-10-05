@@ -1,89 +1,79 @@
-# Stage 07 Pre-Implementation Gate Report — TC014
+# Stage 07 Pre-Implementation Gate Report — TC015
 
 ## Decision
 
 RESULT = PASS
-TARGET_TASK = TC014
+TARGET_TASK = TC015
 IMPLEMENTATION_AUTHORIZATION = GRANTED
 GOVERNANCE_PROFILE = SDD_STRICT
-AUTHORIZED_BASELINE = 216a7f216e02935321b3016ff75b18bb7f210973
+AUTHORIZED_BASELINE = 2a27d6d1647cf9305cdeb11b24007c68f76285f8
 
-## Authority and task readiness
+## Authority and defect classification
 
-TC014 is grounded in `SPEC-017`, `DES-017`, `AGENTS.md` section 9.1, and the
-approved Stage03/Stage04/Stage05 recovery-authorization decision. The corrected
-Stage06 artifact is `TODO`, has no Stage08 execution evidence, and exposes the
-complete bounded write scope through the repository-authoritative `allowed_paths`
-field. No upstream contradiction or unresolved TC014 contract ambiguity was found.
+TC015 is grounded in existing `SPEC-017`, `DES-017`, the ordinary Stage08
+atomic-evidence lifecycle, and the existing repository-backed
+`RecoveryAuthorization` security model. No new Specification or Design decision is
+required.
 
-TC014 extends the existing `RecoveryAuthorization` primitive. It does not replace
-`SafetyAuthorization`, reinterpret normal Stage07 implementation authorization, or
-permit a parallel authorization framework.
+The defect classification is
+`RECOVERY_HISTORICAL_CHECKPOINT_SCOPE_CLASSIFICATION_DEFECT`. The current recovery
+adapter applies ordinary task `allowed_paths` to every changed path in a historical
+checkpoint. The governing contract instead distinguishes task implementation/test
+paths from the exact ordinary Stage08 evidence artifact created atomically for that
+same task and checkpoint.
 
 ## Authorized implementation boundary
 
-AUTHORIZED_FILES = sdd_orchestrator/evidence_writer.py; sdd_orchestrator/git_runtime.py; sdd_orchestrator/codex_adapter.py; tests/test_v1118_safe_pause_and_evidence.py; tests/test_m5_git_recovery.py; tests/test_m6_codex_adapter.py
-VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_v1118_safe_pause_and_evidence.py tests/test_m5_git_recovery.py tests/test_m6_codex_adapter.py
+AUTHORIZED_FILES = sdd_orchestrator/codex_adapter.py; tests/test_m6_codex_adapter.py
+VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_m6_codex_adapter.py
 VERIFICATION_CONTRACT_INDEPENDENT = YES
 
-The authorized behavior is limited to one repository-backed
-`RECOVERY_AUTHORIZATION_V1` family at
-`.sdd/authorizations/recovery/<authorization_id>.yaml`. It must extend the existing
-primitive with the Stage06-defined schema, Project-Authority-only issuance,
-repository-owned load by authorization ID or unique approved recovery-operation
-lookup, complete fail-closed binding validation, atomic one-time consumption before
-fresh verification, and append-only hash-chained status/audit events.
+The repair is limited to historical recovery checkpoint changed-path
+classification. A path is admissible only when it is within the task's exact
+`allowed_paths`, or when it is the single original ordinary Stage08 evidence
+artifact whose path, content digest, task, historical checkpoint, Stage08 execution
+identity, recovery operation, and authority context all match the sealed recovery
+bindings.
 
-The sealed Stage08 envelope binds all six machine-readable paths and the exact single
-verification command directly. Its TC014 task-contract digest additionally binds the
-complete acceptance criteria, forbidden scope, artifact schema, issuance/load/
-validation/consumption/audit contracts, dependencies, and governance profile. Current
-authority artifact digests bind the applicable specification, design, and policy
-versions.
+No generic `.sdd/evidence/**` or path-prefix exception is authorized.
 
-## Required security and lifecycle invariants
+## Required fail-closed behavior
 
-- Only `PROJECT_AUTHORITY` may issue; the executor cannot self-authorize.
-- Missing, invalid, ambiguous, expired, revoked, consumed, overlapping, substituted,
-  path-escaping, or otherwise mismatched authorization data fails closed.
-- Task, task-contract digest, checkpoint, original evidence, exact command,
-  repository, branch, baseline, runtime tree/evidence, authority versions, scope, and
-  worktree requirements remain exact bindings.
-- Statuses are exactly `ACTIVE`, `CONSUMED`, `EXPIRED`, and `REVOKED`; execution
-  failure remains an attempt outcome.
-- Consumption is persisted and checkpointed after successful preflight and before a
-  fresh verification child starts. A consumed authorization cannot replay.
-- Persistence-only resume is permitted only by the explicit same-attempt durable
-  success contract and cannot launch new verification.
-- Normal `tasks()` and `select_task()` behavior remains unchanged, and recovery
-  authority cannot derive normal Stage08 implementation authorization.
+- Evidence for another task, a wrong path or digest, an arbitrary evidence file, or
+  an unrelated governance artifact remains `SCOPE_MISMATCH` or another applicable
+  fail-closed result.
+- Extra production or test paths outside the task contract remain rejected.
+- Historical checkpoints and evidence remain immutable.
+- Recovery operation, authorization, task, checkpoint, evidence, command,
+  repository, branch, baseline, and authority bindings remain exact.
+- RecoveryAuthorization consumption and replay protection remain unchanged.
+- Normal Stage08 file boundaries, `tasks()`, and `select_task()` remain unchanged.
 
-## Forbidden scope and preservation
+## Consumed TC008 authorization preservation
 
-TC014 does not authorize normal Stage08 selector redesign, TC008–TC011 status or
-recovery-package changes, historical evidence rewrite, implementation-state
-reconciliation, TC012/TC013 reimplementation or finalization, validator weakening,
-`SafetyAuthorization` replacement, Stage09, or Stage10.
-
-TC008–TC011 recovery packages and TC012/TC013 Stage08 results remain preserved. This
-gate issued no SPEC-017 recovery authorization and executed no recovery operation.
+`RECOVERY-AUTH-TC008-20261005T002258330057Z` remains permanently `CONSUMED`.
+It cannot be reactivated, reused, amended into `ACTIVE`, or treated as a live test
+authorization. Its consumption checkpoint
+`cde7a4cdba5025d84b04f273cbbddd7f5695086a` and nonqualifying attempt audit
+checkpoint `d2a6624fbdcbb27387d3af98a623a450ea23df7c` remain immutable operational
+evidence.
 
 ## Stage08 proof required
 
-Stage08 must satisfy all TC014 acceptance criteria using exactly the stored single
-pytest invocation. Required coverage includes valid Project Authority issuance and
-repository persistence/load; every positive and negative binding case; expiry,
-revocation, replay, overlap, self-authorization and audit-chain enforcement; issuance
-and consumption runtime-tree preservation; persistence-only resume; normal selector
-preservation; and TC008 recovery-entry capability.
+Stage08 must satisfy all fourteen TC015 acceptance criteria with exactly the stored
+single pytest invocation. Coverage must include the exact TC008 checkpoint
+`6cbb7df678a671493520fa0f6abaddcc9bf61557`, its bound original evidence, every
+negative path/digest/task/governance case, consumed-authorization preservation,
+normal Stage08 regression, and TC009–TC011 compatibility without executing any
+recovery operation.
 
-Verification was not run by Stage07. Passing this gate authorizes implementation but
-does not prove TC014 implemented or qualified.
+Verification was not run during Stage07. This PASS authorizes only the two-file
+TC015 implementation scope and does not prove TC015 implemented or qualified.
 
 STAGE08_EXECUTED = NO
-RECOVERY_AUTHORIZATION_ISSUED = NO
-RECOVERY_EXECUTED = NO
-TC013_STATE_FINALIZATION_EXECUTED = NO
-TC012_STATE_FINALIZATION_EXECUTED = NO
+TC008_NEW_AUTHORIZATION_ISSUED = NO
+TC008_RECOVERY_EXECUTED = NO
+IMPLEMENTATION_STATE_MUTATED = NO
+QUALIFICATION_STATE_RECONCILED = NO
 STAGE09_EXECUTED = NO
 STAGE10_EXECUTED = NO
