@@ -1,5 +1,7 @@
 from pathlib import Path
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 import shutil
 import subprocess
@@ -19,6 +21,11 @@ from sdd_orchestrator.git_runtime import (
 from sdd_orchestrator.evidence_writer import (
     ImplementationQualificationBinding,
     RECOVERY_CAPABILITY,
+    RECOVERY_RECORD_KIND,
+    RECOVERY_SCHEMA_VERSION,
+    RecoveryAuthorization,
+    assemble_recovery_authorization,
+    canonical_sha256,
 )
 from sdd_orchestrator.task_parser import AtomicTask
 from sdd_orchestrator.errors import (
@@ -526,6 +533,452 @@ class M5GitTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(GitRuntimeError, "Conflicting qualification"):
                 manager.reconcile_qualification(completed_task="T010", evidence_path=".sdd/evidence/t010.json")
+
+    TC017_TEST_PATH = "tests/test_m41_runner_context_integration.py"
+    TC017_SCOPE_ERROR = "Recovery checkpoint exceeds task allowed paths"
+
+    def _git(self, *args):
+        return subprocess.run(
+            ["git", *args], cwd=self.repo, check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    @staticmethod
+    def _event_digest(event):
+        return canonical_sha256({key: value for key, value in event.items() if key != "event_digest"})
+
+    @staticmethod
+    def _reseal(record, *, grant=False):
+        if grant:
+            record["grant_digest"] = canonical_sha256(
+                RecoveryAuthorization.from_record(record).grant_payload()
+            )
+        record["record_digest"] = canonical_sha256({
+            key: value
+            for key, value in RecoveryAuthorization.from_record(record).to_record().items()
+            if key != "record_digest"
+        })
+        return record
+
+    @staticmethod
+    def _frozen_clock(moment):
+        class FrozenDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return moment if tz is None else moment.astimezone(tz)
+
+        stack = ExitStack()
+        stack.enter_context(mock.patch("sdd_orchestrator.git_runtime.datetime", FrozenDateTime))
+        stack.enter_context(mock.patch("sdd_orchestrator.evidence_writer.datetime", FrozenDateTime))
+        return stack
+
+    def _tc017_case(
+        self, name, *, extra_files=None, include_original=True, original=None, target=None,
+        grant=None, final_status="CONSUMED", consumed_at="2026-01-01T00:05:00Z",
+        tamper=None, write_authorization=True, commit_authorization=True,
+    ):
+        """Build one historical TC008 checkpoint, its grant, and its recovery attestation."""
+        self._tc017_counter = getattr(self, "_tc017_counter", 0) + 1
+        number = self._tc017_counter
+        stamp = f"20260101T{number:06d}.000000Z"
+        original_rel = f".sdd/evidence/{stamp}-TC008.json"
+        command = RecoveryManager(self.repo)._task("TC008").verification_commands[0]
+        parent = self._git("rev-parse", "HEAD")
+
+        files = {self.TC017_TEST_PATH: f"# checkpoint {name}\n"}
+        if include_original:
+            evidence = {
+                "schema_version": "1.0", "stage": "08", "task_id": "TC008", "status": "PASS",
+                "entry_head": parent, "stage07_envelope_id": f"envelope-{name}",
+                "changed_paths": [self.TC017_TEST_PATH],
+                "verification": [{"command": command, "returncode": 0, "passed": True}],
+            }
+            evidence.update(original or {})
+            files[original_rel] = json.dumps(evidence, indent=2) + "\n"
+        files.update(extra_files or {})
+        for rel, text in files.items():
+            path = self.repo / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        self._git("add", "-f", *files)
+        self._git("commit", "-m", f"fix(implementation): [TC008] tc017 {name}")
+        checkpoint = self._git("rev-parse", "HEAD")
+
+        authorization_id = f"AUTH-TC017-{number:03d}"
+        values = {
+            "authorization_id": authorization_id, "attempt_id": f"attempt-{authorization_id}",
+            "issuer": "PROJECT_AUTHORITY", "issuer_role": "PROJECT_AUTHORITY",
+            "issuer_approval_reference": "AGENTS.md#sha256:" + "d" * 64,
+            "purpose": RECOVERY_CAPABILITY, "one_time": True,
+            "issued_at": "2026-01-01T00:00:00+00:00", "expires_at": "2026-01-02T00:00:00+00:00",
+            "repository": str(self.repo.resolve()), "branch": "main", "baseline": checkpoint,
+            "recovery_operation_id": "RECOVERY-TC008-ORDINARY-EVIDENCE-001",
+            "target_task_id": "TC008", "task_contract_digest": "c" * 64,
+            "target_checkpoint": checkpoint, "target_original_evidence": target or original_rel,
+            "verification_command": command,
+            "verification_command_source": ".sdd/convergence/TC008.yaml",
+            "runtime_checkpoint": checkpoint,
+            "runtime_evidence": ".sdd/evidence/runtime-TC016.json",
+            "spec_version": "SPEC-017", "design_version": "DES-017",
+            "authority_policy_version": "AGENTS.md#9.1",
+            "authority_versions": (("AGENTS.md", "d" * 64),),
+            "allowed_artifact_paths": (
+                f".sdd/authorizations/recovery/{authorization_id}.yaml", ".sdd/evidence/",
+            ),
+            "prohibited_operations": ("IMPLEMENTATION_STATE_RECONCILIATION",),
+            "allow_persistence_only_resume": False,
+            "checkpoint_conditions": ("verification_pass", "scope_respected"),
+        }
+        values.update(grant or {})
+        authorization = assemble_recovery_authorization(values)
+        if final_status is not None:
+            authorization = authorization.append_status_event(
+                final_status, occurred_at=consumed_at, actor="RECOVERY_EXECUTOR",
+                reason="FRESH_VERIFICATION_DISPATCH",
+            )
+        record = authorization.to_record()
+        content = yaml.safe_dump(record, sort_keys=False, allow_unicode=True)
+        if tamper is not None:
+            tampered = tamper(record)
+            content = (
+                tampered if isinstance(tampered, str)
+                else yaml.safe_dump(record, sort_keys=False, allow_unicode=True)
+            )
+        authorization_rel = f".sdd/authorizations/recovery/{authorization_id}.yaml"
+        if write_authorization:
+            path = self.repo / authorization_rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8", newline="\n")
+            if commit_authorization:
+                self._git("add", "-f", authorization_rel)
+                self._git("commit", "-m", f"chore(recovery-authorization): [TC008] {name}")
+
+        git = GitRepository(self.repo)
+        payload = {
+            "schema_version": RECOVERY_SCHEMA_VERSION, "record_kind": RECOVERY_RECORD_KIND,
+            "attempt_id": values["attempt_id"], "authorization_id": authorization_id,
+            "authorization_issuer": "PROJECT_AUTHORITY", "task_id": "TC008",
+            "checkpoint_commit": checkpoint, "checkpoint_parent": parent,
+            "checkpoint_tree": git.tree_identity(checkpoint),
+            "checkpoint_changed_paths": git.commit_paths(checkpoint),
+            "checkpoint_diff_sha256": git.commit_diff_digest(checkpoint),
+            "task_contract_sha256": "c" * 64, "verification_command": command,
+            "verification_outcome": "PASS", "exit_status": 0, "complete": True,
+            "timed_out": False, "implementation_mutated": False,
+            "pre_head": checkpoint, "post_head": checkpoint,
+            "recorded_at": "2026-01-01T00:06:00Z",
+        }
+        payload["record_sha256"] = canonical_sha256(payload)
+        attestation_rel = f".sdd/evidence/{stamp}-TC008-recovery-attempt-{number}.json"
+        (self.repo / attestation_rel).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        self._git("add", "-f", attestation_rel)
+        self._git("commit", "-m", f"chore(implementation-evidence): [TC008] {name}")
+        return attestation_rel, original_rel, authorization_rel
+
+    def _tc017_resolve(self, attestation_rel):
+        manager = RecoveryManager(self.repo)
+        return manager._resolve_evidence(manager._task("TC008"), attestation_rel)
+
+    def test_tc017_bound_original_evidence_resolves_independently_of_clock(self):
+        attestation, original, authorization_rel = self._tc017_case("valid")
+        binding, path, commit = self._tc017_resolve(attestation)
+        self.assertEqual(binding.evidence_kind, RECOVERY_RECORD_KIND)
+        self.assertEqual(path, attestation)
+        self.assertEqual(commit, self._git("rev-parse", "HEAD"))
+        checkpoint = self._git("log", "-1", "--format=%H", "--", original)
+        self.assertEqual(binding.implementation_checkpoint, checkpoint)
+
+        # The grant expired on 2026-01-02; resolution is identical before, during, and long after.
+        for moment in (
+            datetime(2025, 12, 31, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
+            datetime(2027, 1, 2, tzinfo=timezone.utc),
+        ):
+            with self.subTest(moment=moment.isoformat()), self._frozen_clock(moment):
+                self.assertEqual(self._tc017_resolve(attestation), (binding, path, commit))
+
+        # Present-time lifecycle validation is unchanged and still rejects the expired grant.
+        authorization_id = Path(authorization_rel).stem
+        with self.assertRaisesRegex(GitRuntimeError, "expired"):
+            RecoveryAuthorizationStore(self.repo).load(
+                authorization_id=authorization_id, require_active=False
+            )
+
+        # Recorded times are compared as parsed UTC instants, not as strings.
+        def zulu_issue_event(record):
+            first, second = record["status_events"]
+            first["occurred_at"] = "2026-01-01T00:00:00Z"
+            first["event_digest"] = self._event_digest(first)
+            second["previous_event_digest"] = first["event_digest"]
+            second["event_digest"] = self._event_digest(second)
+            self._reseal(record)
+
+        attestation, _, _ = self._tc017_case("zulu", tamper=zulu_issue_event)
+        self.assertEqual(self._tc017_resolve(attestation)[0].evidence_kind, RECOVERY_RECORD_KIND)
+
+    def test_tc017_historical_authorization_integrity_fails_closed(self):
+        def missing_event(record):
+            record["status_events"].pop()
+            self._reseal(record)
+
+        def bad_event_digest(record):
+            record["status_events"][1]["event_digest"] = "0" * 64
+            self._reseal(record)
+
+        def broken_link(record):
+            second = record["status_events"][1]
+            second["previous_event_digest"] = "0" * 64
+            second["event_digest"] = self._event_digest(second)
+            self._reseal(record)
+
+        def bad_sequence(record):
+            second = record["status_events"][1]
+            second["sequence"] = 3
+            second["event_digest"] = self._event_digest(second)
+            self._reseal(record)
+
+        def reordered(record):
+            record["status_events"].reverse()
+            self._reseal(record)
+
+        def extra_event(record):
+            second = record["status_events"][1]
+            third = {
+                "sequence": 3, "status": "CONSUMED", "occurred_at": "2026-01-01T00:07:00Z",
+                "actor": "RECOVERY_EXECUTOR", "reason": "FRESH_VERIFICATION_DISPATCH",
+                "previous_event_digest": second["event_digest"],
+            }
+            third["event_digest"] = self._event_digest(third)
+            record["status_events"].append(third)
+            self._reseal(record)
+
+        def projection(record):
+            record["status"] = "ACTIVE"
+            self._reseal(record)
+
+        def bad_grant_digest(record):
+            record["grant_digest"] = "0" * 64
+            self._reseal(record)
+
+        def bad_record_digest(record):
+            record["record_digest"] = "0" * 64
+
+        def unsealed_binding(record):
+            record["verification_command"] = "python -m pytest -q other.py"
+
+        def resealed(field, value):
+            def apply(record):
+                record[field] = value
+                self._reseal(record, grant=True)
+            return apply
+
+        now = datetime.now(timezone.utc)
+        cases = {
+            "tampered_event_digest": {"tamper": bad_event_digest},
+            "broken_previous_event_digest": {"tamper": broken_link},
+            "invalid_sequence": {"tamper": bad_sequence},
+            "out_of_order_events": {"tamper": reordered},
+            "missing_event": {"tamper": missing_event},
+            "extra_event": {"tamper": extra_event},
+            "inconsistent_status_projection": {"tamper": projection},
+            "tampered_grant_digest": {"tamper": bad_grant_digest},
+            "tampered_record_digest": {"tamper": bad_record_digest},
+            "binding_changed_without_digest_repair": {"tamper": unsealed_binding},
+            "active_authorization": {
+                "final_status": None,
+                "grant": {
+                    "issued_at": now.isoformat(),
+                    "expires_at": (now + timedelta(hours=1)).isoformat(),
+                },
+            },
+            "expired_active_authorization": {"final_status": None},
+            "expired_status": {"final_status": "EXPIRED"},
+            "revoked_status": {"final_status": "REVOKED"},
+            "consumed_before_issued": {"consumed_at": "2025-12-31T23:59:59Z"},
+            "consumed_at_expiry": {"consumed_at": "2026-01-02T00:00:00Z"},
+            "consumed_after_expiry": {"consumed_at": "2026-01-02T00:00:01Z"},
+            "expires_not_after_issued": {
+                "grant": {"expires_at": "2026-01-01T00:00:00+00:00"},
+                "consumed_at": "2026-01-01T00:00:00Z",
+            },
+            "wrong_issuer": {"tamper": resealed("issuer", "RECOVERY_EXECUTOR")},
+            "wrong_purpose": {"tamper": resealed("purpose", "OTHER_CAPABILITY")},
+            "not_one_time": {"tamper": resealed("one_time", False)},
+            "wrong_authorization_id": {"tamper": resealed("authorization_id", "AUTH-OTHER")},
+            "wrong_attempt_id": {"tamper": resealed("attempt_id", "attempt-other")},
+            "wrong_target_task_id": {"tamper": resealed("target_task_id", "TC009")},
+            "wrong_target_checkpoint": {"tamper": resealed("target_checkpoint", "0" * 40)},
+            "wrong_task_contract_digest": {"tamper": resealed("task_contract_digest", "e" * 64)},
+            "wrong_verification_command": {
+                "tamper": resealed("verification_command", "python -m pytest -q other.py"),
+            },
+            "wrong_target_original_evidence": {
+                "tamper": resealed(
+                    "target_original_evidence", ".sdd/evidence/20260101T999999.000000Z-TC008.json"
+                ),
+            },
+            "wrong_recovery_operation": {
+                "grant": {"recovery_operation_id": "RECOVERY-TC009-ORDINARY-EVIDENCE-001"},
+            },
+            "missing_authorization": {"write_authorization": False},
+            "unreadable_authorization": {"tamper": lambda record: "::: [not yaml\n"},
+            "uncommitted_authorization": {"commit_authorization": False},
+        }
+        for name, options in cases.items():
+            with self.subTest(case=name):
+                attestation, _, _ = self._tc017_case(name, **options)
+                with self.assertRaisesRegex(GitRuntimeError, self.TC017_SCOPE_ERROR):
+                    self._tc017_resolve(attestation)
+
+        with self.subTest(case="authorization_modified_in_working_copy"):
+            attestation, _, authorization_rel = self._tc017_case("working_copy")
+            self._tc017_resolve(attestation)
+            path = self.repo / authorization_rel
+            path.write_text(path.read_text(encoding="utf-8") + "# drift\n", encoding="utf-8")
+            with self.assertRaisesRegex(GitRuntimeError, self.TC017_SCOPE_ERROR):
+                self._tc017_resolve(attestation)
+
+    def test_tc017_bound_evidence_scope_and_content_fail_closed(self):
+        def suffix(name, rel):
+            return rel.format(name=name)
+
+        cases = {
+            "other_evidence_path": {
+                "include_original": False,
+                "extra_files": {".sdd/evidence/arbitrary-{name}.json": "{}\n"},
+            },
+            "target_names_other_evidence_path": {
+                "include_original": False,
+                "extra_files": {".sdd/evidence/arbitrary-{name}.json": "{}\n"},
+                "target": ".sdd/evidence/arbitrary-{name}.json",
+            },
+            "two_extra_paths": {"extra_files": {".sdd/evidence/arbitrary-{name}.json": "{}\n"}},
+            "unrelated_governance_file": {
+                "include_original": False,
+                "extra_files": {".sdd/convergence/TC9{name}.yaml": "task_id: TC999\n"},
+                "target": ".sdd/convergence/TC9{name}.yaml",
+            },
+            "additional_production_file": {
+                "extra_files": {"sdd_orchestrator/tc017_{name}.py": "# extra\n"},
+            },
+            "additional_test_file": {"extra_files": {"tests/test_tc017_{name}.py": "# extra\n"}},
+            "wrong_task_evidence": {"original": {"task_id": "TC009"}},
+            "wrong_entry_head": {"original": {"entry_head": "0" * 40}},
+            "empty_envelope": {"original": {"stage07_envelope_id": " "}},
+            "failed_evidence": {"original": {"status": "FAIL"}},
+            "evidence_changed_paths_mismatch": {"original": {"changed_paths": []}},
+            "evidence_command_mismatch": {
+                "original": {"verification": [{"command": "python -m pytest -q other.py"}]},
+            },
+        }
+        for name, options in cases.items():
+            options = dict(options)
+            if "extra_files" in options:
+                options["extra_files"] = {
+                    suffix(name, rel): text for rel, text in options["extra_files"].items()
+                }
+            if "target" in options:
+                options["target"] = suffix(name, options["target"])
+            with self.subTest(case=name):
+                attestation, _, _ = self._tc017_case(name, **options)
+                with self.assertRaisesRegex(GitRuntimeError, self.TC017_SCOPE_ERROR):
+                    self._tc017_resolve(attestation)
+
+        with self.subTest(case="original_evidence_mutated_after_checkpoint"):
+            attestation, original, _ = self._tc017_case("committed_mutation")
+            self._tc017_resolve(attestation)
+            (self.repo / original).write_text('{"mutated": true}\n', encoding="utf-8")
+            self._git("add", "-f", original)
+            self._git("commit", "-m", "test: mutate historical evidence")
+            with self.assertRaisesRegex(GitRuntimeError, self.TC017_SCOPE_ERROR):
+                self._tc017_resolve(attestation)
+
+        with self.subTest(case="original_evidence_mutated_in_working_copy"):
+            attestation, original, _ = self._tc017_case("working_mutation")
+            self._tc017_resolve(attestation)
+            (self.repo / original).write_text('{"mutated": true}\n', encoding="utf-8")
+            with self.assertRaisesRegex(GitRuntimeError, self.TC017_SCOPE_ERROR):
+                self._tc017_resolve(attestation)
+
+    def test_tc017_live_recovery_evidence_resolves_without_side_effects(self):
+        def snapshot():
+            digests = {}
+            for root in (".sdd/state", ".sdd/authorizations", ".sdd/evidence"):
+                for path in sorted((SOURCE_ROOT / root).rglob("*")):
+                    if path.is_file():
+                        digests[path.relative_to(SOURCE_ROOT).as_posix()] = hashlib.sha256(
+                            path.read_bytes()
+                        ).hexdigest()
+            return digests
+
+        before = snapshot()
+        manager = RecoveryManager(SOURCE_ROOT)
+        expected = {
+            "TC008": (
+                ".sdd/evidence/20261005T053700.467476Z-TC008-recovery-"
+                "RECOVERY-ATTEMPT-TC008-20261005T012644959809Z.json",
+                "6cbb7df678a671493520fa0f6abaddcc9bf61557",
+                "92f768ecdc0dba042802e310ee8e154999983dab",
+                "43014b4d1ad39dd2a6a15645d549dab92afd751fee1420be084ff3de103895cf",
+            ),
+            "TC009": (
+                ".sdd/evidence/20261005T065925.541369Z-TC009-recovery-"
+                "RECOVERY-ATTEMPT-TC009-20261005T065553888535Z.json",
+                "81b95bc0a6e659ede01149041309d5eb298abbef",
+                "4c5ace430c394fbe146a3d0d0d7038aab8c69433",
+                "c284ce0989b6eedbb08f1faa84ced16d13152fd1ef2fa8c76467b94916c0f684",
+            ),
+            "TC010": (
+                ".sdd/evidence/20261005T071305.427470Z-TC010-recovery-"
+                "RECOVERY-ATTEMPT-TC010-20261005T070821856445Z.json",
+                "694cc04e42072b3819c97735421908de08ed3076",
+                "70d4367e961b8e4ca5eb694873e112656fb9e556",
+                "fcbf9f05c499d1e513d9a70032ad8150dca8ad18cac25b6a4ad55171a83e7251",
+            ),
+            "TC011": (
+                ".sdd/evidence/20261005T072222.296698Z-TC011-recovery-"
+                "RECOVERY-ATTEMPT-TC011-20261005T071916956540Z.json",
+                "840034da3c598729780524a7bce9528af31fae50",
+                "ce1ac3680a5a13be324bb1f3f20ff57324177548",
+                "7118e428a154da4d5135eab45ca01d17a78070891268ae0ffb7cfc50f193c215",
+            ),
+        }
+        for task_id, (rel, checkpoint, commit, digest) in expected.items():
+            with self.subTest(task=task_id):
+                binding, path, evidence_commit = manager._resolve_evidence(
+                    manager._task(task_id), rel
+                )
+                self.assertEqual(binding.evidence_kind, RECOVERY_RECORD_KIND)
+                self.assertEqual(binding.implementation_checkpoint, checkpoint)
+                self.assertEqual((path, evidence_commit), (rel, commit))
+                self.assertEqual(binding.evidence_record_sha256, digest)
+
+        tc008 = manager._task("TC008")
+        tc008_rel = expected["TC008"][0]
+        current = manager._resolve_evidence(tc008, tc008_rel)
+        with self._frozen_clock(datetime(2027, 10, 6, tzinfo=timezone.utc)):
+            self.assertEqual(manager._resolve_evidence(tc008, tc008_rel), current)
+
+        binding, _, commit = manager._resolve_evidence(
+            manager._task("TC007"), ".sdd/evidence/20260924T014632.311701Z-TC007.json"
+        )
+        self.assertEqual(binding.evidence_kind, "ORDINARY_STAGE08")
+        self.assertEqual(
+            binding.evidence_record_sha256,
+            "249c6c35790e2ab70f2a2644e02fe133cf2a6a90a719452c6085a3c9edd85198",
+        )
+        self.assertEqual(commit, "d597f6b6ba4facfd411d44f939ce5d94c13e26ca")
+
+        for task_id, rel in {
+            "TC008": ".sdd/evidence/20260924T103204.2963462Z-TC008.json",
+            "TC009": ".sdd/evidence/20260924T153812.4217508Z-TC009.json",
+            "TC010": ".sdd/evidence/20260924T155644.2073715Z-TC010.json",
+            "TC011": ".sdd/evidence/20260924T081605.981214Z-TC011.json",
+        }.items():
+            with self.subTest(original=task_id):
+                with self.assertRaisesRegex(GitRuntimeError, "VERIFICATION_FAILED"):
+                    manager._resolve_evidence(manager._task(task_id), rel)
+
+        self.assertEqual(snapshot(), before)
 
     def test_failure_journal_preserves_facts_and_filters_routes(self):
         journal = JsonFailureJournal(self.repo / ".sdd" / "failures.json")

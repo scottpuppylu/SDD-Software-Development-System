@@ -18,9 +18,13 @@ import yaml
 from .evidence_writer import (
     ImplementationQualificationBinding,
     InvalidEvidence,
+    RECOVERY_AUTHORIZATION_RECORD_KIND,
+    RECOVERY_AUTHORIZATION_SCHEMA_VERSION,
     RECOVERY_CAPABILITY,
     RecoveryAuthorization,
+    _parse_utc,
     assemble_recovery_authorization,
+    canonical_sha256,
     implementation_qualification_binding,
 )
 from .task_parser import AtomicTask, TaskFileParser
@@ -720,13 +724,212 @@ class RecoveryManager:
             changed = payload.get("checkpoint_changed_paths")
             if changed != self.git.commit_paths(checkpoint):
                 raise GitRuntimeError("Recovery evidence checkpoint content binding is stale")
-            if set(changed) - set(task.allowed_paths):
+            extra = sorted(set(changed) - set(task.allowed_paths))
+            if extra and (
+                len(extra) != 1
+                or not self._bound_original_evidence_valid(
+                    extra[0], changed, task, payload, checkpoint
+                )
+            ):
                 raise GitRuntimeError("Recovery checkpoint exceeds task allowed paths")
             if payload.get("checkpoint_tree") != self.git.tree_identity(checkpoint):
                 raise GitRuntimeError("Recovery checkpoint tree identity mismatch")
             if payload.get("checkpoint_diff_sha256") != self.git.commit_diff_digest(checkpoint):
                 raise GitRuntimeError("Recovery checkpoint diff identity mismatch")
         return binding, rel, evidence_commit
+
+    def _bound_original_evidence_valid(
+        self,
+        evidence_path: str,
+        changed: list[str],
+        task: AtomicTask,
+        payload: Mapping[str, Any],
+        checkpoint: str,
+    ) -> bool:
+        """Admit only the exact original Stage08 evidence bound by a consumed grant."""
+        authorization = self._historical_consumed_authorization(payload)
+        if authorization is None:
+            return False
+        task_id = task.task_id
+        normalized = Path(evidence_path).as_posix()
+        expected_name = re.compile(
+            rf"^\.sdd/evidence/\d{{8}}T\d{{6}}(?:\.\d+)?Z-{re.escape(task_id)}\.json$"
+        )
+        if (
+            normalized != evidence_path
+            or normalized != authorization.target_original_evidence
+            or not expected_name.fullmatch(normalized)
+            or authorization.target_task_id != task_id
+            or payload.get("task_id") != task_id
+            or authorization.target_checkpoint != checkpoint
+            or payload.get("checkpoint_commit") != checkpoint
+            or authorization.task_contract_digest != payload.get("task_contract_sha256")
+            or authorization.verification_command != payload.get("verification_command")
+            or not authorization.recovery_operation_id.startswith(f"RECOVERY-{task_id}-")
+        ):
+            return False
+        parents = self.git.commit_parents(checkpoint)
+        if len(parents) != 1:
+            return False
+        target = self.repo_root / normalized
+        if not target.is_file() or target.is_symlink():
+            return False
+        checkpoint_blob = self.git.committed_blob_identity(normalized, checkpoint)
+        if (
+            checkpoint_blob is None
+            or checkpoint_blob != self.git.committed_blob_identity(normalized, "HEAD")
+            or checkpoint_blob != self.git.working_blob_identity(normalized)
+        ):
+            return False
+        try:
+            evidence = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return False
+        if not isinstance(evidence, dict):
+            return False
+        verification = evidence.get("verification")
+        if not isinstance(verification, list):
+            return False
+        commands = [item.get("command") for item in verification if isinstance(item, Mapping)]
+        evidence_changed = evidence.get("changed_paths")
+        if not isinstance(evidence_changed, list) or not all(
+            isinstance(path, str) for path in evidence_changed
+        ):
+            return False
+        remaining = sorted(path for path in changed if path != normalized)
+        envelope_id = evidence.get("stage07_envelope_id")
+        return (
+            evidence.get("schema_version") == "1.0"
+            and evidence.get("stage") == "08"
+            and evidence.get("task_id") == task_id
+            and evidence.get("status") == "PASS"
+            and evidence.get("entry_head") == parents[0]
+            and isinstance(envelope_id, str)
+            and bool(envelope_id.strip())
+            and commands == [authorization.verification_command]
+            and sorted(evidence_changed) == remaining
+            and set(remaining) <= set(task.allowed_paths)
+        )
+
+    def _historical_consumed_authorization(
+        self, payload: Mapping[str, Any]
+    ) -> RecoveryAuthorization | None:
+        """Return a repository-backed CONSUMED grant whose history is intact.
+
+        Historical qualification must not depend on the current wall clock, so
+        validate() and load() are deliberately not used; only recorded times are
+        compared with each other.
+        """
+        authorization_id = payload.get("authorization_id")
+        if not isinstance(authorization_id, str):
+            return None
+        try:
+            store = RecoveryAuthorizationStore(self.repo_root)
+            rel = store.relative_path(authorization_id)
+            path = self.repo_root / rel
+            if not path.is_file() or path.is_symlink():
+                return None
+            commit = self.git.latest_commit_for_path(rel)
+            if not commit or not self.git.is_ancestor(commit):
+                return None
+            committed_blob = self.git.committed_blob_identity(rel, "HEAD")
+            if committed_blob is None or committed_blob != self.git.working_blob_identity(rel):
+                return None
+            authorization = store._read(path)
+
+            required = (
+                "schema_version", "record_kind", "authorization_id", "attempt_id",
+                "issuer", "issuer_role", "issuer_approval_reference", "purpose",
+                "issued_at", "expires_at", "repository", "branch", "baseline",
+                "recovery_operation_id", "target_task_id", "task_contract_digest",
+                "target_checkpoint", "target_original_evidence", "verification_command",
+                "verification_command_source", "runtime_checkpoint", "runtime_evidence",
+                "spec_version", "design_version", "authority_policy_version",
+                "grant_digest", "record_digest",
+            )
+            if any(
+                not isinstance(getattr(authorization, name), str)
+                or not getattr(authorization, name).strip()
+                for name in required
+            ):
+                return None
+            if (
+                authorization.schema_version != RECOVERY_AUTHORIZATION_SCHEMA_VERSION
+                or authorization.record_kind != RECOVERY_AUTHORIZATION_RECORD_KIND
+                or authorization.issuer != "PROJECT_AUTHORITY"
+                or authorization.issuer_role != "PROJECT_AUTHORITY"
+                or authorization.purpose != RECOVERY_CAPABILITY
+                or authorization.one_time is not True
+                or authorization.status != "CONSUMED"
+                or authorization.authorization_id != authorization_id
+                or authorization.attempt_id != payload.get("attempt_id")
+            ):
+                return None
+            if (
+                not re.fullmatch(r"[A-Za-z0-9_.-]+", authorization.authorization_id)
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+", authorization.attempt_id)
+                or not re.fullmatch(r"[0-9a-f]{40}", authorization.target_checkpoint)
+                or not re.fullmatch(r"[0-9a-f]{40}", authorization.baseline)
+                or not re.fullmatch(r"[0-9a-f]{40}", authorization.runtime_checkpoint)
+                or not re.fullmatch(r"[0-9a-f]{64}", authorization.task_contract_digest)
+            ):
+                return None
+            if not authorization.authority_versions or any(
+                not path_name.strip() or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                for path_name, digest in authorization.authority_versions
+            ):
+                return None
+            if not authorization.allowed_artifact_paths or any(
+                not str(item).startswith(".sdd/") or ".." in Path(item).parts
+                for item in authorization.allowed_artifact_paths
+            ):
+                return None
+            if not authorization.prohibited_operations or not authorization.checkpoint_conditions:
+                return None
+
+            events = authorization.status_events
+            expected_events = (
+                ("ACTIVE", "PROJECT_AUTHORITY", "ISSUED"),
+                ("CONSUMED", "RECOVERY_EXECUTOR", "FRESH_VERIFICATION_DISPATCH"),
+            )
+            if len(events) != len(expected_events):
+                return None
+            previous: str | None = None
+            for index, (event, (status, actor, reason)) in enumerate(
+                zip(events, expected_events), start=1
+            ):
+                body = {key: value for key, value in event.items() if key != "event_digest"}
+                sequence = event.get("sequence")
+                if (
+                    type(sequence) is not int
+                    or sequence != index
+                    or event.get("status") != status
+                    or event.get("actor") != actor
+                    or event.get("reason") != reason
+                    or event.get("previous_event_digest") != previous
+                    or event.get("event_digest") != canonical_sha256(body)
+                ):
+                    return None
+                previous = event["event_digest"]
+            if events[-1].get("status") != authorization.status:
+                return None
+            if authorization.grant_digest != canonical_sha256(authorization.grant_payload()):
+                return None
+            if authorization.record_digest != canonical_sha256({
+                key: value for key, value in authorization.to_record().items()
+                if key != "record_digest"
+            }):
+                return None
+
+            issued = _parse_utc(authorization.issued_at, "issued_at")
+            expires = _parse_utc(authorization.expires_at, "expires_at")
+            activated = _parse_utc(str(events[0].get("occurred_at", "")), "occurred_at")
+            consumed = _parse_utc(str(events[1].get("occurred_at", "")), "occurred_at")
+            if expires <= issued or activated != issued or not issued <= consumed < expires:
+                return None
+        except (GitRuntimeError, InvalidEvidence, AttributeError, KeyError, TypeError, ValueError):
+            return None
+        return authorization
 
     def _record(
         self,

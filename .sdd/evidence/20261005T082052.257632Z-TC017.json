@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "TC017",
+  "title": "Repair state-side SPEC-017 recovery evidence checkpoint scope classification",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/git_runtime.py",
+    "tests/test_m5_git_recovery.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m5_git_recovery.py",
+      "returncode": 0,
+      "stdout": "..............................                                                         [100%]\n30 passed, 58 subtests passed in 398.34s (0:06:38)\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "TC017 bounded Stage08 implementation completed by Claude Code (Codex unavailable).",
+    "stderr": ""
+  },
+  "recorded_at": "20261005T082052.257632Z",
+  "entry_head": "819464ef3fe4231bdd4b9ab36d935a56f1d77b54",
+  "stage07_envelope_id": "2655fce17d1a9a8f04a171ca733c768d7dbadee5ed230d3c9b7c330a27e38af4",
+  "stage07_report_sha256": "f08784a3cefc50b2c772319f1498bbab541bc3bcbb839a9bd7fc722362a288ab",
+  "allowed_file_boundary": "VALID",
+  "worker": {
+    "model": "CLAUDE_CODE",
+    "codex_invoked": false,
+    "codex_quota_available": false,
+    "role_combination_acknowledged": true,
+    "independent_post_implementation_review_required": true
+  },
+  "governance": {
+    "profile": "SDD_STRICT",
+    "implementation_scope": [
+      "sdd_orchestrator/git_runtime.py",
+      "tests/test_m5_git_recovery.py"
+    ],
+    "implementation_state_mutated": false,
+    "qualification_state_reconciled": false,
+    "recovery_authorization_created_or_consumed": false,
+    "stage09_executed": false,
+    "stage10_executed": false,
+    "final_qualification_declared": false
+  }
+}
