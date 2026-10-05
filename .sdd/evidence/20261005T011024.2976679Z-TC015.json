@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "TC015",
+  "title": "Repair SPEC-017 historical checkpoint scope classification",
+  "status": "PASS",
+  "entry_head": "993fa391501a25b4282f1e62882a1651447e6546",
+  "stage07_envelope_id": "b47c76b7399f6044235f89e57452cfe54c20ecfa3fa8c2e443aeeabd582b9315",
+  "changed_paths": [
+    "sdd_orchestrator/codex_adapter.py",
+    "tests/test_m6_codex_adapter.py"
+  ],
+  "allowed_file_boundary": "VALID",
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m6_codex_adapter.py",
+      "returncode": 0,
+      "summary": "81 passed, 1 warning, 24 subtests passed in 971.35s (0:16:11)",
+      "duration_seconds": 971.35,
+      "termination": "NATURAL",
+      "passed": true
+    }
+  ],
+  "semantic_validation": {
+    "atomic_stage08_evidence_identity_bound": true,
+    "generic_evidence_allowlist_added": false,
+    "normal_task_scope_validation_preserved": true,
+    "tc008_historical_checkpoint_scope_valid": true,
+    "other_task_evidence_rejected": true,
+    "wrong_evidence_digest_rejected": true,
+    "arbitrary_evidence_path_rejected": true,
+    "unrelated_governance_artifact_rejected": true,
+    "extra_source_test_path_rejected": true,
+    "checkpoint_substitution_rejected": true,
+    "recovery_operation_substitution_rejected": true,
+    "old_tc008_authorization_status": "CONSUMED",
+    "old_tc008_authorization_reused": false,
+    "historical_checkpoint_mutated": false,
+    "historical_evidence_mutated": false,
+    "security_invariants_preserved": true
+  },
+  "governance": {
+    "profile": "SDD_STRICT",
+    "implementation_scope": [
+      "sdd_orchestrator/codex_adapter.py",
+      "tests/test_m6_codex_adapter.py"
+    ],
+    "implementation_state_mutated": false,
+    "qualification_state_reconciled": false,
+    "tc008_new_authorization_issued": false,
+    "tc008_recovery_executed": false,
+    "stage09_executed": false,
+    "stage10_executed": false
+  },
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "81 passed, 1 warning, 24 subtests passed in 971.35s (0:16:11)",
+    "final_stderr": ""
+  },
+  "recorded_at": "20261005T011024.2976679Z"
+}

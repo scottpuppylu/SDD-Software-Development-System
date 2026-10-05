@@ -410,6 +410,100 @@ class Stage08CodexRunner:
                 raise CodexAdapterError("EVIDENCE_MISMATCH: historical evidence does not bind task and command")
         return task
 
+    def _historical_checkpoint_scope_valid(
+        self,
+        changed_paths: list[str],
+        task: AtomicTask,
+        authorization: RecoveryAuthorization,
+        checkpoint: str,
+        checkpoint_parent: str,
+        current_head: str,
+    ) -> bool:
+        """Classify one historical Stage08 checkpoint without widening task scope."""
+        if not changed_paths or checkpoint != authorization.checkpoint_commit:
+            return False
+        evidence_paths = [
+            path for path in changed_paths if not self._covered(path, task.allowed_paths)
+        ]
+        if not evidence_paths:
+            return True
+        if evidence_paths != [authorization.target_original_evidence]:
+            return False
+        return self._bound_atomic_stage08_evidence_valid(
+            evidence_paths[0], changed_paths, task, authorization,
+            checkpoint, checkpoint_parent, current_head,
+        )
+
+    def _bound_atomic_stage08_evidence_valid(
+        self,
+        evidence_path: str,
+        checkpoint_paths: list[str],
+        task: AtomicTask,
+        authorization: RecoveryAuthorization,
+        checkpoint: str,
+        checkpoint_parent: str,
+        current_head: str,
+    ) -> bool:
+        """Validate the one exact ordinary Stage08 evidence artifact bound to recovery."""
+        normalized = Path(evidence_path).as_posix()
+        expected_name = re.compile(
+            rf"^\.sdd/evidence/\d{{8}}T\d{{6}}(?:\.\d+)?Z-{re.escape(task.task_id)}\.json$"
+        )
+        if (
+            normalized != Path(authorization.target_original_evidence).as_posix()
+            or not expected_name.fullmatch(normalized)
+            or authorization.target_task_id != task.task_id
+            or authorization.checkpoint_commit != checkpoint
+            or task_contract_sha256(task) != authorization.task_contract_sha256
+            or not authorization.recovery_operation_id.startswith(
+                f"RECOVERY-{task.task_id}-"
+            )
+        ):
+            return False
+
+        target = self.repo_root / normalized
+        if not target.is_file() or target.is_symlink():
+            return False
+        checkpoint_blob = self.git.committed_blob_identity(normalized, checkpoint)
+        current_blob = self.git.committed_blob_identity(normalized, current_head)
+        working_blob = self.git.working_blob_identity(normalized)
+        if (
+            checkpoint_blob is None
+            or checkpoint_blob != current_blob
+            or checkpoint_blob != working_blob
+        ):
+            return False
+        try:
+            evidence = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return False
+        if not isinstance(evidence, dict):
+            return False
+        commands = [
+            item.get("command") for item in evidence.get("verification", [])
+            if isinstance(item, dict)
+        ]
+        evidence_changed_paths = evidence.get("changed_paths")
+        ordinary_checkpoint_paths = sorted(
+            path for path in checkpoint_paths if path != normalized
+        )
+        return (
+            evidence.get("schema_version") == "1.0"
+            and evidence.get("stage") == "08"
+            and evidence.get("task_id") == task.task_id
+            and evidence.get("status") == "PASS"
+            and evidence.get("entry_head") == checkpoint_parent
+            and isinstance(evidence.get("stage07_envelope_id"), str)
+            and bool(evidence["stage07_envelope_id"].strip())
+            and commands == [authorization.verification_command]
+            and isinstance(evidence_changed_paths, list)
+            and sorted(evidence_changed_paths) == ordinary_checkpoint_paths
+            and all(
+                self._covered(path, task.allowed_paths)
+                for path in ordinary_checkpoint_paths
+            )
+        )
+
     def recover_post_checkpoint_evidence(
         self,
         authorization_id: str,
@@ -490,8 +584,8 @@ class Stage08CodexRunner:
         if self._checkpoint_subject_task_id(subject) != task.task_id:
             return RecoveryQualification(False, "TASK_MISMATCH")
         changed_paths = sorted(self.git.commit_paths(checkpoint))
-        if not changed_paths or any(
-            not self._covered(path, task.allowed_paths) for path in changed_paths
+        if not self._historical_checkpoint_scope_valid(
+            changed_paths, task, authorization, checkpoint, parents[0], before.head_commit
         ):
             return RecoveryQualification(False, "SCOPE_MISMATCH")
 

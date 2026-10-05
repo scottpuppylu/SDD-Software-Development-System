@@ -369,6 +369,83 @@ class M6CodexAdapterTests(unittest.TestCase):
             runner._resolve_recovery_target(valid)
         state_path.write_text(original_state, encoding="utf-8")
         self.assertEqual(state_path.read_text(encoding="utf-8"), original_state)
+
+    def test_historical_checkpoint_scope_accepts_only_exact_bound_stage08_evidence(self):
+        repo = SOURCE
+        runner = Stage08CodexRunner(Orchestrator(repo), heartbeat_seconds=0)
+        consumed = runner.recovery_authorizations.load(
+            authorization_id="RECOVERY-AUTH-TC008-20261005T002258330057Z",
+            require_active=False,
+        )
+        self.assertEqual(consumed.status, "CONSUMED")
+
+        grant = consumed.grant_payload()
+        grant.update({
+            "authorization_id": "TC015-TEST-AUTH-TC008",
+            "attempt_id": "TC015-TEST-ATTEMPT-TC008",
+            "issued_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        })
+        authorization = assemble_recovery_authorization(grant)
+        task = runner._resolve_recovery_target(authorization)
+        checkpoint = "6cbb7df678a671493520fa0f6abaddcc9bf61557"
+        parent = "71a44e1640d001270b592d70f0069856cb202d70"
+        current_head = run_git(repo, "rev-parse", "HEAD")
+        evidence = ".sdd/evidence/20260924T103204.2963462Z-TC008.json"
+        task_path = "tests/test_m41_runner_context_integration.py"
+        valid_paths = [evidence, task_path]
+
+        self.assertTrue(runner._historical_checkpoint_scope_valid(
+            [task_path], task, authorization, checkpoint, parent, current_head
+        ))
+        self.assertTrue(runner._historical_checkpoint_scope_valid(
+            valid_paths, task, authorization, checkpoint, parent, current_head
+        ))
+        for invalid_path in (
+            ".sdd/evidence/20260924T103204.2963462Z-TC009.json",
+            ".sdd/evidence/arbitrary-TC008.json",
+            ".sdd/state/project-state.yaml",
+            "tests/test_unrelated.py",
+            "sdd_orchestrator/unrelated.py",
+        ):
+            with self.subTest(invalid_path=invalid_path):
+                self.assertFalse(runner._historical_checkpoint_scope_valid(
+                    [task_path, invalid_path], task, authorization,
+                    checkpoint, parent, current_head,
+                ))
+
+        committed_blob_identity = runner.git.committed_blob_identity
+
+        def wrong_current_blob(path, commit="HEAD"):
+            if path == evidence and commit == current_head:
+                return "0" * 40
+            return committed_blob_identity(path, commit)
+
+        with patch.object(
+            runner.git, "committed_blob_identity", side_effect=wrong_current_blob
+        ):
+            self.assertFalse(runner._historical_checkpoint_scope_valid(
+                valid_paths, task, authorization, checkpoint, parent, current_head
+            ))
+
+        self.assertFalse(runner._historical_checkpoint_scope_valid(
+            valid_paths, task, authorization, "f" * 40, parent, current_head
+        ))
+        wrong_operation_grant = authorization.grant_payload()
+        wrong_operation_grant["authorization_id"] = "TC015-TEST-WRONG-OPERATION"
+        wrong_operation_grant["attempt_id"] = "TC015-TEST-WRONG-OPERATION-ATTEMPT"
+        wrong_operation_grant["recovery_operation_id"] = "RECOVERY-TC009-001"
+        wrong_operation = assemble_recovery_authorization(wrong_operation_grant)
+        self.assertFalse(runner._historical_checkpoint_scope_valid(
+            valid_paths, task, wrong_operation, checkpoint, parent, current_head
+        ))
+        self.assertEqual(
+            runner.recovery_authorizations.load(
+                authorization_id=consumed.authorization_id, require_active=False
+            ).status,
+            "CONSUMED",
+        )
+
     def test_task_parser_extracts_scope_and_verification(self):
         text = '''\n### T001 — Add calculator\n- **Status:** TODO\n- **Traceability:** FR-001 → SPEC-001 → DES-001\n- **Allowed files:** `src/calculator.py`, `tests/test_calculator.py`\n- **Implementation Scope:** Implement the calculator task within the declared files.\n- **Verification Commands:** `python -m pytest -q`\n'''
         task = TaskFileParser(text).parse()[0]
