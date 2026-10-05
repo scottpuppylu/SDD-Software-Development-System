@@ -1,0 +1,76 @@
+schema_version: '1.0'
+record_kind: SPEC017_RECOVERY_AUTHORIZATION
+authorization_id: RECOVERY-AUTH-TC008-20261005T012644959809Z
+attempt_id: RECOVERY-ATTEMPT-TC008-20261005T012644959809Z
+issuer: PROJECT_AUTHORITY
+issuer_role: PROJECT_AUTHORITY
+issuer_approval_reference: AGENTS.md#sha256:4631d00d71e8d1e0636c6a555cc43a58ba3cd78cd85766915eea9f37b6353d48
+purpose: POST_CHECKPOINT_IMPLEMENTATION_EVIDENCE_RECOVERY
+status: ACTIVE
+one_time: true
+issued_at: '2026-10-05T01:26:44.959809+00:00'
+expires_at: '2026-10-06T01:26:44.959809+00:00'
+repository: C:\Users\user\Documents\ChatGPT\SDD-Software-Development-System-v1.1.7
+branch: telemetry-measurement-v2
+baseline: db417ad072bf907ca86c181460d67e3db2de1a7a
+recovery_operation_id: RECOVERY-TC008-ORDINARY-EVIDENCE-001
+target_task_id: TC008
+task_contract_digest: 421f8c45756262bc8a53c2e0406baef865eb2577f2e506950d29d4778bb2a16f
+target_checkpoint: 6cbb7df678a671493520fa0f6abaddcc9bf61557
+target_original_evidence: .sdd/evidence/20260924T103204.2963462Z-TC008.json
+verification_command: .\.venv\Scripts\python.exe -m pytest -q tests/test_m41_runner_context_integration.py
+verification_command_source: .sdd/convergence/TC008.yaml
+runtime_checkpoint: db417ad072bf907ca86c181460d67e3db2de1a7a
+runtime_evidence: .sdd/evidence/20261005T011024.2976679Z-TC015.json
+spec_version: SPEC-017
+design_version: DES-017
+authority_policy_version: AGENTS.md#9.1
+authority_versions:
+- - docs/PRD.md
+  - 3ce7acae7acfa966990eebc89fe1a18ac8426c67f6db618f0b7e27f560fd89cb
+- - docs/spec.md
+  - b3d4f3c5d657fee1f2e1984f3c820c283d33f67120de81b38dee55dd7effc9aa
+- - docs/Design.md
+  - 5bf1f9beab6f91943672d9afd55af575e583377f31c4545143ca1b387c8f0d79
+- - AGENTS.md
+  - 4631d00d71e8d1e0636c6a555cc43a58ba3cd78cd85766915eea9f37b6353d48
+- - tasks.md
+  - 528650343aa31cddad8475511f5f6b5cb29a70e039c423797fb73be5b2db1814
+allowed_artifact_paths:
+- .sdd/authorizations/recovery/RECOVERY-AUTH-TC008-20261005T012644959809Z.yaml
+- .sdd/runs/RECOVERY-TC008-ORDINARY-EVIDENCE-001/RECOVERY-ATTEMPT-TC008-20261005T012644959809Z/
+- .sdd/evidence/
+prohibited_operations:
+- PRODUCTION_CODE_MUTATION
+- TEST_MUTATION
+- HISTORICAL_EVIDENCE_MUTATION
+- TASK_STATUS_MUTATION
+- IMPLEMENTATION_STATE_RECONCILIATION
+- QUALIFICATION_STATE_RECONCILIATION
+- TC007_REPAIR
+- TC009_TC011_RECOVERY
+- TC015_TC014_TC013_TC012_FINALIZATION
+- STAGE09
+- STAGE10
+- COMMAND_SUBSTITUTION
+- CHECKPOINT_SUBSTITUTION
+- EVIDENCE_SUBSTITUTION
+allow_persistence_only_resume: false
+checkpoint_conditions:
+- authorization_consumed_before_fresh_verification
+- exact_verification_command_executed
+- verification_pass
+- scope_respected
+- implementation_unchanged
+- append_only_recovery_attestation_valid
+- evidence_checkpoint_paths_authorized
+grant_digest: 89de70eb891eb8d0deae8b4c2bd4ad4a54ed6e43c4cf8c29027d62167d49a193
+status_events:
+- sequence: 1
+  status: ACTIVE
+  occurred_at: '2026-10-05T01:26:44.959809+00:00'
+  actor: PROJECT_AUTHORITY
+  reason: ISSUED
+  previous_event_digest: null
+  event_digest: 32d13c066977626fa70184dd0fb8274b2f5322856a8d9b3181dacc665cd0661c
+record_digest: 5a4a55455f8aed8293b676e289eeea743e84d997bf43032b05b6481731c89575
