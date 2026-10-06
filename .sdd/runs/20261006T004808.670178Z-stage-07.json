@@ -1,0 +1,62 @@
+{
+  "request_summary": {
+    "stage_id": "07",
+    "stage_name": "PRE_IMPLEMENTATION_GATE",
+    "target_task": "TC018",
+    "baseline": "7998c5091b373bf02de3e660ed4ba79e196d3d88",
+    "artifact_paths": [
+      ".sdd/convergence/TC018.yaml",
+      "docs/handoff/pre-implementation-gate-report.md"
+    ],
+    "semantic_input_keys": [
+      "GIT_READINESS",
+      "REPOSITORY_STRUCTURE",
+      "TARGET_TASK",
+      "SPEC017_AUTHORIZATION_STORE_HISTORICAL_ENUMERATION",
+      "R6_STALE_ACTIVE_POLICY"
+    ]
+  },
+  "result": {
+    "status": "COMPLETED",
+    "result": "PASS",
+    "classification": null,
+    "metadata": {
+      "target_task": "TC018",
+      "authorized_baseline": "7998c5091b373bf02de3e660ed4ba79e196d3d88",
+      "implementation_authorization": true,
+      "governance_profile": "SDD_STRICT",
+      "risk_level": "HIGH",
+      "repair_classification": "RECOVERY_AUTHORIZATION_STORE_HISTORICAL_ENUMERATION_DEFECT",
+      "allowed_files": [
+        "sdd_orchestrator/git_runtime.py",
+        "tests/test_m5_git_recovery.py"
+      ],
+      "allowed_production_units": [
+        "RecoveryAuthorizationStore._active_records",
+        "RecoveryAuthorizationStore._validate_record_integrity"
+      ],
+      "verification_command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m5_git_recovery.py",
+      "verification_contract_independent": true,
+      "r6_stale_active_policy": "CONFIRMED_EXPIRED_ACTIVE_REMAINS_OPEN_FOR_CONFLICT_DETECTION",
+      "binding_clarification": "EXPIRES_AT_OPTIONAL_AS_IN_VALIDATE_WHEN_PRESENT_MUST_PARSE_AND_EXCEED_ISSUED_AT",
+      "global_validate_change_allowed": false,
+      "status_transition_behavior_allowed": false,
+      "current_clock_used_in_enumeration": false,
+      "project_state_mutated": false,
+      "recovery_authorization_issued": false,
+      "recovery_authorization_consumed": false,
+      "stage08_executed": false,
+      "implementation_state_mutated": false,
+      "tc012_tc017_finalization_blocked": true,
+      "stage09_executed": false,
+      "stage10_executed": false
+    }
+  },
+  "transition": {
+    "stage_id": "07",
+    "result": "PASS",
+    "next": "08",
+    "implementation_authorization": true,
+    "release_authorization": false
+  }
+}
