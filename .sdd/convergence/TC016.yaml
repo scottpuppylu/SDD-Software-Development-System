@@ -127,5 +127,5 @@ governance_reason: >-
   contains exactly three subjects matching the legacy form, TC009, TC010, and TC011.
 stage07_required: true
 tc009_authorization_still_blocked: true
-status: TODO
+status: DONE
 source_stage: 06

@@ -85,5 +85,5 @@ governance_reason: >-
   This task changes fail-closed classification at a protected SPEC-017 recovery
   execution boundary and must preserve exact evidence identity, replay protection,
   immutable history, and ordinary Stage08 scope semantics.
-status: TODO
+status: DONE
 source_stage: 06

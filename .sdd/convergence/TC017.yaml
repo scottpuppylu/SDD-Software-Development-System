@@ -203,5 +203,5 @@ governance_reason: >-
   historical qualification time-dependent, confirming the boundary's sensitivity.
 stage07_required: true
 reconciliation_still_blocked: true
-status: TODO
+status: DONE
 source_stage: 06

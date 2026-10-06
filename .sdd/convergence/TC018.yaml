@@ -164,5 +164,5 @@ governance_reason: >-
 stage07_required: true
 tc012_tc017_finalization_still_blocked: true
 stage09_still_blocked: true
-status: TODO
+status: DONE
 source_stage: 06

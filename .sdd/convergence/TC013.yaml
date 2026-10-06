@@ -48,5 +48,5 @@ dependencies:
   - tasks.md#11.2-11.5
   - tasks.md#11.8
 governance_profile: SDD_STRICT
-status: TODO
+status: DONE
 source_stage: 06

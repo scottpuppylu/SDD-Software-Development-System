@@ -28,5 +28,5 @@ verification_commands:
 dependencies:
   - TC011
 governance_profile: SDD_STANDARD
-status: TODO
+status: DONE
 source_stage: 09

@@ -1,10 +1,10 @@
 schema_version: '2.0'
 current_stage: 7
 current_branch: null
-last_completed_task: TC011
+last_completed_task: TC018
 current_task: null
 next_task: null
-last_verified_commit: 840034da3c598729780524a7bce9528af31fae50
+last_verified_commit: ccee185a362ed98e084679922115bb0fb7b055c8
 test_status:
   overall: PASS
   required_checks:
@@ -607,3 +607,108 @@ task_qualifications:
       sequence: 39
       recorded_at: '2026-10-05T07:22:22.296698Z'
       source_head: 40e9fc052c832742d6ce7dc2242a167fb35b3f92
+  TC012:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 6f3f91c005a17f70e6d4a808dc0aac5ea64358a9
+    evidence:
+      path: .sdd/evidence/20261001T004229.839108Z-TC012.json
+      kind: ORDINARY_STAGE08
+      record_sha256: 8c230ad4f9e79d4c2785c5fa655a09feebe135b708e32de4065201adf8fd5798
+      repository_commit: 6f3f91c005a17f70e6d4a808dc0aac5ea64358a9
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-TC012-8c230ad4f9e7
+      sequence: 40
+      recorded_at: 20261001T004229.839108Z
+      source_head: ccee185a362ed98e084679922115bb0fb7b055c8
+  TC013:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 1945f30794ec19f703f9f79369d4af1926ad648f
+    evidence:
+      path: .sdd/evidence/20261001T044244.555311Z-TC013.json
+      kind: ORDINARY_STAGE08
+      record_sha256: b98de2ec58f4cddb39b97c6acbde0d0d4b903d472ea2dafa1897d206103732c5
+      repository_commit: 1945f30794ec19f703f9f79369d4af1926ad648f
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-TC013-b98de2ec58f4
+      sequence: 41
+      recorded_at: 20261001T044244.555311Z
+      source_head: ccee185a362ed98e084679922115bb0fb7b055c8
+  TC014:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 8e75c38962832fcb8f74cc91f7c323c02e5126f4
+    evidence:
+      path: .sdd/evidence/20261004T234738.495022Z-TC014.json
+      kind: ORDINARY_STAGE08
+      record_sha256: c908b7c0488fd8dfde5921d6a9f0bd6b90dbe41f4c5110a86e1390c61cd095e3
+      repository_commit: 8e75c38962832fcb8f74cc91f7c323c02e5126f4
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-TC014-c908b7c0488f
+      sequence: 42
+      recorded_at: 20261004T234738.495022Z
+      source_head: ccee185a362ed98e084679922115bb0fb7b055c8
+  TC015:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: db417ad072bf907ca86c181460d67e3db2de1a7a
+    evidence:
+      path: .sdd/evidence/20261005T011024.2976679Z-TC015.json
+      kind: ORDINARY_STAGE08
+      record_sha256: 49f8b1ba5f33e1dfdd8caa0c1aa5d18b27a22bf65e0b36d4e6de44effadd5586
+      repository_commit: db417ad072bf907ca86c181460d67e3db2de1a7a
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-TC015-49f8b1ba5f33
+      sequence: 43
+      recorded_at: 20261005T011024.2976679Z
+      source_head: ccee185a362ed98e084679922115bb0fb7b055c8
+  TC016:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 3bea371945f20014fa6090982034f43037708efa
+    evidence:
+      path: .sdd/evidence/20261005T063847.998603Z-TC016.json
+      kind: ORDINARY_STAGE08
+      record_sha256: ce4cd3193d6c4d1af3dded050296e760ca9e2548b2d1f5230be575ac831f0a7d
+      repository_commit: 3bea371945f20014fa6090982034f43037708efa
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-TC016-ce4cd3193d6c
+      sequence: 44
+      recorded_at: 20261005T063847.998603Z
+      source_head: ccee185a362ed98e084679922115bb0fb7b055c8
+  TC017:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: 40e9fc052c832742d6ce7dc2242a167fb35b3f92
+    evidence:
+      path: .sdd/evidence/20261005T082052.257632Z-TC017.json
+      kind: ORDINARY_STAGE08
+      record_sha256: 4fe7843852d0fcebff253562db5d9f01698098ff04a25a151d506144ed88e365
+      repository_commit: 40e9fc052c832742d6ce7dc2242a167fb35b3f92
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-TC017-4fe7843852d0
+      sequence: 45
+      recorded_at: 20261005T082052.257632Z
+      source_head: ccee185a362ed98e084679922115bb0fb7b055c8
+  TC018:
+    status: IMPLEMENTATION_QUALIFIED
+    implementation_checkpoint: ccee185a362ed98e084679922115bb0fb7b055c8
+    evidence:
+      path: .sdd/evidence/20261006T010446.729245Z-TC018.json
+      kind: ORDINARY_STAGE08
+      record_sha256: 66843466a7b45e4f6676f3de40624a1c57c823f6a637da7d0e422f87af52178f
+      repository_commit: ccee185a362ed98e084679922115bb0fb7b055c8
+    verification:
+      outcome: PASS
+    reconciliation:
+      id: RECONCILE-TC018-66843466a7b4
+      sequence: 46
+      recorded_at: 20261006T010446.729245Z
+      source_head: ccee185a362ed98e084679922115bb0fb7b055c8

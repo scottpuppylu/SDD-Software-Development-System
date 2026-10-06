@@ -186,5 +186,5 @@ governance_reason: >-
   The task creates persistent Project-Authority security and governance state,
   one-time consumption semantics, and runtime execution authority for protected
   SPEC-017 recovery.
-status: TODO
+status: DONE
 source_stage: 06
