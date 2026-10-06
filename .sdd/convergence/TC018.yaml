@@ -1,0 +1,168 @@
+task_id: TC018
+title: Repair recovery authorization store historical record enumeration
+objective: >-
+  Make RecoveryAuthorizationStore enumeration validate every stored recovery
+  authorization's non-clock integrity instead of its present-time execution
+  validity, so historical CONSUMED, REVOKED, or EXPIRED records past expires_at no
+  longer break issue(), load(), or consume(), while ACTIVE grants keep full time,
+  runtime, and binding enforcement and integrity failures still fail closed.
+behavior_scope: >-
+  RecoveryAuthorizationStore._active_records() enumeration only, plus one new
+  private RecoveryAuthorizationStore._validate_record_integrity(record) helper in
+  sdd_orchestrator/git_runtime.py. Do not change RecoveryAuthorization.validate(),
+  load(), consume(), issue(), _persist(), _read(), relative_path(),
+  _approval_reference_valid(), any RecoveryManager behavior, or the recovery
+  executor.
+task_class: RECOVERY_AUTHORIZATION_STORE_HISTORICAL_ENUMERATION_DEFECT
+repair_classification: RECOVERY_AUTHORIZATION_STORE_HISTORICAL_ENUMERATION_DEFECT
+root_cause: >-
+  RECOVERY_AUTHORIZATION_STORE_HISTORICAL_ENUMERATION_DEFECT:
+  RecoveryAuthorizationStore._active_records() (sdd_orchestrator/git_runtime.py)
+  calls the full lifecycle check record.validate(require_active=False) on every
+  stored authorization before filtering to ACTIVE. validate()
+  (sdd_orchestrator/evidence_writer.py) always applies two current-time checks
+  regardless of require_active: an issue time in the future, or the current time at
+  or past expires_at, raises AUTHORITY_INVALID. Once any stored authorization's
+  execution window ends, enumeration raises. This occurred when the first TC008
+  grant expired at 2026-10-06T00:22:58Z, and holds for all five stored records by
+  2026-10-06T07:19:16Z. Enumeration feeds conflict detection in issue() and load()
+  and lookup by recovery operation in load(), so all of them fail. The defect is
+  confined to the enumeration step; load(), consume(), and issue() validate the
+  grant actually being used through a separate call that must keep its time checks.
+discovered_by: >-
+  Independent review of QUALIFICATION-STATE-RECONCILIATION-001 at
+  d488c79b19ebebc42aaabd18f8f7cde0922adb92; the reconciliation is not the cause.
+observed_failure:
+  command: .\.venv\Scripts\python.exe -m pytest -q tests/test_m5_git_recovery.py
+  result: 3 failed, 27 passed, 58 subtests passed
+  exit_code: 1
+  failing_tests:
+    - test_repository_backed_recovery_authorization_issue_load_and_consume
+    - test_recovery_authorization_rejects_overlap_bad_issuer_and_path_escape
+    - test_recovery_authorization_runtime_tree_and_approval_fail_closed
+  failure: 'AUTHORITY_INVALID: recovery authorization expired raised from _active_records() for a historical CONSUMED record copied from the live repository'
+allowed_paths:
+  - sdd_orchestrator/git_runtime.py
+  - tests/test_m5_git_recovery.py
+allowed_change_detail:
+  sdd_orchestrator/git_runtime.py: >-
+    RecoveryAuthorizationStore._active_records() plus exactly one new private
+    helper RecoveryAuthorizationStore._validate_record_integrity(record) only.
+  tests/test_m5_git_recovery.py: >-
+    New or extended authorization-store tests only.
+  evidence: Ordinary TC018 Stage08 evidence artifact only.
+forbidden_scope:
+  - sdd_orchestrator/evidence_writer.py including RecoveryAuthorization.validate() and qualify_recovery_attestation (no global validate() change)
+  - sdd_orchestrator/codex_adapter.py
+  - RecoveryAuthorizationStore.load()
+  - RecoveryAuthorizationStore.consume()
+  - RecoveryAuthorizationStore._persist()
+  - RecoveryAuthorizationStore._read()
+  - RecoveryAuthorizationStore.relative_path()
+  - RecoveryAuthorizationStore._approval_reference_valid()
+  - ProjectAuthorityRecoveryAuthorizationIssuer.issue()
+  - any RecoveryManager behavior
+  - TC017 helpers _bound_original_evidence_valid and _historical_consumed_authorization
+  - _resolve_evidence
+  - _validate_v2
+  - _write_state
+  - reconcile_qualification
+  - .sdd/state/**
+  - .sdd/authorizations/** (no record rewritten, deleted, transitioned, or normalized)
+  - .sdd/runs/**
+  - any existing .sdd/evidence/** artifact
+  - .sdd/convergence/TC001.yaml through .sdd/convergence/TC017.yaml
+  - tasks.md
+  - docs/PRD.md
+  - docs/spec.md
+  - docs/Design.md
+  - AGENTS.md
+  - docs/handoff/**
+  - any other production or test file
+  - Stage09 or Stage10 logic or execution
+  - TC012-TC017 finalization
+  - reconciliation
+  - push
+production_change_allowed: true
+governance_contract_change_allowed: false
+affected_components:
+  - 'RecoveryAuthorizationStore._active_records(): changed; every record gets clock-free integrity validation and only ACTIVE records are returned.'
+  - 'RecoveryAuthorizationStore.load(): no code change; overlap scanning and lookup by recovery operation work again; per-grant validate(require_active=...) still applies time checks.'
+  - 'ProjectAuthorityRecoveryAuthorizationIssuer.issue(): no code change; overlap scan works again; the new grant is still checked with validate(require_active=True).'
+  - 'RecoveryAuthorizationStore.consume(): no code change; still goes through load(require_active=True).'
+  - 'Stage08CodexRunner.recover_post_checkpoint_evidence(): no code change; reaches the store only through load()/consume().'
+semantic_rules:
+  - 'R1: Every stored authorization gets non-clock integrity validation before filtering, using the rules of validate() except its two current-time comparisons: required non-blank fields; schema version and record kind; Project Authority issuer and issuer role; recovery purpose; status in RECOVERY_AUTHORIZATION_STATUSES and one_time true; safe authorization and attempt identifier formats; full 40-hex target checkpoint, baseline, and runtime checkpoint; 64-hex task digest; non-empty authority versions with 64-hex digests; non-empty allowed artifact paths under .sdd/ without ..; non-empty prohibited operations and checkpoint conditions; issued_at and expires_at parse as UTC with expires_at > issued_at; non-empty status-event chain with sequence numbers, previous_event_digest links, every event_digest, and status projection; grant_digest; record_digest.'
+  - 'R2: Integrity failures still fail closed. Any R1 failure on any record raises GitRuntimeError from enumeration, as an integrity failure does today: malformed or unreadable records, bad digests, broken chains, wrong status projection, wrong schema or issuer.'
+  - 'R3: Current wall-clock time is not used during enumeration. No record is rejected during enumeration because of the current time.'
+  - 'R4: Only records with status ACTIVE are returned. CONSUMED, REVOKED, and EXPIRED records are checked for integrity but are never returned and cannot block enumeration merely because their execution window has passed.'
+  - 'R5: Expired ACTIVE authorization remains unusable. load(authorization_id), load(recovery_operation_id), and consume() keep calling validate(require_active=True), which raises expired.'
+  - 'R6: An expired authorization whose status is still ACTIVE remains returned by _active_records() for conflict detection, so issue() and load() continue to treat it as overlapping and fail closed (AGENTS.md section 9.1: overlapping active authorizations are ambiguity and must block). Clearing a stale ACTIVE grant would require a separately authorized status transition; no such capability exists and TC018 adds none. No live record is currently ACTIVE. R6 must not be silently reinterpreted.'
+  - 'R7: No authorization file is rewritten, transitioned, normalized, or deleted, and there is no expiry bypass anywhere.'
+r6_stale_active_policy:
+  rule: R6
+  policy: EXPIRED_ACTIVE_REMAINS_OPEN_FOR_CONFLICT_DETECTION
+  stage07_policy_confirmation_required: true
+  alternative_not_adopted: >-
+    Ignoring expired ACTIVE grants during overlap detection would allow a second
+    grant to be issued while the first is still nominally open.
+implementation_plan:
+  - Add RecoveryAuthorizationStore._validate_record_integrity(self, record) -> None in sdd_orchestrator/git_runtime.py.
+  - 'It validates the same non-clock integrity properties required by validate(): required fields; schema; record kind; Project Authority issuer and role; purpose; legal status; one_time; identifier formats; checkpoint, baseline, and runtime SHA formats; task digest; authority versions; artifact paths; prohibited operations; checkpoint conditions; issued_at and expires_at parseability; expires_at > issued_at; event chain integrity; event sequence; previous_event_digest links; event_digest; status projection; grant_digest; record_digest. It raises GitRuntimeError with the existing reason-style messages (SCHEMA_INVALID / AUTHORITY_INVALID) and reuses the constants, canonical_sha256, and _parse_utc already imported by git_runtime.py.'
+  - It must not inspect the current time.
+  - In _active_records(), replace record.validate(require_active=False) with self._validate_record_integrity(record).
+  - Keep _read(path), the sorted *.yaml enumeration, and the status == "ACTIVE" filter unchanged.
+  - Make no other production-code change; load(), consume(), and issue() stay exactly as they are, validate() is not edited, and the TC017 helpers are not touched (any later consolidation is a separate task).
+test_plan:
+  - 'Expired historical CONSUMED record (clock frozen after expiry): enumeration succeeds and the record is not returned.'
+  - 'Expired ACTIVE record (clock frozen after expiry): returned by _active_records(); load(authorization_id) and load(recovery_operation_id) reject as expired; consume() rejects; overlapping issue() is blocked with overlapping ACTIVE.'
+  - 'Valid ACTIVE record inside its window: returned, loads, and consumes exactly once.'
+  - 'CONSUMED record after consumption: no longer returned as active.'
+  - 'REVOKED and EXPIRED historical records past expires_at: do not block enumeration solely due to wall-clock expiry and are not returned as active.'
+  - 'Integrity-negative cases on a historical non-active record, each making _active_records() (and issue()/load() through it) raise: malformed record (field tampered without digest repair); unreadable YAML; invalid schema; invalid issuer; unknown status; broken event chain; bad event digest; invalid sequence; wrong status projection; bad grant_digest; bad record_digest; expires_at <= issued_at.'
+  - 'issue() overlap semantics unchanged: succeeds with only historical records present; raises overlapping ACTIVE against an unexpired or expired ACTIVE grant for the same operation or the same task and checkpoint.'
+  - 'load() runtime-tree, authority-version, approval-reference, and repository-backed checks remain unchanged and fail closed.'
+  - 'consume() still requires a valid ACTIVE grant: not active for CONSUMED, expired for expired ACTIVE.'
+  - 'TC017 historical qualification tests remain valid and pass unchanged.'
+  - 'The three current real-date failures (test_repository_backed_recovery_authorization_issue_load_and_consume, test_recovery_authorization_rejects_overlap_bad_issuer_and_path_escape, test_recovery_authorization_runtime_tree_and_approval_fail_closed) return to PASS with the live expired CONSUMED records copied in.'
+  - 'No live repository side effects: before/after hashes of .sdd/state/**, .sdd/authorizations/**, and .sdd/evidence/** are unchanged. Time-dependent cases use the existing _frozen_clock helper so results do not depend on the real date.'
+acceptance_criteria:
+  - 'AC1: _active_records() does not fail because a structurally intact CONSUMED, REVOKED, or EXPIRED record is past its expires_at; such records are never returned as active.'
+  - 'AC2: An ACTIVE grant outside its time window stays unusable: load() and consume() raise expired or not yet valid.'
+  - 'AC3: A valid ACTIVE grant inside its window is returned by enumeration, loads, and consumes exactly once.'
+  - 'AC4: An integrity failure in any stored record still makes enumeration, and every operation that relies on it, fail closed: malformed or unreadable records; schema, issuer, purpose, status, or one_time errors; bad event chain or digest; wrong status projection; bad grant or record digests; expires_at <= issued_at.'
+  - 'AC5: issue() continues rejecting overlapping authorization (same operation, or same task and checkpoint) against any record whose status remains ACTIVE, including an expired ACTIVE record (R6).'
+  - 'AC6: load() keeps all its checks for the specific grant: path identity; validate(require_active) with its time checks; repository, branch, and baseline binding; repository backing; runtime-tree identity; approval reference; evidence availability; authority versions; overlap.'
+  - 'AC7: consume() still requires a valid ACTIVE grant and keeps one-time consumption and replay protection.'
+  - 'AC8: RecoveryAuthorization.validate(), load(), consume(), issue(), _persist(), the TC017 helpers, sdd_orchestrator/codex_adapter.py, and sdd_orchestrator/evidence_writer.py are unchanged.'
+  - 'AC9: No authorization file is created, rewritten, transitioned, or deleted, and there is no expiry bypass.'
+  - 'AC10: All tests in the verification file pass deterministically regardless of the real date, including the three that currently fail and the TC017 tests.'
+  - 'AC11: No .sdd/state/**, evidence, or authorization side effects.'
+  - 'AC12: The checkpoint diff contains only the two allowed files plus the task''s own atomic Stage08 evidence artifact.'
+verification_commands:
+  - .\.venv\Scripts\python.exe -m pytest -q tests/test_m5_git_recovery.py
+dependencies:
+  - docs/spec.md#SPEC-017
+  - docs/Design.md#DES-017
+  - AGENTS.md section 9.1
+  - .sdd/convergence/TC014.yaml
+  - .sdd/convergence/TC017.yaml
+  - .sdd/evidence/20261005T082052.257632Z-TC017.json
+  - QUALIFICATION-STATE-RECONCILIATION-001 checkpoint d488c79b19ebebc42aaabd18f8f7cde0922adb92
+dependency_constraints:
+  tc017_required: true
+  reconciliation_execution_required: false
+  recovery_authorization_required: false
+risk_level: HIGH
+governance_profile: SDD_STRICT
+governance_reason: >-
+  This task changes recovery authorization capability-store semantics at a
+  protected SPEC-017 boundary that feeds issuance, loading, and consumption of
+  Project Authority grants. The production change is small, but an error could
+  either weaken ACTIVE grant enforcement or mask integrity failures, so risk is
+  not lowered on account of size.
+stage07_required: true
+tc012_tc017_finalization_still_blocked: true
+stage09_still_blocked: true
+status: TODO
+source_stage: 06
