@@ -20,6 +20,7 @@ from .evidence_writer import (
     InvalidEvidence,
     RECOVERY_AUTHORIZATION_RECORD_KIND,
     RECOVERY_AUTHORIZATION_SCHEMA_VERSION,
+    RECOVERY_AUTHORIZATION_STATUSES,
     RECOVERY_CAPABILITY,
     RecoveryAuthorization,
     _parse_utc,
@@ -410,10 +411,92 @@ class RecoveryAuthorizationStore:
             return records
         for path in sorted(root.glob("*.yaml")):
             record = self._read(path)
-            record.validate(require_active=False)
+            self._validate_record_integrity(record)
             if record.status == "ACTIVE":
                 records.append(record)
         return records
+
+    def _validate_record_integrity(self, record: RecoveryAuthorization) -> None:
+        """Validate a stored grant's integrity without consulting the current time.
+
+        Mirrors the non-clock rules of RecoveryAuthorization.validate(); execution
+        validity (issued_at/expires_at against now) stays with load() and consume().
+        """
+        try:
+            required = (
+                "schema_version", "record_kind", "authorization_id", "attempt_id",
+                "issuer", "issuer_role", "issuer_approval_reference", "purpose",
+                "issued_at", "repository", "branch", "baseline",
+                "recovery_operation_id", "target_task_id", "task_contract_digest",
+                "target_checkpoint", "target_original_evidence", "verification_command",
+                "verification_command_source", "runtime_checkpoint", "runtime_evidence",
+                "spec_version", "design_version", "authority_policy_version",
+                "grant_digest", "record_digest",
+            )
+            if any(not str(getattr(record, name)).strip() for name in required):
+                raise GitRuntimeError("AUTHORITY_INVALID: incomplete recovery authorization")
+            if (
+                record.schema_version != RECOVERY_AUTHORIZATION_SCHEMA_VERSION
+                or record.record_kind != RECOVERY_AUTHORIZATION_RECORD_KIND
+            ):
+                raise GitRuntimeError("SCHEMA_INVALID: unsupported recovery authorization schema")
+            if (
+                record.issuer != "PROJECT_AUTHORITY"
+                or record.issuer_role != "PROJECT_AUTHORITY"
+                or record.purpose != RECOVERY_CAPABILITY
+            ):
+                raise GitRuntimeError("AUTHORITY_INVALID: recovery requires Project Authority")
+            if record.status not in RECOVERY_AUTHORIZATION_STATUSES or not record.one_time:
+                raise GitRuntimeError("AUTHORITY_INVALID: authorization status or single-use is invalid")
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+", record.authorization_id):
+                raise GitRuntimeError("AUTHORITY_INVALID: unsafe authorization identity")
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+", record.attempt_id):
+                raise GitRuntimeError("AUTHORITY_INVALID: unsafe recovery attempt identity")
+            if not re.fullmatch(r"[0-9a-f]{40}", record.target_checkpoint):
+                raise GitRuntimeError("CHECKPOINT_MISMATCH: full checkpoint commit is required")
+            if not re.fullmatch(r"[0-9a-f]{40}", record.baseline):
+                raise GitRuntimeError("AUTHORITY_INVALID: full baseline commit is required")
+            if not re.fullmatch(r"[0-9a-f]{40}", record.runtime_checkpoint):
+                raise GitRuntimeError("AUTHORITY_INVALID: full runtime checkpoint is required")
+            if not re.fullmatch(r"[0-9a-f]{64}", record.task_contract_digest):
+                raise GitRuntimeError("TASK_MISMATCH: task contract digest is invalid")
+            if not record.authority_versions or any(
+                not path.strip() or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                for path, digest in record.authority_versions
+            ):
+                raise GitRuntimeError("AUTHORITY_INVALID: authority versions are incomplete")
+            if not record.allowed_artifact_paths or any(
+                not str(path).startswith(".sdd/") or ".." in Path(path).parts
+                for path in record.allowed_artifact_paths
+            ):
+                raise GitRuntimeError("AUTHORITY_INVALID: recovery artifact scope is invalid")
+            if not record.prohibited_operations or not record.checkpoint_conditions:
+                raise GitRuntimeError("AUTHORITY_INVALID: recovery boundaries are incomplete")
+            issued = _parse_utc(record.issued_at, "issued_at")
+            if record.expires_at is not None:
+                if _parse_utc(record.expires_at, "expires_at") <= issued:
+                    raise GitRuntimeError("AUTHORITY_INVALID: recovery authorization window is invalid")
+            if not record.status_events:
+                raise GitRuntimeError("SCHEMA_INVALID: authorization status history is missing")
+            previous: str | None = None
+            for index, event in enumerate(record.status_events, start=1):
+                body = {key: value for key, value in event.items() if key != "event_digest"}
+                if event.get("sequence") != index or event.get("previous_event_digest") != previous:
+                    raise GitRuntimeError("SCHEMA_INVALID: authorization audit chain is broken")
+                digest = canonical_sha256(body)
+                if event.get("event_digest") != digest:
+                    raise GitRuntimeError("SCHEMA_INVALID: authorization event digest mismatch")
+                previous = digest
+            if record.status_events[-1].get("status") != record.status:
+                raise GitRuntimeError("SCHEMA_INVALID: authorization status projection is stale")
+            if record.grant_digest != canonical_sha256(record.grant_payload()):
+                raise GitRuntimeError("SCHEMA_INVALID: authorization grant digest mismatch")
+            if record.record_digest != canonical_sha256({
+                key: value for key, value in record.to_record().items() if key != "record_digest"
+            }):
+                raise GitRuntimeError("SCHEMA_INVALID: authorization record digest mismatch")
+        except InvalidEvidence as exc:
+            raise GitRuntimeError(str(exc)) from exc
 
     def load(
         self,

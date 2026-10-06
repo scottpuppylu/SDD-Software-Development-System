@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "stage": "08",
+  "task_id": "TC018",
+  "title": "Repair recovery authorization store historical record enumeration",
+  "status": "PASS",
+  "changed_paths": [
+    "sdd_orchestrator/git_runtime.py",
+    "tests/test_m5_git_recovery.py"
+  ],
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_m5_git_recovery.py",
+      "returncode": 0,
+      "stdout": "...................................                     [100%]\n35 passed, 89 subtests passed in 488.36s (0:08:08)\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "codex": {
+    "returncode": 0,
+    "final_stdout": "TC018 bounded Stage08 implementation completed by Claude Code (Codex unavailable).",
+    "stderr": ""
+  },
+  "recorded_at": "20261006T010446.729245Z",
+  "entry_head": "40f417c63db0dd9c6b4180e1a1fa44a171289f05",
+  "stage07_envelope_id": "96288cb7bacb3bd60f484ccfa7363a8813edf1da74f67f5956aa6315792ac9d6",
+  "stage07_report_sha256": "f13e16cff40d0a1fa9bbf7064e3bedcc671c9ed32b9b0896185fd104a298ddee",
+  "allowed_file_boundary": "VALID",
+  "worker": {
+    "model": "CLAUDE_CODE",
+    "codex_invoked": false,
+    "codex_quota_available": false,
+    "role_combination_acknowledged": true,
+    "independent_post_implementation_review_required": true
+  },
+  "semantic_validation": {
+    "r6_stale_active_policy": "EXPIRED_ACTIVE_REMAINS_OPEN_FOR_CONFLICT_DETECTION",
+    "current_clock_used_in_enumeration": false,
+    "global_validate_changed": false,
+    "load_consume_issue_changed": false,
+    "status_transition_behavior_added": false
+  },
+  "governance": {
+    "profile": "SDD_STRICT",
+    "implementation_scope": [
+      "sdd_orchestrator/git_runtime.py",
+      "tests/test_m5_git_recovery.py"
+    ],
+    "implementation_state_mutated": false,
+    "authorization_records_mutated": false,
+    "finalization_performed": false,
+    "stage09_executed": false,
+    "stage10_executed": false,
+    "final_qualification_declared": false
+  }
+}

@@ -980,6 +980,238 @@ class M5GitTests(unittest.TestCase):
 
         self.assertEqual(snapshot(), before)
 
+    TC018_LATE = datetime(2030, 1, 1, tzinfo=timezone.utc)
+
+    def _tc018_record(
+        self, authorization_id, *, final_status="CONSUMED",
+        issued_at="2026-01-01T00:00:00+00:00", expires_at="2026-01-02T00:00:00+00:00",
+        event_at="2026-01-01T00:05:00Z",
+        recovery_operation_id="RECOVERY-TC999-ORDINARY-EVIDENCE-001",
+        target_task_id="TC999", tamper=None, commit=False,
+    ):
+        """Write one stored authorization record directly, bypassing issue()/consume()."""
+        values = {
+            "authorization_id": authorization_id, "attempt_id": f"attempt-{authorization_id}",
+            "issuer": "PROJECT_AUTHORITY", "issuer_role": "PROJECT_AUTHORITY",
+            "issuer_approval_reference": "AGENTS.md#sha256:" + "d" * 64,
+            "purpose": RECOVERY_CAPABILITY, "one_time": True,
+            "issued_at": issued_at, "expires_at": expires_at,
+            "repository": str(self.repo.resolve()), "branch": "main", "baseline": "1" * 40,
+            "recovery_operation_id": recovery_operation_id,
+            "target_task_id": target_task_id, "task_contract_digest": "c" * 64,
+            "target_checkpoint": "2" * 40,
+            "target_original_evidence": f".sdd/evidence/20260101T000000.000000Z-{target_task_id}.json",
+            "verification_command": "python -m pytest -q tests/test_tc018.py",
+            "verification_command_source": f".sdd/convergence/{target_task_id}.yaml",
+            "runtime_checkpoint": "3" * 40,
+            "runtime_evidence": ".sdd/evidence/runtime-TC018.json",
+            "spec_version": "SPEC-017", "design_version": "DES-017",
+            "authority_policy_version": "AGENTS.md#9.1",
+            "authority_versions": (("AGENTS.md", "d" * 64),),
+            "allowed_artifact_paths": (
+                f".sdd/authorizations/recovery/{authorization_id}.yaml", ".sdd/evidence/",
+            ),
+            "prohibited_operations": ("IMPLEMENTATION_STATE_RECONCILIATION",),
+            "allow_persistence_only_resume": False,
+            "checkpoint_conditions": ("verification_pass", "scope_respected"),
+        }
+        authorization = assemble_recovery_authorization(values)
+        if final_status != "ACTIVE":
+            authorization = authorization.append_status_event(
+                final_status, occurred_at=event_at, actor="RECOVERY_EXECUTOR",
+                reason="FRESH_VERIFICATION_DISPATCH",
+            )
+        record = authorization.to_record()
+        content = yaml.safe_dump(record, sort_keys=False, allow_unicode=True)
+        if tamper is not None:
+            tampered = tamper(record)
+            content = (
+                tampered if isinstance(tampered, str)
+                else yaml.safe_dump(record, sort_keys=False, allow_unicode=True)
+            )
+        rel = RecoveryAuthorizationStore.relative_path(authorization_id)
+        path = self.repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8", newline="\n")
+        if commit:
+            self._git("add", "-f", rel)
+            self._git("commit", "-m", f"test: store {authorization_id}")
+        return path
+
+    def _active_ids(self):
+        return sorted(
+            record.authorization_id
+            for record in RecoveryAuthorizationStore(self.repo)._active_records()
+        )
+
+    def test_tc018_historical_records_do_not_break_enumeration_after_expiry(self):
+        # The fixture also carries every live historical CONSUMED grant copied by setUp.
+        self._tc018_record("AUTH-TC018-CONSUMED")
+        self._tc018_record("AUTH-TC018-REVOKED", final_status="REVOKED")
+        self._tc018_record("AUTH-TC018-EXPIRED", final_status="EXPIRED", event_at="2026-01-02T00:00:00Z")
+        self._tc018_record("AUTH-TC018-NO-EXPIRY", expires_at=None)
+        for moment in (
+            datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc), self.TC018_LATE,
+        ):
+            with self.subTest(moment=moment.isoformat()), self._frozen_clock(moment):
+                self.assertEqual(self._active_ids(), [])
+
+    def test_tc018_expired_active_stays_open_for_conflicts_but_unusable(self):
+        grant = self._recovery_grant()
+        stale_path = self._tc018_record(
+            "AUTH-TC018-STALE", final_status="ACTIVE",
+            recovery_operation_id=grant["recovery_operation_id"],
+            target_task_id=grant["target_task_id"], commit=True,
+        )
+        store = RecoveryAuthorizationStore(self.repo)
+        with self._frozen_clock(self.TC018_LATE):
+            self.assertEqual(self._active_ids(), ["AUTH-TC018-STALE"])
+            with self.assertRaisesRegex(GitRuntimeError, "expired"):
+                store.load(authorization_id="AUTH-TC018-STALE")
+            with self.assertRaisesRegex(GitRuntimeError, "expired"):
+                store.load(recovery_operation_id=grant["recovery_operation_id"])
+            with self.assertRaisesRegex(GitRuntimeError, "expired"):
+                store.consume("AUTH-TC018-STALE")
+        not_yet = self._tc018_record(
+            "AUTH-TC018-FUTURE", final_status="ACTIVE",
+            issued_at="2031-01-01T00:00:00+00:00", expires_at="2031-01-02T00:00:00+00:00",
+        )
+        with self._frozen_clock(self.TC018_LATE):
+            with self.assertRaisesRegex(GitRuntimeError, "not yet valid"):
+                store.load(authorization_id="AUTH-TC018-FUTURE")
+        not_yet.unlink()
+
+        head = self._git("rev-parse", "HEAD")
+        issuer = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo)
+        with self.assertRaisesRegex(GitRuntimeError, "overlapping ACTIVE"):
+            issuer.issue({**grant, "baseline": head})
+        with self.assertRaisesRegex(GitRuntimeError, "overlapping ACTIVE"):
+            issuer.issue({
+                **grant, "baseline": head, "authorization_id": "AUTH-TC008-OTHER-OP",
+                "recovery_operation_id": "RECOVERY-TC008-OTHER-001",
+                "target_checkpoint": "2" * 40,
+            })
+        self.assertTrue(stale_path.is_file())
+        self.assertIn("status: ACTIVE", stale_path.read_text(encoding="utf-8"))
+
+    def test_tc018_valid_active_lifecycle_and_issue_with_history(self):
+        grant = self._recovery_grant()
+        self._tc018_record("AUTH-TC018-HIST-CONSUMED", commit=True)
+        self._tc018_record("AUTH-TC018-HIST-REVOKED", final_status="REVOKED", commit=True)
+        head = self._git("rev-parse", "HEAD")
+        authorization, _, _ = ProjectAuthorityRecoveryAuthorizationIssuer(self.repo).issue(
+            {**grant, "baseline": head}
+        )
+        store = RecoveryAuthorizationStore(self.repo)
+        self.assertEqual(self._active_ids(), [authorization.authorization_id])
+        self.assertEqual(store.load(authorization_id=authorization.authorization_id), authorization)
+        consumed, _ = store.consume(authorization.authorization_id)
+        self.assertEqual(consumed.status, "CONSUMED")
+        self.assertEqual(self._active_ids(), [])
+        with self.assertRaisesRegex(GitRuntimeError, "not active"):
+            store.consume(authorization.authorization_id)
+
+    def test_tc018_corrupted_historical_records_fail_closed(self):
+        def resealed(field, value):
+            def apply(record):
+                record[field] = value
+                self._reseal(record, grant=True)
+            return apply
+
+        def event_change(mutate):
+            def apply(record):
+                mutate(record["status_events"])
+                self._reseal(record)
+            return apply
+
+        def relink(events):
+            events[1]["previous_event_digest"] = "0" * 64
+            events[1]["event_digest"] = self._event_digest(events[1])
+
+        def resequence(events):
+            events[1]["sequence"] = 3
+            events[1]["event_digest"] = self._event_digest(events[1])
+
+        def bad_digest(events):
+            events[1]["event_digest"] = "0" * 64
+
+        def projection(record):
+            record["status"] = "REVOKED"
+            self._reseal(record)
+
+        def bad_grant(record):
+            record["grant_digest"] = "0" * 64
+            self._reseal(record)
+
+        def bad_record(record):
+            record["record_digest"] = "0" * 64
+
+        def unsealed(record):
+            record["verification_command"] = "python -m pytest -q other.py"
+
+        cases = {
+            "field_tamper_without_digest_repair": {"tamper": unsealed},
+            "unreadable_yaml": {"tamper": lambda record: "::: [not yaml\n"},
+            "invalid_schema": {"tamper": resealed("schema_version", "9.9")},
+            "invalid_record_kind": {"tamper": resealed("record_kind", "OTHER")},
+            "invalid_issuer": {"tamper": resealed("issuer", "RECOVERY_EXECUTOR")},
+            "invalid_issuer_role": {"tamper": resealed("issuer_role", "RECOVERY_EXECUTOR")},
+            "invalid_purpose": {"tamper": resealed("purpose", "OTHER_CAPABILITY")},
+            "invalid_status": {"tamper": resealed("status", "BOGUS")},
+            "not_one_time": {"tamper": resealed("one_time", False)},
+            "invalid_identifier": {"tamper": resealed("attempt_id", "attempt id!")},
+            "bad_checkpoint_sha": {"tamper": resealed("target_checkpoint", "abc")},
+            "bad_baseline_sha": {"tamper": resealed("baseline", "abc")},
+            "bad_runtime_checkpoint_sha": {"tamper": resealed("runtime_checkpoint", "abc")},
+            "bad_task_digest": {"tamper": resealed("task_contract_digest", "abc")},
+            "bad_authority_version_digest": {
+                "tamper": resealed("authority_versions", [["AGENTS.md", "abc"]]),
+            },
+            "unsafe_artifact_path": {
+                "tamper": resealed("allowed_artifact_paths", [".sdd/../escape.yaml"]),
+            },
+            "artifact_path_outside_sdd": {"tamper": resealed("allowed_artifact_paths", ["docs/x.md"])},
+            "empty_prohibited_operations": {"tamper": resealed("prohibited_operations", [])},
+            "empty_checkpoint_conditions": {"tamper": resealed("checkpoint_conditions", [])},
+            "invalid_issued_at": {"tamper": resealed("issued_at", "not-a-time")},
+            "invalid_expires_at": {"tamper": resealed("expires_at", "not-a-time")},
+            "expires_not_after_issued": {"expires_at": "2026-01-01T00:00:00+00:00"},
+            "broken_event_link": {"tamper": event_change(relink)},
+            "bad_sequence": {"tamper": event_change(resequence)},
+            "bad_event_digest": {"tamper": event_change(bad_digest)},
+            "missing_status_events": {"tamper": event_change(lambda events: events.clear())},
+            "status_projection_mismatch": {"tamper": projection},
+            "bad_grant_digest": {"tamper": bad_grant},
+            "bad_record_digest": {"tamper": bad_record},
+        }
+        store = RecoveryAuthorizationStore(self.repo)
+        for index, (name, options) in enumerate(cases.items(), start=1):
+            with self.subTest(case=name):
+                path = self._tc018_record(f"AUTH-TC018-BAD-{index:03d}", **options)
+                try:
+                    with self._frozen_clock(self.TC018_LATE):
+                        with self.assertRaises(GitRuntimeError):
+                            store._active_records()
+                        with self.assertRaises(GitRuntimeError):
+                            store.load(recovery_operation_id="RECOVERY-TC999-ORDINARY-EVIDENCE-001")
+                finally:
+                    path.unlink()
+        with self._frozen_clock(self.TC018_LATE):
+            self.assertEqual(self._active_ids(), [])
+
+    def test_tc018_live_historical_records_enumerate_without_side_effects(self):
+        def snapshot():
+            return {
+                path.relative_to(SOURCE_ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                for root in (".sdd/state", ".sdd/authorizations", ".sdd/evidence")
+                for path in sorted((SOURCE_ROOT / root).rglob("*")) if path.is_file()
+            }
+
+        before = snapshot()
+        with self._frozen_clock(self.TC018_LATE):
+            self.assertEqual(RecoveryAuthorizationStore(SOURCE_ROOT)._active_records(), [])
+        self.assertEqual(snapshot(), before)
+
     def test_failure_journal_preserves_facts_and_filters_routes(self):
         journal = JsonFailureJournal(self.repo / ".sdd" / "failures.json")
         failure = new_failure(
