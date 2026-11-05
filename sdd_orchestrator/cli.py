@@ -31,6 +31,7 @@ from .developer_entry import (
     start_message,
     unbind_repo,
 )
+from .authority_state import AuthorityStateBootstrapError, bootstrap_authority_state
 
 
 def _print(data):
@@ -71,6 +72,10 @@ def main():
     sub.add_parser("status")
     sub.add_parser("current")
     sub.add_parser("reconcile-stage07-provenance")
+    sub.add_parser(
+        "authority-state-bootstrap",
+        help="Create deterministic repository-backed authority runtime state",
+    )
 
     p_operation = sub.add_parser("operation")
     p_operation.add_argument("--journey", required=True)
@@ -186,6 +191,12 @@ def main():
     p_detect.add_argument("--config")
 
     args = parser.parse_args()
+    if args.command == "authority-state-bootstrap":
+        try:
+            _print(bootstrap_authority_state(args.repo))
+        except AuthorityStateBootstrapError as exc:
+            raise SystemExit(f"SDD authority-state bootstrap blocked: {exc}") from exc
+        return
     if args.command == "bootstrap":
         path = bootstrap_global_config(args.config, args.runtime_path)
         _print({"bootstrap": "PASS", "config_path": str(path), "message": start_message()})

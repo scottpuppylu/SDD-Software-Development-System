@@ -15,6 +15,16 @@ This package converts the existing SDD 01–10 v2.3 governance into machine-read
 - `.sdd/state/implementation-state.yaml` — restart/recovery contract for Stage 08.
 - `.sdd/state/authority-state.yaml` — unresolved authority conflicts and routing state.
 
+`authority-state.yaml` is ignored runtime state. On a clean clone, create it only
+from validated repository-backed inputs:
+
+```bash
+sdd --repo . authority-state-bootstrap
+```
+
+The command requires a clean Git worktree, refuses to overwrite inconsistent
+existing state, and never derives authority from chat or file existence.
+
 ## Core invariant
 
 Lifecycle progression is sequential and gated, while artifact dependencies and authority routing are non-linear.

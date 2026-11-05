@@ -6,6 +6,8 @@ from typing import Any, Protocol
 import fnmatch
 import yaml
 
+from .authority_state import AuthorityStateValidationError, validate_authority_state
+
 
 class SDDOrchestratorError(Exception):
     pass
@@ -388,6 +390,10 @@ class Orchestrator:
         self.implementation_state_path = self.sdd_root / "state" / "implementation-state.yaml"
         self.project_state = self._load_yaml(self.project_state_path)
         self.authority_state = self._load_yaml(self.authority_state_path)
+        try:
+            validate_authority_state(self.authority_state)
+        except AuthorityStateValidationError as exc:
+            raise SDDOrchestratorError(f"Invalid authority runtime state: {exc}") from exc
         self.implementation_state = self._load_yaml(self.implementation_state_path)
 
     @staticmethod

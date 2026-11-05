@@ -24,13 +24,24 @@ From the SDD distribution folder:
 pip install -e .
 ```
 
-## 4. Check state
+## 4. Bootstrap ignored runtime authority state
+
+After the structured repository inputs are committed and the worktree is clean:
+
+```bash
+sdd --repo /path/to/my-project authority-state-bootstrap
+```
+
+This reconstructs repository-backed runtime projections only; it creates no
+Stage 07, Stage 08, Stage 09, or release authority.
+
+## 5. Check state
 
 ```bash
 sdd --repo /path/to/my-project status
 ```
 
-## 5. Start the full automated workflow
+## 6. Start the full automated workflow
 
 ```bash
 sdd --repo /path/to/my-project auto \
@@ -58,7 +69,7 @@ The default path is now:
 
 Each reasoning Stage uses a fresh ephemeral Codex execution. Repository artifacts, `.sdd/state`, and Git are the persistent memory—not a long-running Codex conversation.
 
-## 6. Human decision stop
+## 7. Human decision stop
 
 ```bash
 sdd --repo /path/to/my-project decision-list --status OPEN
@@ -68,7 +79,7 @@ sdd --repo /path/to/my-project decision-resolve <DR-ID> --resolution '<explicit 
 
 Then run `sdd ... auto` again. The authoritative owner Stage is rerun; the decision gateway does not directly patch PRD/Spec/Design.
 
-## 7. Pause safely at an Atomic Task boundary
+## 8. Pause safely at an Atomic Task boundary
 
 When you want to close or shut down the notebook after the next verified Stage 08 task:
 
@@ -78,7 +89,7 @@ sdd --repo /path/to/my-project auto --max-steps 1
 
 The runner completes the current Atomic Task, reruns verification, creates the Git checkpoint, persists implementation state, and reports `SAFE TO STOP`. Progress is printed during Stage 08 and a heartbeat is emitted every 30 seconds by default.
 
-## 8. Recover after interruption
+## 9. Recover after interruption
 
 ```bash
 sdd --repo /path/to/my-project recovery

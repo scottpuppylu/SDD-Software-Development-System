@@ -20,4 +20,6 @@ if [[ ! -d "$TARGET/.git" ]]; then
   git -C "$TARGET" init >/dev/null
 fi
 echo "Initialized SDD runtime in: $TARGET"
-echo "Next: install this package, set OPENAI_API_KEY, authenticate Codex, then run sdd status / sdd auto."
+echo "Next: commit the initialized repository inputs, install this package, then run:"
+echo "  sdd --repo \"$TARGET\" authority-state-bootstrap"
+echo "The bootstrap requires a clean Git worktree and never infers substantive authority."

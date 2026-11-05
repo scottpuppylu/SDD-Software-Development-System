@@ -36,6 +36,15 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+From a clean Git checkout, bootstrap the ignored authority runtime projection:
+
+```bash
+sdd --repo . authority-state-bootstrap
+```
+
+This command fails closed on dirty, contradictory, incomplete, or unbacked
+authority inputs. It does not grant lifecycle or implementation authority.
+
 ## 2. Install and authenticate Codex CLI
 
 Install Codex CLI using the current official OpenAI instructions, then authenticate once:
@@ -59,6 +68,8 @@ Do **not** copy `~/.codex/auth.json` into the project, Git, chat, tickets, or do
 ```
 
 The initializer refuses to overwrite an existing `.sdd` directory.
+Commit the initialized structured inputs so the worktree is clean, then run
+`sdd --repo /path/to/your-project authority-state-bootstrap`.
 
 ## 4. No API key is needed by default
 
