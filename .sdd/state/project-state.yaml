@@ -4,9 +4,9 @@ project:
   name: TBD
   status: ACTIVE
 lifecycle:
-  current_stage: 09
-  current_stage_name: VERIFICATION_AND_CONVERGENCE
-  last_completed_stage: 08
+  current_stage: 08
+  current_stage_name: IMPLEMENTATION_RUNNER
+  last_completed_stage: '07'
   next_action: RUN_STAGE
 stages:
   '01':
@@ -31,16 +31,16 @@ stages:
     status: DONE
     result: PASS
   08:
-    status: DONE
-    result: COMPLETED
-  09:
     status: IN_PROGRESS
+    result: null
+  09:
+    status: TODO
     result: null
   '10':
     status: TODO
     result: null
 authorizations:
-  implementation: false
+  implementation: true
   release: false
 blocking:
   is_blocked: false

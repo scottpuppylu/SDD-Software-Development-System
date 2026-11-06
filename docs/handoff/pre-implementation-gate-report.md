@@ -1,118 +1,113 @@
-# Stage 07 Pre-Implementation Gate Report — TC018
+# Stage 07 Pre-Implementation Gate Report — TC020 and TC021
 
 ## Decision
 
 RESULT = PASS
-TARGET_TASK = TC018
+TARGET_TASKS = TC020; TC021
 IMPLEMENTATION_AUTHORIZATION = GRANTED
 GOVERNANCE_PROFILE = SDD_STRICT
 RISK_LEVEL = HIGH
-AUTHORIZED_BASELINE = 7998c5091b373bf02de3e660ed4ba79e196d3d88
+AUTHORIZED_BASELINE = ca9d352e670d62244f57342dc1c4a3070a3df438
+DECISIONS_INDEPENDENT = YES
 
-## Authority and defect classification
+The fresh Stage07 reviews for TC020 and TC021 independently passed. Each task
+has its own sealed Stage08 authorization envelope. This report authorizes only
+the bounded implementation described by the applicable envelope; it does not
+mark either task implemented or complete, does not evaluate Stage09, and does
+not authorize Stage10.
 
-TC018 is grounded in existing `SPEC-017`, `DES-017`, `AGENTS.md` section 9.1, and the
-existing repository-backed `RecoveryAuthorization` security model. No new
-Specification or Design decision is required.
+## TC020 decision and sealed Stage08 envelope
 
-The defect classification is
-`RECOVERY_AUTHORIZATION_STORE_HISTORICAL_ENUMERATION_DEFECT`.
-`RecoveryAuthorizationStore._active_records()` calls
-`record.validate(require_active=False)` on every stored record before filtering to
-`ACTIVE`. `validate()` always applies two current-time checks regardless of
-`require_active`, so structurally intact historical records fail enumeration after
-their `expires_at`. The defect is confined to enumeration; `load()`, `consume()`,
-and `issue()` validate the grant in use through separate calls that keep their time
-checks.
+ENVELOPE_ID = STAGE07-TC020-ca9d352-e18ca38f
+TASK_ID = TC020
+REVIEW_RESULT = PASS
+SCOPE_SEALED = YES
+IMPLEMENTATION_AUTHORIZATION = GRANTED
+TASK_CONTRACT_SHA256 = e18ca38f868eb7fdc596c2f612996fe84086845df518021627f83a160488df5b
+ALLOWED_FILES = tests/test_m10_convergence_auto.py
 
-## Authorized implementation boundary
+TC020 remains classified as `TEST_FIXTURE_DEFECT`. Implementation may repair
+only the fixture-local no-op commit assumption in the allowed file. It must
+preserve all three existing behavioral assertions, authority-conflict rejection,
+implementation-gap persistence and Stage08 routing, generated convergence-task
+execution behavior, and fail-closed visibility of unexpected Git failures.
 
-AUTHORIZED_FILES = sdd_orchestrator/git_runtime.py; tests/test_m5_git_recovery.py
-VERIFICATION_COMMAND = .\.venv\Scripts\python.exe -m pytest -q tests/test_m5_git_recovery.py
-VERIFICATION_CONTRACT_INDEPENDENT = YES
+Forbidden scope includes `tests/test_m6_codex_adapter.py`, `sdd_orchestrator/**`,
+all other production and test files, PRD, Spec, Design, AGENTS, tasks authority,
+`.sdd/state/**`, `.sdd/evidence/**`, `.sdd/authorizations/**`, `docs/handoff/**`,
+Stage09 or Stage10 authority mutation, arbitrary Git-error suppression, and
+allow-empty or fabricated commits.
 
-Production change is limited to `RecoveryAuthorizationStore._active_records()` plus
-exactly one new private helper,
-`RecoveryAuthorizationStore._validate_record_integrity(record)`, in
-`sdd_orchestrator/git_runtime.py`. In `_active_records()`, only the
-`record.validate(require_active=False)` call is replaced by
-`self._validate_record_integrity(record)`; `_read(path)`, the sorted `*.yaml` scan,
-and the `status == "ACTIVE"` filter stay unchanged. Test change is limited to new
-or extended authorization-store tests. The only other permitted checkpoint path is
-the ordinary TC018 Stage08 evidence artifact. Importing existing `evidence_writer`
-constants (including `RECOVERY_AUTHORIZATION_STATUSES`) without modifying
-`evidence_writer.py` is permitted.
+TARGETED_VERIFICATION = python -m pytest -q tests/test_m10_convergence_auto.py::M10Tests::test_authority_conflict_cannot_emit_tc tests/test_m10_convergence_auto.py::M10Tests::test_stage09_gap_persists_tc_task_and_routes_08 tests/test_m10_convergence_auto.py::M10Tests::test_tc_task_can_be_executed_by_stage08
 
-## Binding implementation clarification
+Checkpoint eligibility requires the exact targeted command to pass, the diff
+to remain limited to the allowed file plus separately governed ordinary Stage08
+evidence, all existing assertions to remain intact, and every configured atomic
+checkpoint condition to pass.
 
-The helper mirrors exactly the non-clock rules of `RecoveryAuthorization.validate()`.
-`expires_at` is optional in the record schema (`str | None`) and `validate()` checks
-it only when present; therefore, when `expires_at` is present it must parse as UTC
-and be strictly later than `issued_at`, and its absence is not an integrity failure.
-`issued_at` must always parse as UTC. The helper must not be stricter or weaker than
-the non-clock subset of `validate()`.
+## TC021 decision and sealed Stage08 envelope
 
-## Semantic rules (R1–R7)
+ENVELOPE_ID = STAGE07-TC021-ca9d352-8ebc9e6f
+TASK_ID = TC021
+REVIEW_RESULT = PASS
+SCOPE_SEALED = YES
+IMPLEMENTATION_AUTHORIZATION = GRANTED
+TASK_CONTRACT_SHA256 = 8ebc9e6fe474b597730906c07fea8d8edeb0686df8fe31e1dec3942ba2801784
+ALLOWED_FILES = tests/test_m6_codex_adapter.py
 
-- R1: every stored record receives non-clock integrity validation before filtering.
-- R2: any integrity failure raises from enumeration (fail closed).
-- R3: current wall-clock time is not used during enumeration.
-- R4: only `ACTIVE` records are returned; `CONSUMED`, `REVOKED`, and `EXPIRED`
-  records are integrity-checked but not returned.
-- R5: expired or not-yet-valid `ACTIVE` grants remain unusable through unchanged
-  `load()` and `consume()`.
-- R6: a record whose status is still `ACTIVE` after `expires_at` remains returned
-  for conflict detection and continues to block overlapping issuance.
-- R7: no authorization file is rewritten, transitioned, normalized, or deleted; no
-  expiry bypass.
+TC021 remains classified as `TEST_EXPECTATION_DEFECT`. Implementation may only
+construct the named test authorization with the controlled fixture's exact
+repository, branch, baseline, and integrity-valid identity. Exact production
+repository and branch binding, baseline ancestry, authorization integrity,
+historical evidence-scope enforcement, fail-closed `AUTHORITY_INVALID` behavior,
+and production code byte identity must be preserved.
 
-## R6 stale-ACTIVE policy confirmation
+Forbidden scope includes `tests/test_m10_convergence_auto.py`,
+`sdd_orchestrator/**`, all other production and test files, recovery authorization
+or historical evidence mutation, repository/branch/baseline/digest/scope
+relaxation, production path normalization or portability substitution, PRD,
+Spec, Design, AGENTS, tasks authority, `.sdd/state/**`, `.sdd/evidence/**`,
+`.sdd/authorizations/**`, `docs/handoff/**`, and Stage09 or Stage10 authority
+mutation.
 
-R6 is CONFIRMED by this gate. A record whose status is still `ACTIVE` is a nominally
-open single-use capability until a governed status transition closes it. Under
-`AGENTS.md` section 9.1, overlapping active authorizations for the same task or
-checkpoint are ambiguity that must be detected, reported, and blocked. Ignoring
-expired `ACTIVE` grants during overlap detection would permit a second grant while
-the first remains nominally open, so that alternative is rejected. R6 cannot weaken
-execution: the stale grant stays unusable through `load()` and `consume()`. TC018
-adds no status transition or cleanup behavior; closing a stale `ACTIVE` grant
-requires separate authority. No live record is currently `ACTIVE`.
+TARGETED_VERIFICATION = python -m pytest -q tests/test_m6_codex_adapter.py::M6CodexAdapterTests::test_historical_checkpoint_scope_accepts_only_exact_bound_stage08_evidence tests/test_m6_codex_adapter.py::V1116GeneratedVerificationArtifactTests::test_historical_checkpoint_scope_accepts_only_exact_bound_stage08_evidence
 
-## Duplicated validation
+Checkpoint eligibility requires the exact targeted command to pass, the diff
+to remain limited to the allowed file plus separately governed ordinary Stage08
+evidence, exact fail-closed binding and negative coverage to remain intact, and
+every configured atomic checkpoint condition to pass.
 
-The helper duplicates only stable, non-clock integrity rules; lifecycle and
-current-time validity remain solely in `validate()`. No shared refactor is
-authorized in TC018. Future consolidation with `validate()` and the TC017 helpers
-may be proposed as a separate task.
+## Joint regression and independence
 
-## Excluded scope
+TC020 and TC021 have no implementation dependency and may be executed and
+checkpointed independently. After both targeted verifications pass and before a
+fresh Stage09 execution, the following joint regression is mandatory:
 
-`sdd_orchestrator/evidence_writer.py` (including `RecoveryAuthorization.validate()`),
-`sdd_orchestrator/codex_adapter.py`, `RecoveryAuthorizationStore.load()`,
-`consume()`, `_persist()`, `_read()`, `relative_path()`,
-`_approval_reference_valid()`, `ProjectAuthorityRecoveryAuthorizationIssuer.issue()`,
-all `RecoveryManager` behavior including the TC017 helpers, `_resolve_evidence`,
-`_validate_v2`, `_write_state`, and `reconcile_qualification`, `.sdd/state/**`,
-`.sdd/authorizations/**`, `.sdd/runs/**`, existing `.sdd/evidence/**`, other
-convergence tasks, `tasks.md`, authority artifacts, `docs/handoff/**`, and every
-other production or test file remain outside TC018. Finalization, reconciliation,
-Stage09, Stage10, and push remain excluded.
+```text
+python -m pytest -q tests
+git diff --check
+git diff --cached --check
+git status --porcelain=v1
+```
 
-## Stage08 proof required
+The complete suite and both diff checks must pass, Git status must be empty, and
+no known failure may be skipped or normalized. This joint regression obligation
+does not combine the two implementation scopes.
 
-Stage08 must satisfy all twelve TC018 acceptance criteria with exactly the stored
-single pytest invocation, using the existing frozen-clock helper for time-dependent
-cases, including the three currently failing real-date tests returning to PASS, the
-TC017 tests passing unchanged, every integrity-negative case, R5 and R6 behavior,
-and proof of no live repository side effects.
+## Authority bindings
 
-Verification was not run during Stage07. This PASS authorizes only the two-file
-TC018 implementation scope and does not prove TC018 implemented or qualified.
+- `AGENTS.md` SHA-256: `4631d00d71e8d1e0636c6a555cc43a58ba3cd78cd85766915eea9f37b6353d48`
+- `.sdd/stages.yaml` SHA-256: `6f82d21bb6a8be32062025eeb89f6561a4ad5baee89e1ff0627f9c12afbe1af5`
+- `docs/PRD.md` SHA-256: `3ce7acae7acfa966990eebc89fe1a18ac8426c67f6db618f0b7e27f560fd89cb`
+- `docs/spec.md` SHA-256: `b3d4f3c5d657fee1f2e1984f3c820c283d33f67120de81b38dee55dd7effc9aa`
+- `docs/Design.md` SHA-256: `5bf1f9beab6f91943672d9afd55af575e583377f31c4545143ca1b387c8f0d79`
+- `tasks.md` SHA-256: `528650343aa31cddad8475511f5f6b5cb29a70e039c423797fb73be5b2db1814`
+- `.sdd/convergence/TC020.yaml` pre-decision SHA-256: `e18ca38f868eb7fdc596c2f612996fe84086845df518021627f83a160488df5b`
+- `.sdd/convergence/TC021.yaml` pre-decision SHA-256: `8ebc9e6fe474b597730906c07fea8d8edeb0686df8fe31e1dec3942ba2801784`
 
 STAGE08_EXECUTED = NO
-RECOVERY_AUTHORIZATION_ISSUED = NO
-RECOVERY_AUTHORIZATION_CONSUMED = NO
+TC020_IMPLEMENTED = NO
+TC021_IMPLEMENTED = NO
 IMPLEMENTATION_STATE_MUTATED = NO
-TC012_TC017_FINALIZATION_BLOCKED = YES
-STAGE09_EXECUTED = NO
-STAGE10_EXECUTED = NO
+STAGE09_DECISION = NOT_EVALUATED
+STAGE10_AUTHORIZED = NO
