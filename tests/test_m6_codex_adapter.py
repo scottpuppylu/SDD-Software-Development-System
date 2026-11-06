@@ -379,19 +379,33 @@ class M6CodexAdapterTests(unittest.TestCase):
         )
         self.assertEqual(consumed.status, "CONSUMED")
 
+        current_head = run_git(repo, "rev-parse", "HEAD")
         grant = consumed.grant_payload()
         grant.update({
             "authorization_id": "TC015-TEST-AUTH-TC008",
             "attempt_id": "TC015-TEST-ATTEMPT-TC008",
             "issued_at": datetime.now(timezone.utc).isoformat(),
             "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            "repository": str(repo.resolve()),
+            "branch": run_git(repo, "branch", "--show-current"),
+            "baseline": current_head,
         })
         authorization = assemble_recovery_authorization(grant)
-        task = runner._resolve_recovery_target(authorization)
         checkpoint = "6cbb7df678a671493520fa0f6abaddcc9bf61557"
         parent = "71a44e1640d001270b592d70f0069856cb202d70"
-        current_head = run_git(repo, "rev-parse", "HEAD")
         evidence = ".sdd/evidence/20260924T103204.2963462Z-TC008.json"
+        historical_qualification = {
+            "task_qualifications": {
+                "TC008": {
+                    "implementation_checkpoint": checkpoint,
+                    "evidence": {"path": evidence},
+                }
+            }
+        }
+        with patch.object(
+            runner.recovery, "_load_state", return_value=historical_qualification
+        ):
+            task = runner._resolve_recovery_target(authorization)
         task_path = "tests/test_m41_runner_context_integration.py"
         valid_paths = [evidence, task_path]
 
