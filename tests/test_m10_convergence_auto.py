@@ -60,7 +60,23 @@ class M10Tests(unittest.TestCase):
     def tearDown(self): self.tmp.cleanup()
 
     def _set_stage09(self):
-        p=self.repo/'.sdd/state/project-state.yaml'; d=yaml.safe_load(p.read_text(encoding="utf-8"));d['lifecycle']['current_stage']='09';d['lifecycle']['current_stage_name']='VERIFICATION_AND_CONVERGENCE';d['stages']['09']['status']='IN_PROGRESS';p.write_text(yaml.safe_dump(d,sort_keys=False), encoding='utf-8');git(self.repo,'add','.sdd/state/project-state.yaml');git(self.repo,'commit','-m','stage09')
+        p=self.repo/'.sdd/state/project-state.yaml'; d=yaml.safe_load(p.read_text(encoding="utf-8"));d['lifecycle']['current_stage']='09';d['lifecycle']['current_stage_name']='VERIFICATION_AND_CONVERGENCE';d['stages']['09']['status']='IN_PROGRESS';p.write_text(yaml.safe_dump(d,sort_keys=False), encoding='utf-8');git(self.repo,'add','.sdd/state/project-state.yaml')
+        staged = subprocess.run(
+            ['git', 'diff', '--cached', '--quiet'],
+            cwd=self.repo,
+            text=True,
+            capture_output=True,
+        )
+        if staged.returncode == 0:
+            return
+        if staged.returncode != 1:
+            raise subprocess.CalledProcessError(
+                staged.returncode,
+                staged.args,
+                output=staged.stdout,
+                stderr=staged.stderr,
+            )
+        git(self.repo,'commit','-m','stage09')
 
     def test_stage09_gap_persists_tc_task_and_routes_08(self):
         self._set_stage09(); orch=Orchestrator(self.repo); runner=StageRunner(orch)
