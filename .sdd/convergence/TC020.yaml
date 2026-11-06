@@ -1,0 +1,100 @@
+task_id: TC020
+title: M10 Stage09 fixture no-op commit defect
+objective: >-
+  Repair only the M10 Stage09 fixture assumption that _set_stage09() must
+  always create a Git commit when the canonical source state is already
+  Stage09 IN_PROGRESS, so the existing behavioral assertions execute without
+  weakening their semantics or changing production code.
+task_class: M10_STAGE09_FIXTURE_NOOP_COMMIT_DEFECT
+repair_classification: TEST_FIXTURE_DEFECT
+root_cause: >-
+  M10Tests._set_stage09() rewrites project-state.yaml to the Stage09
+  IN_PROGRESS values already present at the current baseline, stages no
+  content change, and then unconditionally invokes git commit -m stage09.
+  Git correctly exits 1 because there is nothing to commit, so three tests
+  fail before their behavioral assertions execute.
+traceability:
+  - AGENTS.md section 8
+  - tasks.md section 10
+  - .sdd/stages.yaml Stage09 IMPLEMENTATION_GAP convergence routing
+  - Stage09 execution evidence at e2542e5f59f52588d081e55bbbc85582532d4bb1
+allowed_paths:
+  - tests/test_m10_convergence_auto.py
+allowed_change_detail:
+  tests/test_m10_convergence_auto.py: >-
+    Fixture setup and transition preparation used by the three named
+    M10Tests only. The fixture may establish a deterministic pre-Stage09 state
+    or avoid requiring a commit when the intended state is already present.
+forbidden_scope:
+  - tests/test_m6_codex_adapter.py
+  - sdd_orchestrator/**
+  - any other production or test file
+  - docs/PRD.md
+  - docs/spec.md
+  - docs/Design.md
+  - AGENTS.md
+  - tasks.md
+  - .sdd/state/**
+  - .sdd/evidence/**
+  - .sdd/authorizations/**
+  - docs/handoff/**
+  - Stage09 or Stage10 authority mutation
+  - commit-error suppression outside the proven no-op fixture condition
+production_change_allowed: false
+governance_contract_change_allowed: false
+allowed_behavior_scope: >-
+  Change only fixture-local setup needed for the named tests to reach their
+  existing assertions when the copied canonical project state is already
+  Stage09 IN_PROGRESS. Do not alter production behavior, convergence routing,
+  task execution, or assertion strength.
+required_behavior_outcome:
+  - The authority-conflict test still proves that an authority contract conflict cannot emit a convergence task.
+  - The implementation-gap test still proves convergence-task persistence and routing to Stage08.
+  - The generated convergence-task test still proves authorized Stage08 execution and completion behavior.
+  - A genuine unexpected fixture Git failure remains visible and fail-closed.
+preservation_obligations:
+  - Preserve all existing behavioral assertions in the three named tests.
+  - Preserve Stage09 authority-conflict and implementation-gap classification semantics.
+  - Preserve generated convergence-task Stage08 execution expectations.
+  - Preserve existing production behavior and fail-closed semantics.
+failure_expectations:
+  - An unexpected dirty fixture, invalid transition precondition, or Git error other than the proven no-op condition must fail visibly.
+  - Any required change outside tests/test_m10_convergence_auto.py blocks implementation and routes back to Stage06 or Stage07.
+  - Targeted verification failure prevents checkpoint eligibility.
+security_governance_constraints:
+  - No production, authority, lifecycle, evidence, release, or deployment mutation.
+  - Do not fabricate a commit or use allow-empty merely to make the fixture pass.
+  - Do not weaken, delete, skip, or replace any behavioral assertion.
+verification_commands:
+  - python -m pytest -q tests/test_m10_convergence_auto.py::M10Tests::test_authority_conflict_cannot_emit_tc tests/test_m10_convergence_auto.py::M10Tests::test_stage09_gap_persists_tc_task_and_routes_08 tests/test_m10_convergence_auto.py::M10Tests::test_tc_task_can_be_executed_by_stage08
+regression_verification_required:
+  timing: AFTER_TC020_AND_TC021_TARGETED_PASS_BEFORE_FRESH_STAGE09
+  commands:
+    - python -m pytest -q tests
+    - git diff --check
+    - git diff --cached --check
+    - git status --porcelain=v1
+  required_outcome: >-
+    The complete suite and both diff checks pass, Git status is empty, and no
+    known failure is skipped or normalized. This joint regression requirement
+    does not create an implementation dependency between TC020 and TC021.
+checkpoint_eligibility:
+  - The exact targeted verification command passes.
+  - The diff is limited to tests/test_m10_convergence_auto.py plus any separately governed ordinary Stage08 evidence artifact.
+  - No behavioral assertion is weakened and no unexpected dirty path exists.
+  - All Stage07-bound atomic checkpoint conditions are satisfied.
+out_of_scope:
+  - Production fixes or changes.
+  - Group B or TC021 remediation.
+  - Stage09 decision, Stage10 authorization, release, or deployment.
+  - Authority, lifecycle state, evidence, or historical checkpoint mutation.
+dependencies: []
+independent: true
+stage07_required: true
+stage07_result: NOT_EVALUATED
+implementation_authorized: false
+status: TODO
+source_stage: 06
+originating_stage: 09
+risk_level: MEDIUM
+governance_profile: SDD_STRICT

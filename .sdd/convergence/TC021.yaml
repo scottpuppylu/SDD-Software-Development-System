@@ -1,0 +1,104 @@
+task_id: TC021
+title: M6 recovery binding portability expectation defect
+objective: >-
+  Make the historical-checkpoint-scope test portable by constructing or
+  binding test authorization to a controlled test repository identity instead
+  of expecting production code to accept mismatched historical repository or
+  branch bindings.
+task_class: M6_RECOVERY_BINDING_PORTABILITY_EXPECTATION_DEFECT
+repair_classification: TEST_EXPECTATION_DEFECT
+root_cause: >-
+  The test reuses a historical authorization bound to a Windows absolute
+  repository path and branch telemetry-measurement-v2 while Codex Cloud uses
+  /workspace/SDD-Software-Development-System and platform branch work. The
+  production resolver correctly fails closed with AUTHORITY_INVALID recovery
+  repository binding mismatch before the historical-scope assertions execute.
+traceability:
+  - docs/spec.md SPEC-017
+  - docs/Design.md DES-017
+  - AGENTS.md section 9.1
+  - tasks.md TASK-019 recovery binding requirements
+  - Stage09 execution evidence at e2542e5f59f52588d081e55bbbc85582532d4bb1
+allowed_paths:
+  - tests/test_m6_codex_adapter.py
+allowed_change_detail:
+  tests/test_m6_codex_adapter.py: >-
+    Test fixture or expectation construction for the named historical
+    checkpoint-scope test inherited by V1116GeneratedVerificationArtifactTests.
+    Test authority may be constructed with the controlled fixture's exact
+    repository, branch, baseline, and integrity-valid digest bindings.
+forbidden_scope:
+  - tests/test_m10_convergence_auto.py
+  - sdd_orchestrator/**
+  - any other production or test file
+  - .sdd/authorizations/**
+  - .sdd/evidence/**
+  - .sdd/state/**
+  - docs/PRD.md
+  - docs/spec.md
+  - docs/Design.md
+  - AGENTS.md
+  - tasks.md
+  - docs/handoff/**
+  - repository or branch binding relaxation
+  - recovery authorization or historical evidence mutation
+  - Stage09 or Stage10 authority mutation
+production_change_allowed: false
+governance_contract_change_allowed: false
+allowed_behavior_scope: >-
+  Change only the named test's controlled authorization/fixture identity so
+  its positive historical-scope assertions run against matching bindings.
+  Production validation must continue rejecting mismatched repository, branch,
+  baseline, authorization integrity, and historical evidence scope.
+required_behavior_outcome:
+  - Both collected instances of the named inherited test reach and pass their historical evidence-scope assertions.
+  - Repository and branch mismatches continue to raise AUTHORITY_INVALID.
+  - Baseline ancestry, authorization integrity, and historical evidence-scope checks remain exact and fail-closed.
+preservation_obligations:
+  - Preserve exact repository binding validation.
+  - Preserve exact branch binding validation.
+  - Preserve baseline ancestry checks and recovery authorization integrity.
+  - Preserve historical evidence-scope enforcement and all negative-path assertions.
+  - Preserve production code byte-for-byte.
+failure_expectations:
+  - Any mismatched repository, branch, baseline, digest, checkpoint, command, task, or evidence scope remains rejected.
+  - Any required production relaxation or historical-record mutation blocks implementation and routes back to Stage06 or Stage07.
+  - Targeted verification failure prevents checkpoint eligibility.
+security_governance_constraints:
+  - No normalization, substitution, or bypass of repository or branch identity in production.
+  - No recovery authorization, evidence, authority, lifecycle, release, or deployment mutation.
+  - Test authority must remain integrity-valid and scoped to a controlled fixture identity.
+verification_commands:
+  - python -m pytest -q tests/test_m6_codex_adapter.py::M6CodexAdapterTests::test_historical_checkpoint_scope_accepts_only_exact_bound_stage08_evidence tests/test_m6_codex_adapter.py::V1116GeneratedVerificationArtifactTests::test_historical_checkpoint_scope_accepts_only_exact_bound_stage08_evidence
+regression_verification_required:
+  timing: AFTER_TC020_AND_TC021_TARGETED_PASS_BEFORE_FRESH_STAGE09
+  commands:
+    - python -m pytest -q tests
+    - git diff --check
+    - git diff --cached --check
+    - git status --porcelain=v1
+  required_outcome: >-
+    The complete suite and both diff checks pass, Git status is empty, and no
+    known failure is skipped or normalized. This joint regression requirement
+    does not create an implementation dependency between TC020 and TC021.
+checkpoint_eligibility:
+  - The exact targeted verification command passes.
+  - The diff is limited to tests/test_m6_codex_adapter.py plus any separately governed ordinary Stage08 evidence artifact.
+  - Exact fail-closed binding behavior and negative coverage remain intact.
+  - All Stage07-bound atomic checkpoint conditions are satisfied.
+out_of_scope:
+  - Production fixes or changes.
+  - Group A or TC020 remediation.
+  - Acceptance of mismatched historical authorization bindings.
+  - Stage09 decision, Stage10 authorization, release, or deployment.
+  - Authority, lifecycle state, evidence, authorization, or historical checkpoint mutation.
+dependencies: []
+independent: true
+stage07_required: true
+stage07_result: NOT_EVALUATED
+implementation_authorized: false
+status: TODO
+source_stage: 06
+originating_stage: 09
+risk_level: MEDIUM
+governance_profile: SDD_STRICT
